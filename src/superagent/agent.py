@@ -4,7 +4,7 @@ Superagent Claude agent with tool use.
 Orchestrates Claude API calls with deterministic tool dispatch.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 import json
 from anthropic import Anthropic
 from superagent.tool_schemas import tool_schema_for_claude, get_tool_by_name
@@ -42,7 +42,8 @@ def _content_block_to_dict(block: Any) -> Dict[str, Any]:
 def run_agent(
     question: str,
     client: Optional[Anthropic] = None,
-    model: Optional[str] = None
+    model: Optional[str] = None,
+    history: Optional[List[Dict[str, str]]] = None
 ) -> Dict[str, Any]:
     """
     Run Claude agent with tool use to answer a question.
@@ -51,6 +52,9 @@ def run_agent(
         question: User's natural language question
         client: Optional Anthropic client (for testing/injection). If None, creates new client.
         model: Optional model override. Defaults to "claude-3-5-sonnet-20241022"
+        history: Optional conversation history. List of dicts with "role" and "content" keys.
+                 Example: [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
+                 Will be capped at last 12 items (6 turns) to manage token usage.
 
     Returns:
         {
@@ -97,10 +101,13 @@ def run_agent(
     tool_round = 0
 
     try:
-        # Initial message to Claude
-        messages = [
-            {"role": "user", "content": question}
-        ]
+        # Initialize messages with prior conversation history (capped at last 12 items = 6 turns)
+        messages = []
+        if history:
+            messages.extend(history[-12:])
+
+        # Append the new question
+        messages.append({"role": "user", "content": question})
 
         # Tool use loop
         while tool_round < max_tool_rounds:

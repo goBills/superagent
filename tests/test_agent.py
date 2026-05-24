@@ -234,5 +234,124 @@ class TestAgentBasic:
         assert call_args.kwargs["model"] == "claude-3-opus-20250219"
 
 
+class TestAgentConversationHistory:
+    """Test conversation history (Phase 3C)."""
+
+    def test_agent_with_history_single_turn(self):
+        """Test agent preserves prior conversation history."""
+        mock_client = Mock()
+        mock_response = MockMessage(
+            content=[Mock(type="text", text="Josh Allen had 4367 passing yards in 2024.")]
+        )
+        mock_client.messages.create.return_value = mock_response
+
+        # First turn: ask about Josh Allen
+        history = []
+        result1 = run_agent("Tell me about Josh Allen in 2024", client=mock_client, history=history)
+
+        assert result1["ok"] == True
+        assert "4367" in result1["answer"]
+
+        # Verify the first message to Claude was just the question (no prior history)
+        call_args = mock_client.messages.create.call_args
+        messages = call_args.kwargs["messages"]
+        assert len(messages) == 1
+        assert messages[0]["role"] == "user"
+        assert "Josh Allen" in messages[0]["content"]
+
+    def test_agent_with_history_two_turns(self):
+        """Test agent uses prior context for follow-up questions."""
+        mock_client = Mock()
+
+        # First response: answer about Josh Allen
+        first_response = MockMessage(
+            content=[Mock(type="text", text="Josh Allen had 4367 passing yards in 2024.")]
+        )
+
+        # Second response: comparison (should have prior context)
+        second_response = MockMessage(
+            content=[Mock(type="text", text="Josh Allen: 4367 yards. Lamar Jackson: 4172 yards.")]
+        )
+
+        mock_client.messages.create.side_effect = [first_response, second_response]
+
+        # Build history from first turn
+        history = [
+            {"role": "user", "content": "Tell me about Josh Allen in 2024"},
+            {"role": "assistant", "content": "Josh Allen had 4367 passing yards in 2024."}
+        ]
+
+        # Second turn: follow-up question
+        result = run_agent(
+            "Compare him to Lamar Jackson",
+            client=mock_client,
+            history=history
+        )
+
+        assert result["ok"] == True
+
+        # Verify the second message to Claude includes prior context
+        call_args = mock_client.messages.create.call_args
+        messages = call_args.kwargs["messages"]
+
+        # Should have: prior user turn + prior assistant response + new question
+        assert len(messages) == 3
+        assert messages[0]["role"] == "user"
+        assert "Josh Allen" in messages[0]["content"]
+        assert messages[1]["role"] == "assistant"
+        assert "4367" in messages[1]["content"]
+        assert messages[2]["role"] == "user"
+        assert "Lamar Jackson" in messages[2]["content"]
+
+    def test_agent_history_capped_at_12_items(self):
+        """Test that history is capped at 12 items (6 turns)."""
+        mock_client = Mock()
+        mock_response = MockMessage(
+            content=[Mock(type="text", text="Answer.")]
+        )
+        mock_client.messages.create.return_value = mock_response
+
+        # Build a long history (15 items = 7.5 turns)
+        history = []
+        for i in range(7):
+            history.append({"role": "user", "content": f"Question {i}"})
+            history.append({"role": "assistant", "content": f"Answer {i}"})
+        history.append({"role": "user", "content": "Question 7"})
+
+        result = run_agent("New question", client=mock_client, history=history)
+
+        assert result["ok"] == True
+
+        # Verify only the last 12 items were sent to Claude
+        call_args = mock_client.messages.create.call_args
+        messages = call_args.kwargs["messages"]
+
+        # Should be: 12 prior items (capped) + 1 new question = 13 total
+        assert len(messages) == 13
+
+        # When we cap at last 12, we should drop Q0 and A0, start with A1
+        # So the first message should be from Answer 1
+        assert "Answer 1" in messages[0]["content"]
+
+        # And we should have the new question at the end
+        assert "New question" in messages[-1]["content"]
+
+    def test_agent_empty_history(self):
+        """Test agent works with empty/None history."""
+        mock_client = Mock()
+        mock_response = MockMessage(
+            content=[Mock(type="text", text="Answer.")]
+        )
+        mock_client.messages.create.return_value = mock_response
+
+        # Test with None
+        result = run_agent("Question?", client=mock_client, history=None)
+        assert result["ok"] == True
+
+        # Test with empty list
+        result = run_agent("Question?", client=mock_client, history=[])
+        assert result["ok"] == True
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

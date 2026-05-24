@@ -41,6 +41,9 @@ def main():
 
     print_welcome()
 
+    # Conversation history: list of {"role": "user"/"assistant", "content": str}
+    history = []
+
     while True:
         try:
             user_input = input("You: ").strip()
@@ -55,15 +58,22 @@ def main():
                 print_help()
                 continue
 
-            # Run agent
+            # Run agent with conversation history
             print("\n🤔 Thinking...\n")
-            result = run_agent(user_input)
+            result = run_agent(user_input, history=history)
 
-            # Display response
+            # Display response and update history
             if result["ok"]:
                 answer = result.get("answer", "").strip()
                 if answer:
                     print("Agent:", answer)
+
+                # Append this turn to history
+                history.append({"role": "user", "content": user_input})
+                history.append({"role": "assistant", "content": answer})
+
+                # Cap history at 12 items (6 turns)
+                history = history[-12:]
 
                 # Show tools used
                 tools_used = result.get("tools_used", [])
