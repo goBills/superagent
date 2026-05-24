@@ -11,6 +11,9 @@ from superagent.tools import (
     get_player_summary,
     compare_players,
     get_team_epa_trend,
+    get_fantasy_player_summary,
+    compare_fantasy_players,
+    get_player_weekly_usage,
 )
 
 
@@ -101,6 +104,73 @@ TOOL_SCHEMAS = [
             },
             "required": ["team", "season", "start_week", "end_week"]
         }
+    },
+    {
+        "name": "get_fantasy_player_summary",
+        "description": "Get a player's fantasy stats for a season: games, fantasy points, PPR/half-PPR/standard scoring, targets, receptions, yards, TDs",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "player_name": {
+                    "type": "string",
+                    "description": "Player's full name (e.g., 'Josh Allen', 'James Cook')"
+                },
+                "season": {
+                    "type": "integer",
+                    "description": "NFL season year (2020-2025)"
+                },
+                "scoring": {
+                    "type": "string",
+                    "description": "Scoring format: 'standard', 'half_ppr', or 'ppr' (default: 'ppr')",
+                    "enum": ["standard", "half_ppr", "ppr"],
+                    "default": "ppr"
+                }
+            },
+            "required": ["player_name", "season"]
+        }
+    },
+    {
+        "name": "compare_fantasy_players",
+        "description": "Compare multiple players' fantasy stats side-by-side with fantasy points and scoring breakdown",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "player_names": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of player names to compare (e.g., ['Josh Allen', 'Lamar Jackson'])"
+                },
+                "season": {
+                    "type": "integer",
+                    "description": "NFL season year (2020-2025)"
+                },
+                "scoring": {
+                    "type": "string",
+                    "description": "Scoring format: 'standard', 'half_ppr', or 'ppr' (default: 'ppr')",
+                    "enum": ["standard", "half_ppr", "ppr"],
+                    "default": "ppr"
+                }
+            },
+            "required": ["player_names", "season"]
+        }
+    },
+    {
+        "name": "get_player_weekly_usage",
+        "description": "Get a player's weekly usage stats (carries, targets, receptions, yards, TDs, fantasy points) for each week of a season",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "player_name": {
+                    "type": "string",
+                    "description": "Player's full name (e.g., 'Josh Allen', 'James Cook')"
+                },
+                "season": {
+                    "type": "integer",
+                    "description": "NFL season year (2020-2025)"
+                }
+            },
+            "required": ["player_name", "season"]
+        }
     }
 ]
 
@@ -110,6 +180,9 @@ TOOL_DISPATCH: Dict[str, Callable] = {
     "get_player_summary": get_player_summary,
     "compare_players": compare_players,
     "get_team_epa_trend": get_team_epa_trend,
+    "get_fantasy_player_summary": get_fantasy_player_summary,
+    "compare_fantasy_players": compare_fantasy_players,
+    "get_player_weekly_usage": get_player_weekly_usage,
 }
 
 

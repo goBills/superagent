@@ -514,3 +514,439 @@ def get_team_epa_trend(
             "error": str(e),
             "meta": {"team_abbr": team_abbr, "season": season}
         }
+
+
+# ============================================================================
+# Phase 4A: Fantasy Research Tools
+# ============================================================================
+
+def _calculate_fantasy_points(
+    pass_yds: int,
+    pass_td: int,
+    interceptions: int,
+    rush_yds: int,
+    rush_td: int,
+    rec_yds: int,
+    rec_td: int,
+    receptions: int,
+    scoring: str = "ppr"
+) -> float:
+    """
+    Calculate fantasy points based on scoring format.
+
+    Args:
+        scoring: "standard", "half_ppr", or "ppr"
+
+    Returns:
+        Total fantasy points (float)
+    """
+    # Standard scoring
+    points = (
+        pass_yds * 0.04
+        + pass_td * 4
+        - interceptions * 2
+        + rush_yds * 0.1
+        + rush_td * 6
+        + rec_yds * 0.1
+        + rec_td * 6
+    )
+
+    # Add reception scoring
+    if scoring == "ppr":
+        points += receptions * 1.0
+    elif scoring == "half_ppr":
+        points += receptions * 0.5
+
+    return round(points, 2)
+
+
+def get_fantasy_player_summary(
+    player_name: str,
+    season: int,
+    scoring: str = "ppr"
+) -> Dict[str, Any]:
+    """
+    Get player fantasy summary for a season.
+
+    Args:
+        player_name: Player full name (e.g., "Josh Allen")
+        season: NFL season year
+        scoring: "standard", "half_ppr", or "ppr" (default: "ppr")
+
+    Returns:
+        {
+            "ok": bool,
+            "data": {
+                "player_id": str,
+                "name": str,
+                "position": str,
+                "team": str,
+                "games": int,
+                "fantasy_points": float,
+                "fantasy_points_per_game": float,
+                "passing_yards": int,
+                "passing_tds": int,
+                "interceptions": int,
+                "rushing_yards": int,
+                "rushing_tds": int,
+                "targets": int,
+                "receptions": int,
+                "receiving_yards": int,
+                "receiving_tds": int,
+                "carries": int,
+                "scoring": str
+            },
+            "meta": {
+                "player_id": str,
+                "source": "weekly" or "pbp_derived",
+                "scoring_format": str
+            },
+            "error": None
+        }
+    """
+    # Validate scoring format
+    if scoring not in ("standard", "half_ppr", "ppr"):
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"Invalid scoring format: {scoring}. Use 'standard', 'half_ppr', or 'ppr'.",
+            "meta": {}
+        }
+
+    # Resolve player
+    player_result = resolve_player(player_name, season)
+    if not player_result["ok"]:
+        return {
+            "ok": False,
+            "data": None,
+            "error": player_result["error"],
+            "meta": {}
+        }
+
+    player_id = player_result["player_id"]
+    player_name_canonical = player_result["name"]
+    position = player_result["position"]
+    team = player_result["team"]
+
+    # Get stats
+    stats_result = get_player_stats(player_id, season)
+    if not stats_result["ok"]:
+        return {
+            "ok": False,
+            "data": None,
+            "error": stats_result["error"],
+            "meta": {"player_id": player_id}
+        }
+
+    if not stats_result["stats"]:
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"No stats found for {player_name_canonical} in season {season}",
+            "meta": {"player_id": player_id}
+        }
+
+    stats = stats_result["stats"]
+    source = stats_result["source"] or "unknown"
+
+    # Extract stats
+    games = int(stats.get("games", 0))
+    pass_yds = int(stats.get("passing_yards", 0))
+    pass_td = int(stats.get("passing_tds", 0))
+    int_count = int(stats.get("interceptions", 0))
+    rush_yds = int(stats.get("rushing_yards", 0))
+    rush_td = int(stats.get("rushing_tds", 0))
+    rec_yds = int(stats.get("receiving_yards", 0))
+    rec_td = int(stats.get("receiving_tds", 0))
+    receptions = int(stats.get("receptions", 0))
+    carries = int(stats.get("carries", 0))
+    targets = int(stats.get("targets", 0))
+
+    # Calculate fantasy points
+    fantasy_points = _calculate_fantasy_points(
+        pass_yds, pass_td, int_count,
+        rush_yds, rush_td,
+        rec_yds, rec_td,
+        receptions,
+        scoring=scoring
+    )
+
+    fantasy_ppg = round(fantasy_points / games, 2) if games > 0 else 0.0
+
+    data = {
+        "player_id": player_id,
+        "name": player_name_canonical,
+        "position": position,
+        "team": team,
+        "season": season,
+        "games": games,
+        "fantasy_points": fantasy_points,
+        "fantasy_points_per_game": fantasy_ppg,
+        "passing_yards": pass_yds,
+        "passing_tds": pass_td,
+        "interceptions": int_count,
+        "rushing_yards": rush_yds,
+        "rushing_tds": rush_td,
+        "targets": targets,
+        "receptions": receptions,
+        "receiving_yards": rec_yds,
+        "receiving_tds": rec_td,
+        "carries": carries,
+        "scoring": scoring,
+    }
+
+    meta = {
+        "player_id": player_id,
+        "source": source,
+        "scoring_format": scoring
+    }
+    if season == 2025:
+        meta["source"] = "pbp_derived"
+        meta["2025_note"] = "Derived from play-by-play data"
+
+    return {
+        "ok": True,
+        "data": data,
+        "error": None,
+        "meta": meta
+    }
+
+
+def compare_fantasy_players(
+    player_names: List[str],
+    season: int,
+    scoring: str = "ppr"
+) -> Dict[str, Any]:
+    """
+    Compare multiple players' fantasy stats side-by-side.
+
+    Args:
+        player_names: List of player names
+        season: NFL season year
+        scoring: "standard", "half_ppr", or "ppr" (default: "ppr")
+
+    Returns:
+        {
+            "ok": bool,
+            "data": [
+                {
+                    "player_id": str,
+                    "name": str,
+                    "position": str,
+                    "team": str,
+                    "games": int,
+                    "fantasy_points": float,
+                    "fantasy_points_per_game": float,
+                    "targets": int,
+                    "receptions": int,
+                    "receiving_yards": int,
+                    "passing_yards": int,
+                    "rushing_yards": int,
+                    "scoring": str
+                },
+                ...
+            ],
+            "meta": {
+                "season": int,
+                "players_compared": int,
+                "scoring_format": str
+            },
+            "error": None
+        }
+    """
+    if not player_names:
+        return {
+            "ok": False,
+            "data": None,
+            "error": "player_names cannot be empty",
+            "meta": {}
+        }
+
+    if scoring not in ("standard", "half_ppr", "ppr"):
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"Invalid scoring format: {scoring}",
+            "meta": {}
+        }
+
+    comparisons = []
+    for player_name in player_names:
+        result = get_fantasy_player_summary(player_name, season, scoring=scoring)
+        if result["ok"] and result["data"]:
+            comparisons.append(result["data"])
+        else:
+            comparisons.append({
+                "name": player_name,
+                "error": result.get("error", "Unknown error")
+            })
+
+    if not comparisons or all("error" in c for c in comparisons):
+        return {
+            "ok": False,
+            "data": None,
+            "error": "Could not resolve any of the provided player names",
+            "meta": {}
+        }
+
+    meta = {
+        "season": season,
+        "players_compared": len([c for c in comparisons if "error" not in c]),
+        "scoring_format": scoring
+    }
+
+    return {
+        "ok": True,
+        "data": comparisons,
+        "error": None,
+        "meta": meta
+    }
+
+
+def get_player_weekly_usage(
+    player_name: str,
+    season: int
+) -> Dict[str, Any]:
+    """
+    Get player's weekly usage stats for a season.
+
+    Args:
+        player_name: Player full name
+        season: NFL season year
+
+    Returns:
+        {
+            "ok": bool,
+            "data": [
+                {
+                    "week": int,
+                    "opponent": str,
+                    "carries": int,
+                    "targets": int,
+                    "receptions": int,
+                    "rushing_yards": int,
+                    "receiving_yards": int,
+                    "passing_yards": int,
+                    "tds": int,
+                    "fantasy_points": float (PPR)
+                },
+                ...
+            ],
+            "meta": {
+                "player_id": str,
+                "name": str,
+                "position": str,
+                "source": "weekly" or "pbp_derived",
+                "weeks_with_data": int
+            },
+            "error": None
+        }
+    """
+    # Resolve player
+    player_result = resolve_player(player_name, season)
+    if not player_result["ok"]:
+        return {
+            "ok": False,
+            "data": None,
+            "error": player_result["error"],
+            "meta": {}
+        }
+
+    player_id = player_result["player_id"]
+    player_name_canonical = player_result["name"]
+    position = player_result["position"]
+
+    try:
+        conn = get_db_connection()
+
+        # Query weekly stats
+        result = conn.execute(
+            """
+            SELECT
+                week,
+                opponent,
+                carries,
+                targets,
+                receptions,
+                rushing_yards,
+                receiving_yards,
+                passing_yards,
+                passing_tds,
+                rushing_tds,
+                receiving_tds,
+                interceptions
+            FROM player_weekly_stats
+            WHERE player_id = ?
+              AND season = ?
+            ORDER BY week
+            """,
+            [player_id, season],
+        ).fetchall()
+
+        conn.close()
+
+        if not result:
+            return {
+                "ok": False,
+                "data": None,
+                "error": f"No weekly data found for {player_name_canonical} in season {season}",
+                "meta": {"player_id": player_id, "name": player_name_canonical, "position": position}
+            }
+
+        weeks_data = []
+        for row in result:
+            (week, opponent, carries, targets, receptions,
+             rush_yds, rec_yds, pass_yds,
+             pass_td, rush_td, rec_td, interceptions) = row
+
+            # Calculate PPR fantasy points for this week
+            week_points = _calculate_fantasy_points(
+                int(pass_yds or 0), int(pass_td or 0), int(interceptions or 0),
+                int(rush_yds or 0), int(rush_td or 0),
+                int(rec_yds or 0), int(rec_td or 0),
+                int(receptions or 0),
+                scoring="ppr"
+            )
+
+            weeks_data.append({
+                "week": int(week),
+                "opponent": opponent or "N/A",
+                "carries": int(carries or 0),
+                "targets": int(targets or 0),
+                "receptions": int(receptions or 0),
+                "rushing_yards": int(rush_yds or 0),
+                "receiving_yards": int(rec_yds or 0),
+                "passing_yards": int(pass_yds or 0),
+                "tds": int((pass_td or 0) + (rush_td or 0) + (rec_td or 0)),
+                "fantasy_points_ppr": week_points,
+            })
+
+        # Determine source
+        source = "weekly"
+        if season == 2025:
+            source = "pbp_derived"
+
+        meta = {
+            "player_id": player_id,
+            "name": player_name_canonical,
+            "position": position,
+            "source": source,
+            "weeks_with_data": len(weeks_data)
+        }
+        if season == 2025:
+            meta["2025_note"] = "Derived from play-by-play data"
+
+        return {
+            "ok": True,
+            "data": weeks_data,
+            "error": None,
+            "meta": meta
+        }
+
+    except Exception as e:
+        return {
+            "ok": False,
+            "data": None,
+            "error": str(e),
+            "meta": {"player_id": player_id}
+        }
