@@ -233,6 +233,18 @@ class TestAgentBasic:
         call_args = mock_client.messages.create.call_args
         assert call_args.kwargs["model"] == "claude-3-opus-20250219"
 
+    def test_agent_default_model_comes_from_config(self):
+        """Test agent uses configured default model when no override is supplied."""
+        mock_client = Mock()
+        mock_response = MockMessage(content=[Mock(type="text", text="Answer.")])
+        mock_client.messages.create.return_value = mock_response
+
+        result = run_agent("Test?", client=mock_client)
+
+        assert result["ok"] == True
+        call_args = mock_client.messages.create.call_args
+        assert call_args.kwargs["model"] == "claude-sonnet-4-20250514"
+
 
 class TestAgentConversationHistory:
     """Test conversation history (Phase 3C)."""

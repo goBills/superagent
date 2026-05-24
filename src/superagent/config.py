@@ -22,6 +22,7 @@ class Config:
 
     # API Configuration
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+    ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
 
     # Database Configuration
     DB_TIMEOUT = 30  # seconds

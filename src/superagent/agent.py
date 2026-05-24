@@ -68,7 +68,7 @@ def run_agent(
     Args:
         question: User's natural language question
         client: Optional Anthropic client (for testing/injection). If None, creates new client.
-        model: Optional model override. Defaults to "claude-3-5-sonnet-20241022"
+        model: Optional model override. Defaults to config.ANTHROPIC_MODEL.
         history: Optional conversation history. List of dicts with "role" and "content" keys.
                  Example: [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
                  Will be capped at last 12 items (6 turns) to manage token usage.
@@ -111,7 +111,7 @@ def run_agent(
         client = Anthropic(api_key=config.ANTHROPIC_API_KEY)
 
     if model is None:
-        model = "claude-3-5-sonnet-20241022"
+        model = config.ANTHROPIC_MODEL
 
     tools_used = []
     max_tool_rounds = 5

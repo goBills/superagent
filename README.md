@@ -39,6 +39,7 @@ A sellable NFL research assistant that answers natural-language questions about 
    ```bash
    cp .env.example .env
    # Edit .env and add your ANTHROPIC_API_KEY
+   # Optional: set ANTHROPIC_MODEL=claude-sonnet-4-20250514
    export ANTHROPIC_API_KEY=sk-...  # Your Anthropic API key
    ```
 
