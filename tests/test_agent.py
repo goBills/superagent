@@ -322,19 +322,34 @@ class TestAgentConversationHistory:
 
         assert result["ok"] == True
 
-        # Verify only the last 12 items were sent to Claude
+        # Verify the history is capped and starts with a user message for API safety.
         call_args = mock_client.messages.create.call_args
         messages = call_args.kwargs["messages"]
 
-        # Should be: 12 prior items (capped) + 1 new question = 13 total
-        assert len(messages) == 13
+        assert len(messages) <= 13
 
-        # When we cap at last 12, we should drop Q0 and A0, start with A1
-        # So the first message should be from Answer 1
-        assert "Answer 1" in messages[0]["content"]
+        assert messages[0]["role"] == "user"
 
         # And we should have the new question at the end
         assert "New question" in messages[-1]["content"]
+
+    def test_agent_history_drops_leading_assistant_after_cap(self):
+        """Test capped odd-length history never starts with assistant."""
+        mock_client = Mock()
+        mock_response = MockMessage(content=[Mock(type="text", text="Answer.")])
+        mock_client.messages.create.return_value = mock_response
+
+        history = [{"role": "assistant", "content": "Dangling assistant answer"}]
+        for i in range(6):
+            history.append({"role": "user", "content": f"Question {i}"})
+            history.append({"role": "assistant", "content": f"Answer {i}"})
+
+        result = run_agent("New question", client=mock_client, history=history)
+
+        assert result["ok"] == True
+        messages = mock_client.messages.create.call_args.kwargs["messages"]
+        assert messages[0]["role"] == "user"
+        assert messages[-1]["content"] == "New question"
 
     def test_agent_empty_history(self):
         """Test agent works with empty/None history."""

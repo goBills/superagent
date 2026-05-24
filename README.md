@@ -6,8 +6,9 @@ A sellable NFL research assistant that answers natural-language questions about 
 
 ✅ **Phase 1: Data Layer** — nflverse data ingestion and DuckDB infrastructure complete.
 ✅ **Phase 2A: Deterministic Tools** — Name resolution + 4 core NFL query tools with pytest coverage.
-✅ **Phase 3A: Claude Agent** — Tool-calling agent with multi-turn reasoning and error handling.
+✅ **Phase 3A: Claude Agent** — Tool-calling agent with error handling.
 ✅ **Phase 3B: Interactive CLI** — User-facing REPL for natural language questions.
+✅ **Phase 3C: Conversation Memory** — CLI preserves recent turns for follow-up questions.
 
 ## Quick Start
 
@@ -109,11 +110,11 @@ You: exit
 Goodbye! 👋
 ```
 
-**Note on multi-turn:** Each question is independent. The CLI loops but does not preserve conversation history, so pronouns like "him" or "them" won't resolve to previous questions. Ask self-contained questions.
+**Note on multi-turn:** The CLI preserves the last 6 turns of conversation, so follow-ups like "Compare him to Lamar" can use recent context.
 
 ### How It Works
 
-1. **You ask a question** in natural language (single-turn)
+1. **You ask a question** in natural language
 2. **Claude decides which tools to call:** 
    - `get_team_summary` — wins, losses, points, offensive/defensive EPA
    - `get_player_summary` — passing/rushing/receiving yards and TDs
@@ -131,7 +132,7 @@ Goodbye! 👋
 - Graceful error handling (missing data, invalid names, etc.)
 
 **Current scope:**
-- Single-turn Q&A (no conversation memory)
+- Multi-turn Q&A with recent conversation memory capped at 6 turns
 - Box-score and EPA metrics (no projection/prediction)
 - Historical data only (2020-2025)
 
@@ -178,9 +179,9 @@ superagent/
 
 ## Test Coverage
 
-All 45 tests passing:
+All 50 tests passing:
 - **Phase 2A (Tools):** 25 tests validating name resolution and 4 core tools
-- **Phase 3A (Agent):** 9 tests of Claude tool-calling with mocked client (no API key needed)
+- **Phase 3A/3C (Agent):** 14 tests of Claude tool-calling and conversation history with mocked client (no API key needed)
 - **Phase 3B (CLI):** 11 tests of formatting functions
 
 Run tests:
@@ -193,7 +194,6 @@ pytest -v                 # Verbose output
 ## Future Phases (Out of Scope)
 
 Potential enhancements beyond MVP:
-- **Phase 3C:** Conversation memory for multi-turn follow-ups
 - **Phase 4:** Player EPA metrics and richer player analytics
 - **Phase 5:** Web API (FastAPI) instead of CLI-only
 - **Phase 6:** Live/current-week data integration
@@ -204,8 +204,8 @@ Potential enhancements beyond MVP:
 
 ## Known Limitations
 
-**Phase 3B (Current):**
-- ⚠️ **Single-turn only:** CLI loops but doesn't preserve conversation history. Each question is independent.
+**Phase 3C (Current):**
+- ⚠️ **Short-term memory only:** CLI preserves recent turns in memory during the current session only. No persistence across sessions.
 - ⚠️ **No player EPA/play:** `get_player_summary` returns box-score stats (yards, TDs, etc.), not EPA metrics. Team EPA available via `get_team_epa_trend`.
 
 **MVP Scope:**
@@ -214,7 +214,7 @@ Potential enhancements beyond MVP:
 - No betting picks, fantasy projections, or predictions
 - No ML models; Claude only orchestrates deterministic tools
 
-**These are not bugs—they're intentional scope decisions. Multi-turn memory and player EPA metrics are Phase 3C/4 enhancements.**
+**These are not bugs—they're intentional scope decisions. Persistent memory and player EPA metrics are future enhancements.**
 
 ## Development
 

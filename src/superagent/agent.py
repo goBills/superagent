@@ -39,6 +39,23 @@ def _content_block_to_dict(block: Any) -> Dict[str, Any]:
     return {"type": str(block_type or "unknown"), "text": str(block)}
 
 
+def _prepare_history(history: Optional[List[Dict[str, str]]], limit: int = 12) -> List[Dict[str, str]]:
+    """Return a capped, API-safe history that starts with a user turn."""
+    if not history:
+        return []
+
+    prepared = [
+        {"role": item["role"], "content": item["content"]}
+        for item in history
+        if item.get("role") in {"user", "assistant"} and isinstance(item.get("content"), str)
+    ][-limit:]
+
+    while prepared and prepared[0]["role"] != "user":
+        prepared.pop(0)
+
+    return prepared
+
+
 def run_agent(
     question: str,
     client: Optional[Anthropic] = None,
@@ -102,9 +119,7 @@ def run_agent(
 
     try:
         # Initialize messages with prior conversation history (capped at last 12 items = 6 turns)
-        messages = []
-        if history:
-            messages.extend(history[-12:])
+        messages = _prepare_history(history)
 
         # Append the new question
         messages.append({"role": "user", "content": question})
