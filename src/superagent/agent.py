@@ -24,6 +24,21 @@ Rules:
 """
 
 
+def _content_block_to_dict(block: Any) -> Dict[str, Any]:
+    """Convert an Anthropic content block or test mock into a message-safe dict."""
+    block_type = getattr(block, "type", None)
+    if block_type == "text":
+        return {"type": "text", "text": getattr(block, "text", "")}
+    if block_type == "tool_use":
+        return {
+            "type": "tool_use",
+            "id": getattr(block, "id"),
+            "name": getattr(block, "name"),
+            "input": getattr(block, "input", {}),
+        }
+    return {"type": str(block_type or "unknown"), "text": str(block)}
+
+
 def run_agent(
     question: str,
     client: Optional[Anthropic] = None,
@@ -134,7 +149,10 @@ def run_agent(
                 }
 
             # Process tool use blocks
-            assistant_message = {"role": "assistant", "content": response.content}
+            assistant_message = {
+                "role": "assistant",
+                "content": [_content_block_to_dict(block) for block in response.content],
+            }
             messages.append(assistant_message)
 
             tool_results_content = []
@@ -178,13 +196,15 @@ def run_agent(
                 })
 
                 # Add result for Claude
-                is_error = tool_result.get("ok") == False
-                tool_results_content.append({
+                is_error = tool_result.get("ok") is False
+                result_block = {
                     "type": "tool_result",
                     "tool_use_id": tool_block.id,
                     "content": json.dumps(tool_result),
-                    "is_error": is_error if is_error else None
-                })
+                }
+                if is_error:
+                    result_block["is_error"] = True
+                tool_results_content.append(result_block)
 
             # Send tool results back to Claude
             messages.append({
