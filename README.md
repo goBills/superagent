@@ -87,36 +87,53 @@ superagent
 ### Example Questions
 
 ```
-You: What's Josh Allen's EPA per play in 2024?
-Agent: [calls get_player_summary tool, returns formatted stats]
+You: What's the Bills' record in 2024?
+Agent: The Buffalo Bills went 13-4 in the 2024 season...
+📊 Tools Used:
+  ✅ get_team_summary
 
-You: Compare him to Lamar Jackson
-Agent: [calls compare_players tool, displays side-by-side comparison]
+You: Get the Bills' EPA trend for weeks 1-5 of 2024
+Agent: Here's the weekly EPA breakdown for the Bills weeks 1-5...
+📊 Tools Used:
+  ✅ get_team_epa_trend
 
-You: How did the Bills offense perform in weeks 1-5 of 2024?
-Agent: [calls get_team_epa_trend tool, shows weekly EPA breakdown]
+You: Compare Josh Allen and Lamar Jackson in 2024
+Agent: Josh Allen (QB, BUF) vs Lamar Jackson (QB, BAL)...
+📊 Tools Used:
+  ✅ compare_players
 
 You: help
-Agent: [shows example questions]
+Agent: [shows available question types]
 
 You: exit
 Goodbye! 👋
 ```
 
+**Note on multi-turn:** Each question is independent. The CLI loops but does not preserve conversation history, so pronouns like "him" or "them" won't resolve to previous questions. Ask self-contained questions.
+
 ### How It Works
 
-1. **You ask a question** in natural language
-2. **Claude decides which tools to call** (get_team_summary, get_player_summary, compare_players, get_team_epa_trend)
-3. **Superagent executes the tools** with deterministic queries
+1. **You ask a question** in natural language (single-turn)
+2. **Claude decides which tools to call:** 
+   - `get_team_summary` — wins, losses, points, offensive/defensive EPA
+   - `get_player_summary` — passing/rushing/receiving yards and TDs
+   - `compare_players` — side-by-side stats for multiple players
+   - `get_team_epa_trend` — weekly EPA breakdown over a range
+3. **Superagent executes tools** with deterministic SQL queries
 4. **Claude synthesizes results** and provides a clear answer
 5. **CLI formats and displays** the response with tables and stats
 
-**Key features:**
-- Multi-turn conversation (ask follow-up questions)
-- Tool use for guaranteed accuracy (no AI hallucination)
+**Strengths:**
+- Tool use for guaranteed accuracy (no AI hallucination of stats)
+- All data backed by nflverse/nflfastR (validated source)
 - Clear attribution of data sources
-- 2025 player stats marked as "derived from play-by-play"
-- Handles error gracefully (missing data, invalid names, etc.)
+- 2025 player stats transparently marked as "derived from play-by-play"
+- Graceful error handling (missing data, invalid names, etc.)
+
+**Current scope:**
+- Single-turn Q&A (no conversation memory)
+- Box-score and EPA metrics (no projection/prediction)
+- Historical data only (2020-2025)
 
 ## Project Structure
 
@@ -183,14 +200,19 @@ Potential enhancements beyond MVP:
 - **Phase 8:** Caching layer for performance
 - **Phase 9:** Fine-tuned model for domain-specific reasoning
 
-## Known Limitations (MVP)
+## Known Limitations
 
-- Historical data through 2025 season only
-- No live/current-week game updates
-- No injury data or depth charts
-- No betting recommendations
-- No fantasy projections
-- No predictions or ML models
+**Phase 3B (Current):**
+- ⚠️ **Single-turn only:** CLI loops but doesn't preserve conversation history. Each question is independent.
+- ⚠️ **No player EPA/play:** `get_player_summary` returns box-score stats (yards, TDs, etc.), not EPA metrics. Team EPA available via `get_team_epa_trend`.
+
+**MVP Scope:**
+- Historical data through 2025 season only (no live/current-week updates)
+- No injury data, depth charts, or Vegas lines
+- No betting picks, fantasy projections, or predictions
+- No ML models; Claude only orchestrates deterministic tools
+
+**These are not bugs—they're intentional scope decisions. Multi-turn memory and player EPA metrics are Phase 3C/4 enhancements.**
 
 ## Development
 
