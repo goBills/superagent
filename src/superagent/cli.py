@@ -229,8 +229,10 @@ def print_help():
     print("Example Questions:")
     print("="*70)
     examples = [
-        "What's Josh Allen's EPA per play in 2024?",
+        "Get Josh Allen's fantasy stats for 2024 in PPR.",
         "Compare Josh Allen and Lamar Jackson in 2024.",
+        "Compare James Cook and Khalil Shakir in half-PPR for 2024.",
+        "Show James Cook's weekly usage in 2024.",
         "How did the Bills offense perform in weeks 1-5 of 2024?",
         "What was the Bills' record in 2023?",
         "Get the Cowboys' defensive EPA trend for weeks 10-17 in 2024.",

@@ -115,13 +115,11 @@ class TestFantasyPlayerSummary:
         """Test Lamar Jackson 2024 fantasy summary."""
         result = get_fantasy_player_summary("Lamar Jackson", 2024, scoring="ppr")
 
-        # Lamar Jackson may not be in the database with that exact name
-        if not result["ok"]:
-            pytest.skip(f"Lamar Jackson data not available: {result.get('error')}")
-            return
-
+        assert result["ok"] == True
         data = result["data"]
+        assert data["name"] == "Lamar Jackson"
         assert data["position"] == "QB"
+        assert data["team"] == "BAL"
         assert data["games"] >= 16  # At least 16 regular season games
         assert data["fantasy_points"] > 0
 
@@ -191,14 +189,13 @@ class TestCompareFantasyPlayers:
 
         assert result["ok"] == True
         assert result["data"] is not None
-        assert len(result["data"]) >= 1  # At least Josh Allen
+        assert len(result["data"]) == 2
 
         # Check structure for successful players
         for player in result["data"]:
             assert "name" in player
-            if "error" not in player:  # Valid player
-                assert "position" in player
-                assert "fantasy_points" in player
+            assert "position" in player
+            assert "fantasy_points" in player
 
         # Meta check
         assert result["meta"]["season"] == 2024
@@ -247,11 +244,7 @@ class TestPlayerWeeklyUsage:
         """Test Josh Allen's weekly usage in 2024."""
         result = get_player_weekly_usage("Josh Allen", 2024)
 
-        # Weekly data might not be available in all schemas, skip if not found
-        if not result["ok"]:
-            pytest.skip(f"Weekly usage data not available: {result.get('error')}")
-            return
-
+        assert result["ok"] == True
         assert result["data"] is not None
         assert len(result["data"]) > 0
 
@@ -270,10 +263,7 @@ class TestPlayerWeeklyUsage:
         """Test James Cook's weekly usage in 2024."""
         result = get_player_weekly_usage("James Cook", 2024)
 
-        if not result["ok"]:
-            pytest.skip(f"Weekly usage data not available: {result.get('error')}")
-            return
-
+        assert result["ok"] == True
         assert result["data"] is not None
         assert len(result["data"]) > 0
 
@@ -287,10 +277,7 @@ class TestPlayerWeeklyUsage:
         """Test Khalil Shakir's weekly usage in 2024."""
         result = get_player_weekly_usage("Khalil Shakir", 2024)
 
-        if not result["ok"]:
-            pytest.skip(f"Weekly usage data not available: {result.get('error')}")
-            return
-
+        assert result["ok"] == True
         assert result["data"] is not None
         # WR should have targets
         assert any(w["targets"] > 0 for w in result["data"])
@@ -305,9 +292,10 @@ class TestPlayerWeeklyUsage:
         """Test 2025 player weekly usage is marked pbp_derived if available."""
         result = get_player_weekly_usage("Josh Allen", 2025)
 
-        if result["ok"]:
-            assert result["meta"]["source"] == "pbp_derived"
-            assert "2025_note" in result["meta"]
+        assert result["ok"] == True
+        assert result["meta"]["source"] == "pbp_derived"
+        assert "2025_note" in result["meta"]
+        assert len(result["data"]) > 0
 
 
 if __name__ == "__main__":

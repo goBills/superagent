@@ -229,6 +229,18 @@ def _player_candidates(season: int):
         conn.close()
 
 
+def _position_priority(position: Any) -> int:
+    """Prefer fantasy/offensive positions when duplicate names exist."""
+    priorities = {
+        "QB": 0,
+        "RB": 1,
+        "WR": 2,
+        "TE": 3,
+        "K": 4,
+    }
+    return priorities.get(str(position), 99)
+
+
 def resolve_player(name: str, season: int) -> Dict[str, Any]:
     """Resolve a player name to a GSIS player id and metadata."""
     if not name or not name.strip():
@@ -251,6 +263,7 @@ def resolve_player(name: str, season: int) -> Dict[str, Any]:
         if str(row[1]).lower() == needle or (row[2] and str(row[2]).lower() == needle)
     ]
     if exact_matches:
+        exact_matches.sort(key=lambda row: (_position_priority(row[3]), str(row[1]), str(row[4])))
         player_id, display_name, _, position, team, source = exact_matches[0]
         return {
             "ok": True,
@@ -268,10 +281,10 @@ def resolve_player(name: str, season: int) -> Dict[str, Any]:
         display_score = fuzz.token_set_ratio(needle, str(display_name).lower())
         football_score = fuzz.token_set_ratio(needle, str(football_name).lower()) if football_name else 0
         score = max(display_score, football_score)
-        scored.append((score, player_id, display_name, position, team, source))
+        scored.append((score, _position_priority(position), player_id, display_name, position, team, source))
 
-    scored.sort(key=lambda item: item[0], reverse=True)
-    best_score, player_id, display_name, position, team, source = scored[0]
+    scored.sort(key=lambda item: (-item[0], item[1], str(item[3]), str(item[5])))
+    best_score, _, player_id, display_name, position, team, source = scored[0]
 
     if best_score >= 80:
         return {

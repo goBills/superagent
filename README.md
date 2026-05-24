@@ -9,6 +9,7 @@ A sellable NFL research assistant that answers natural-language questions about 
 ✅ **Phase 3A: Claude Agent** — Tool-calling agent with error handling.
 ✅ **Phase 3B: Interactive CLI** — User-facing REPL for natural language questions.
 ✅ **Phase 3C: Conversation Memory** — CLI preserves recent turns for follow-up questions.
+✅ **Phase 4A: Fantasy Research Tools** — Fantasy scoring summaries, comparisons, and weekly usage.
 
 ## Quick Start
 
@@ -104,6 +105,16 @@ Agent: Josh Allen (QB, BUF) vs Lamar Jackson (QB, BAL)...
 📊 Tools Used:
   ✅ compare_players
 
+You: Compare James Cook and Khalil Shakir in PPR for 2024
+Agent: Here's their fantasy comparison using PPR scoring...
+📊 Tools Used:
+  ✅ compare_fantasy_players
+
+You: Show James Cook's weekly usage in 2024
+Agent: Here's James Cook's weekly usage by carries, targets, receptions, yards, and PPR points...
+📊 Tools Used:
+  ✅ get_player_weekly_usage
+
 You: help
 Agent: [shows available question types]
 
@@ -121,6 +132,9 @@ Goodbye! 👋
    - `get_player_summary` — passing/rushing/receiving yards and TDs
    - `compare_players` — side-by-side stats for multiple players
    - `get_team_epa_trend` — weekly EPA breakdown over a range
+   - `get_fantasy_player_summary` — fantasy points by standard, half-PPR, or PPR scoring
+   - `compare_fantasy_players` — side-by-side fantasy comparison
+   - `get_player_weekly_usage` — weekly carries, targets, receptions, yards, TDs, and PPR points
 3. **Superagent executes tools** with deterministic SQL queries
 4. **Claude synthesizes results** and provides a clear answer
 5. **CLI formats and displays** the response with tables and stats
@@ -134,7 +148,7 @@ Goodbye! 👋
 
 **Current scope:**
 - Multi-turn Q&A with recent conversation memory capped at 6 turns
-- Box-score and EPA metrics (no projection/prediction)
+- Box-score, team EPA, and fantasy research metrics (no projection/prediction)
 - Historical data only (2020-2025)
 
 ## Project Structure
@@ -147,7 +161,7 @@ superagent/
 │   ├── database.py                # DuckDB setup & schema
 │   ├── db_query.py                # Safe query helpers + JSON serialization
 │   ├── name_resolution.py         # Player/team fuzzy matching
-│   ├── tools.py                   # 4 core deterministic tools
+│   ├── tools.py                   # deterministic NFL + fantasy query tools
 │   ├── tool_schemas.py            # Claude tool definitions
 │   ├── agent.py                   # Claude tool-calling agent
 │   ├── cli.py                     # CLI formatting functions
@@ -163,8 +177,9 @@ superagent/
 │   └── smoke_agent.py             # Manual agent test (requires API key)
 ├── tests/
 │   ├── test_tools.py              # 25 tests: name resolution + tools
-│   ├── test_agent.py              # 9 tests: agent with mocked client
-│   └── test_cli.py                # 11 tests: CLI formatting
+│   ├── test_agent.py              # 15 tests: agent with mocked client
+│   ├── test_cli.py                # 11 tests: CLI formatting
+│   └── test_fantasy.py            # 22 tests: fantasy scoring + usage tools
 ├── requirements.txt               # Python dependencies
 ├── pyproject.toml                 # Package metadata + console script
 ├── .env.example                   # Environment template
@@ -180,28 +195,32 @@ superagent/
 
 ## Test Coverage
 
-All 50 tests passing:
+All 73 tests passing:
 - **Phase 2A (Tools):** 25 tests validating name resolution and 4 core tools
-- **Phase 3A/3C (Agent):** 14 tests of Claude tool-calling and conversation history with mocked client (no API key needed)
+- **Phase 3A/3C (Agent):** 15 tests of Claude tool-calling and conversation history with mocked client (no API key needed)
 - **Phase 3B (CLI):** 11 tests of formatting functions
+- **Phase 4A (Fantasy):** 22 tests of fantasy scoring, player summaries, comparisons, and weekly usage
 
 Run tests:
 ```bash
 pytest                    # Run all tests
 pytest tests/test_cli.py  # Run CLI tests only
+pytest tests/test_fantasy.py  # Run fantasy tests only
 pytest -v                 # Verbose output
 ```
 
 ## Future Phases (Out of Scope)
 
 Potential enhancements beyond MVP:
-- **Phase 4:** Player EPA metrics and richer player analytics
-- **Phase 5:** Web API (FastAPI) instead of CLI-only
-- **Phase 6:** Live/current-week data integration
-- **Phase 7:** Injury status, depth charts, Vegas lines (informational-only)
-- **Phase 8:** Multi-user support with auth
-- **Phase 9:** Caching layer for performance
-- **Phase 10:** Fine-tuned model for domain-specific reasoning
+- **Phase 4B:** Draft research tools (sleepers, usage risers, target opportunity)
+- **Phase 4C:** Historical waiver and trend finder
+- **Phase 5:** Player EPA metrics and richer player analytics
+- **Phase 6:** Web API (FastAPI) instead of CLI-only
+- **Phase 7:** Live/current-week data integration
+- **Phase 8:** Injury status, depth charts, Vegas lines (informational-only)
+- **Phase 9:** Multi-user support with auth
+- **Phase 10:** Caching layer for performance
+- **Phase 11:** Fine-tuned model for domain-specific reasoning
 
 ## Known Limitations
 
@@ -213,6 +232,7 @@ Potential enhancements beyond MVP:
 - Historical data through 2025 season only (no live/current-week updates)
 - No injury data, depth charts, or Vegas lines
 - No betting picks, fantasy projections, or predictions
+- Fantasy tools are research tools, not start/sit or waiver pickup advice
 - No ML models; Claude only orchestrates deterministic tools
 
 **These are not bugs—they're intentional scope decisions. Persistent memory and player EPA metrics are future enhancements.**

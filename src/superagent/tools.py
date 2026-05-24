@@ -859,29 +859,120 @@ def get_player_weekly_usage(
     try:
         conn = get_db_connection()
 
-        # Query weekly stats
-        result = conn.execute(
-            """
-            SELECT
-                week,
-                opponent,
-                carries,
-                targets,
-                receptions,
-                rushing_yards,
-                receiving_yards,
-                passing_yards,
-                passing_tds,
-                rushing_tds,
-                receiving_tds,
-                interceptions
-            FROM player_weekly_stats
-            WHERE player_id = ?
-              AND season = ?
-            ORDER BY week
-            """,
-            [player_id, season],
-        ).fetchall()
+        if season == 2025:
+            result = conn.execute(
+                """
+                WITH player_events AS (
+                    SELECT
+                        week,
+                        CASE
+                            WHEN posteam = home_team THEN away_team
+                            WHEN posteam = away_team THEN home_team
+                            ELSE NULL
+                        END AS opponent,
+                        COALESCE(pass_attempt, 0) AS passing_attempts,
+                        COALESCE(complete_pass, 0) AS completions,
+                        COALESCE(passing_yards, 0) AS passing_yards,
+                        COALESCE(pass_touchdown, 0) AS passing_tds,
+                        COALESCE(interception, 0) AS interceptions,
+                        0 AS carries,
+                        0 AS targets,
+                        0 AS receptions,
+                        0 AS rushing_yards,
+                        0 AS rushing_tds,
+                        0 AS receiving_yards,
+                        0 AS receiving_tds
+                    FROM plays
+                    WHERE season = ? AND passer_player_id = ?
+                    UNION ALL
+                    SELECT
+                        week,
+                        CASE
+                            WHEN posteam = home_team THEN away_team
+                            WHEN posteam = away_team THEN home_team
+                            ELSE NULL
+                        END AS opponent,
+                        0 AS passing_attempts,
+                        0 AS completions,
+                        0 AS passing_yards,
+                        0 AS passing_tds,
+                        0 AS interceptions,
+                        COALESCE(rush_attempt, 0) AS carries,
+                        0 AS targets,
+                        0 AS receptions,
+                        COALESCE(rushing_yards, 0) AS rushing_yards,
+                        COALESCE(rush_touchdown, 0) AS rushing_tds,
+                        0 AS receiving_yards,
+                        0 AS receiving_tds
+                    FROM plays
+                    WHERE season = ? AND rusher_player_id = ?
+                    UNION ALL
+                    SELECT
+                        week,
+                        CASE
+                            WHEN posteam = home_team THEN away_team
+                            WHEN posteam = away_team THEN home_team
+                            ELSE NULL
+                        END AS opponent,
+                        0 AS passing_attempts,
+                        0 AS completions,
+                        0 AS passing_yards,
+                        0 AS passing_tds,
+                        0 AS interceptions,
+                        0 AS carries,
+                        1 AS targets,
+                        COALESCE(complete_pass, 0) AS receptions,
+                        0 AS rushing_yards,
+                        0 AS rushing_tds,
+                        COALESCE(receiving_yards, 0) AS receiving_yards,
+                        COALESCE(pass_touchdown, 0) AS receiving_tds
+                    FROM plays
+                    WHERE season = ? AND receiver_player_id = ?
+                )
+                SELECT
+                    week,
+                    MAX(opponent) AS opponent,
+                    SUM(carries) AS carries,
+                    SUM(targets) AS targets,
+                    SUM(receptions) AS receptions,
+                    SUM(rushing_yards) AS rushing_yards,
+                    SUM(receiving_yards) AS receiving_yards,
+                    SUM(passing_yards) AS passing_yards,
+                    SUM(passing_tds) AS passing_tds,
+                    SUM(rushing_tds) AS rushing_tds,
+                    SUM(receiving_tds) AS receiving_tds,
+                    SUM(interceptions) AS interceptions
+                FROM player_events
+                GROUP BY week
+                ORDER BY week
+                """,
+                [season, player_id, season, player_id, season, player_id],
+            ).fetchall()
+            source = "pbp_derived"
+        else:
+            result = conn.execute(
+                """
+                SELECT
+                    week,
+                    opponent_team AS opponent,
+                    carries,
+                    targets,
+                    receptions,
+                    rushing_yards,
+                    receiving_yards,
+                    passing_yards,
+                    passing_tds,
+                    rushing_tds,
+                    receiving_tds,
+                    interceptions
+                FROM weekly
+                WHERE player_id = ?
+                  AND season = ?
+                ORDER BY week
+                """,
+                [player_id, season],
+            ).fetchall()
+            source = "weekly"
 
         conn.close()
 
@@ -920,11 +1011,6 @@ def get_player_weekly_usage(
                 "tds": int((pass_td or 0) + (rush_td or 0) + (rec_td or 0)),
                 "fantasy_points_ppr": week_points,
             })
-
-        # Determine source
-        source = "weekly"
-        if season == 2025:
-            source = "pbp_derived"
 
         meta = {
             "player_id": player_id,
