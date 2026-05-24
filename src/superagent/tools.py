@@ -1036,3 +1036,527 @@ def get_player_weekly_usage(
             "error": str(e),
             "meta": {"player_id": player_id}
         }
+
+
+# ============================================================================
+# Phase 4B: Draft Research Tools
+# ============================================================================
+
+FANTASY_POSITIONS = {"RB", "WR", "TE", "QB", "K"}
+
+
+def _normalize_position(position: Optional[str], allow_none: bool = False) -> Optional[str]:
+    """Normalize and validate a fantasy position filter."""
+    if position is None and allow_none:
+        return None
+    if not position or not str(position).strip():
+        raise ValueError("position is required")
+
+    normalized = str(position).strip().upper()
+    if normalized == "ALL" and allow_none:
+        return None
+    if normalized not in FANTASY_POSITIONS:
+        raise ValueError(f"Unsupported position '{position}'. Use one of: QB, RB, WR, TE, K.")
+    return normalized
+
+
+def _opportunities_for_position(position: str, carries: int, targets: int) -> int:
+    """Return the simple opportunity definition used by draft research tools."""
+    if position in ("WR", "TE"):
+        return targets
+    return carries + targets
+
+
+def _pct_change(old_value: float, new_value: float) -> Optional[float]:
+    """Calculate percent change; return None when the old value is zero."""
+    if old_value == 0:
+        return None
+    return round(((new_value - old_value) / old_value) * 100, 1)
+
+
+def _weekly_research_rows(season: int, position: Optional[str] = None) -> Dict[str, Any]:
+    """Return weekly usage rows from weekly stats or 2025 play-by-play-derived data."""
+    if season < 2020 or season > 2025:
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"Season {season} out of supported range (2020-2025)",
+            "meta": {},
+        }
+
+    try:
+        conn = get_db_connection()
+        if season == 2025:
+            position_filter = "AND roster.position = ?" if position else ""
+            params = [season, season, season, season]
+            if position:
+                params.append(position)
+            rows = conn.execute(
+                f"""
+                WITH roster AS (
+                    SELECT
+                        gsis_id AS player_id,
+                        full_name AS player_name,
+                        position,
+                        team,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY gsis_id
+                            ORDER BY week DESC, team
+                        ) AS row_num
+                    FROM rosters
+                    WHERE season = ?
+                      AND gsis_id IS NOT NULL
+                      AND full_name IS NOT NULL
+                ),
+                events AS (
+                    SELECT
+                        season,
+                        week,
+                        passer_player_id AS player_id,
+                        posteam AS team,
+                        0 AS carries,
+                        0 AS targets,
+                        0 AS receptions,
+                        0 AS rushing_yards,
+                        0 AS rushing_tds,
+                        0 AS receiving_yards,
+                        0 AS receiving_tds,
+                        COALESCE(passing_yards, 0) AS passing_yards,
+                        COALESCE(pass_touchdown, 0) AS passing_tds,
+                        COALESCE(interception, 0) AS interceptions
+                    FROM plays
+                    WHERE season = ? AND passer_player_id IS NOT NULL
+                    UNION ALL
+                    SELECT
+                        season,
+                        week,
+                        rusher_player_id AS player_id,
+                        posteam AS team,
+                        COALESCE(rush_attempt, 0) AS carries,
+                        0 AS targets,
+                        0 AS receptions,
+                        COALESCE(rushing_yards, 0) AS rushing_yards,
+                        COALESCE(rush_touchdown, 0) AS rushing_tds,
+                        0 AS receiving_yards,
+                        0 AS receiving_tds,
+                        0 AS passing_yards,
+                        0 AS passing_tds,
+                        0 AS interceptions
+                    FROM plays
+                    WHERE season = ? AND rusher_player_id IS NOT NULL
+                    UNION ALL
+                    SELECT
+                        season,
+                        week,
+                        receiver_player_id AS player_id,
+                        posteam AS team,
+                        0 AS carries,
+                        1 AS targets,
+                        COALESCE(complete_pass, 0) AS receptions,
+                        0 AS rushing_yards,
+                        0 AS rushing_tds,
+                        COALESCE(receiving_yards, 0) AS receiving_yards,
+                        COALESCE(pass_touchdown, 0) AS receiving_tds,
+                        0 AS passing_yards,
+                        0 AS passing_tds,
+                        0 AS interceptions
+                    FROM plays
+                    WHERE season = ? AND receiver_player_id IS NOT NULL
+                )
+                SELECT
+                    events.player_id,
+                    COALESCE(roster.player_name, events.player_id) AS player_name,
+                    roster.position,
+                    COALESCE(events.team, roster.team) AS team,
+                    events.week,
+                    SUM(events.carries) AS carries,
+                    SUM(events.targets) AS targets,
+                    SUM(events.receptions) AS receptions,
+                    SUM(events.rushing_yards) AS rushing_yards,
+                    SUM(events.rushing_tds) AS rushing_tds,
+                    SUM(events.receiving_yards) AS receiving_yards,
+                    SUM(events.receiving_tds) AS receiving_tds,
+                    SUM(events.passing_yards) AS passing_yards,
+                    SUM(events.passing_tds) AS passing_tds,
+                    SUM(events.interceptions) AS interceptions
+                FROM events
+                LEFT JOIN roster
+                  ON events.player_id = roster.player_id
+                 AND roster.row_num = 1
+                WHERE roster.position IS NOT NULL
+                {position_filter}
+                GROUP BY
+                    events.player_id,
+                    COALESCE(roster.player_name, events.player_id),
+                    roster.position,
+                    COALESCE(events.team, roster.team),
+                    events.week
+                ORDER BY events.week, player_name
+                """,
+                params,
+            ).fetchall()
+            source = "pbp_derived"
+        else:
+            position_filter = "AND position = ?" if position else "AND position != 'QB'"
+            params = [season]
+            if position:
+                params.append(position)
+            rows = conn.execute(
+                f"""
+                SELECT
+                    player_id,
+                    player_display_name AS player_name,
+                    position,
+                    recent_team AS team,
+                    week,
+                    carries,
+                    targets,
+                    receptions,
+                    rushing_yards,
+                    rushing_tds,
+                    receiving_yards,
+                    receiving_tds,
+                    passing_yards,
+                    passing_tds,
+                    interceptions
+                FROM weekly
+                WHERE season = ?
+                  {position_filter}
+                ORDER BY week, player_display_name
+                """,
+                params,
+            ).fetchall()
+            source = "weekly"
+        conn.close()
+    except Exception as exc:
+        return {"ok": False, "data": None, "error": str(exc), "meta": {}}
+
+    data = []
+    for row in rows:
+        (
+            player_id,
+            player_name,
+            row_position,
+            team,
+            week,
+            carries,
+            targets,
+            receptions,
+            rushing_yards,
+            rushing_tds,
+            receiving_yards,
+            receiving_tds,
+            passing_yards,
+            passing_tds,
+            interceptions,
+        ) = row
+        row_position = str(row_position) if row_position else None
+        carries = int(carries or 0)
+        targets = int(targets or 0)
+        receptions = int(receptions or 0)
+        rushing_yards = int(rushing_yards or 0)
+        rushing_tds = int(rushing_tds or 0)
+        receiving_yards = int(receiving_yards or 0)
+        receiving_tds = int(receiving_tds or 0)
+        passing_yards = int(passing_yards or 0)
+        passing_tds = int(passing_tds or 0)
+        interceptions = int(interceptions or 0)
+        data.append({
+            "player_id": str(player_id),
+            "name": str(player_name),
+            "position": row_position,
+            "team": str(team) if team else None,
+            "week": int(week),
+            "carries": carries,
+            "targets": targets,
+            "receptions": receptions,
+            "rushing_yards": rushing_yards,
+            "rushing_tds": rushing_tds,
+            "receiving_yards": receiving_yards,
+            "receiving_tds": receiving_tds,
+            "passing_yards": passing_yards,
+            "passing_tds": passing_tds,
+            "interceptions": interceptions,
+            "opportunities": _opportunities_for_position(row_position or "", carries, targets),
+            "ppr_points": _calculate_fantasy_points(
+                passing_yards,
+                passing_tds,
+                interceptions,
+                rushing_yards,
+                rushing_tds,
+                receiving_yards,
+                receiving_tds,
+                receptions,
+                scoring="ppr",
+            ),
+        })
+
+    meta = {"source": source, "season": season, "position": position}
+    if season == 2025:
+        meta["2025_note"] = "Derived from play-by-play data"
+    return {"ok": True, "data": data, "error": None, "meta": meta}
+
+
+def _aggregate_player_period(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Aggregate weekly rows into a period summary."""
+    games = len(rows)
+    opportunities = sum(row["opportunities"] for row in rows)
+    ppr_points = round(sum(row["ppr_points"] for row in rows), 2)
+    targets = sum(row["targets"] for row in rows)
+    carries = sum(row["carries"] for row in rows)
+    receptions = sum(row["receptions"] for row in rows)
+    receiving_yards = sum(row["receiving_yards"] for row in rows)
+    rushing_yards = sum(row["rushing_yards"] for row in rows)
+    touchdowns = sum(row["rushing_tds"] + row["receiving_tds"] + row["passing_tds"] for row in rows)
+    return {
+        "games": games,
+        "opportunities": opportunities,
+        "opportunities_per_game": round(opportunities / games, 2) if games else 0.0,
+        "ppr_points": ppr_points,
+        "ppr_points_per_game": round(ppr_points / games, 2) if games else 0.0,
+        "targets": targets,
+        "carries": carries,
+        "receptions": receptions,
+        "receiving_yards": receiving_yards,
+        "rushing_yards": rushing_yards,
+        "touchdowns": touchdowns,
+    }
+
+
+def _period_change_player_rows(
+    rows: List[Dict[str, Any]],
+    early_start: int,
+    early_end: int,
+    late_start: int,
+    late_end: int,
+    min_early_opportunities: int = 10,
+    min_late_opportunities: int = 15,
+) -> List[Dict[str, Any]]:
+    """Build before/after player rows that pass draft-research noise thresholds."""
+    grouped: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        player_id = row["player_id"]
+        if player_id not in grouped:
+            grouped[player_id] = {
+                "player_id": player_id,
+                "name": row["name"],
+                "team": row["team"],
+                "position": row["position"],
+                "early_rows": [],
+                "late_rows": [],
+            }
+        if early_start <= row["week"] <= early_end:
+            grouped[player_id]["early_rows"].append(row)
+        elif late_start <= row["week"] <= late_end:
+            grouped[player_id]["late_rows"].append(row)
+
+    output = []
+    for player in grouped.values():
+        early = _aggregate_player_period(player["early_rows"])
+        late = _aggregate_player_period(player["late_rows"])
+        if early["opportunities"] < min_early_opportunities or late["opportunities"] < min_late_opportunities:
+            continue
+
+        opportunity_delta = round(late["opportunities_per_game"] - early["opportunities_per_game"], 2)
+        ppr_delta = round(late["ppr_points_per_game"] - early["ppr_points_per_game"], 2)
+        opportunity_pct = _pct_change(early["opportunities_per_game"], late["opportunities_per_game"])
+        ppr_pct = _pct_change(early["ppr_points_per_game"], late["ppr_points_per_game"])
+        opportunity_pct_value = opportunity_pct if opportunity_pct is not None else 0.0
+        ppr_pct_value = ppr_pct if ppr_pct is not None else 0.0
+
+        if not (
+            opportunity_delta >= 3.0
+            and ppr_delta >= 3.0
+            and (opportunity_pct_value >= 25.0 or ppr_pct_value >= 25.0)
+        ):
+            continue
+
+        output.append({
+            "player_id": player["player_id"],
+            "name": player["name"],
+            "team": player["team"],
+            "position": player["position"],
+            "early": {
+                "weeks": f"{early_start}-{early_end}",
+                **early,
+            },
+            "late": {
+                "weeks": f"{late_start}-{late_end}",
+                **late,
+            },
+            "change": {
+                "opportunities_per_game_delta": opportunity_delta,
+                "opportunities_per_game_pct": opportunity_pct,
+                "ppr_points_per_game_delta": ppr_delta,
+                "ppr_points_per_game_pct": ppr_pct,
+            },
+        })
+
+    return output
+
+
+def find_usage_risers(
+    position: str,
+    season: int,
+    start_week: int,
+    end_week: int
+) -> Dict[str, Any]:
+    """
+    Find players whose opportunity and PPR usage rose within a week range.
+
+    The week range is split in half. For example, weeks 1-17 compares
+    weeks 1-8 against weeks 9-17.
+    """
+    try:
+        position_code = _normalize_position(position)
+    except ValueError as exc:
+        return {"ok": False, "data": None, "error": str(exc), "meta": {}}
+
+    if start_week < 1 or end_week > 22 or start_week >= end_week:
+        return {
+            "ok": False,
+            "data": None,
+            "error": "Use a valid week range where 1 <= start_week < end_week <= 22",
+            "meta": {},
+        }
+
+    midpoint = start_week + ((end_week - start_week + 1) // 2) - 1
+    weekly = _weekly_research_rows(season, position_code)
+    if not weekly["ok"]:
+        return weekly
+
+    data = _period_change_player_rows(
+        weekly["data"],
+        start_week,
+        midpoint,
+        midpoint + 1,
+        end_week,
+    )
+    data.sort(key=lambda row: row["change"]["opportunities_per_game_delta"], reverse=True)
+
+    return {
+        "ok": True,
+        "data": data,
+        "error": None,
+        "meta": {
+            **weekly["meta"],
+            "position": position_code,
+            "early_weeks": f"{start_week}-{midpoint}",
+            "late_weeks": f"{midpoint + 1}-{end_week}",
+            "sort": "opportunities_per_game_delta_desc",
+            "minimums": {"early_opportunities": 10, "late_opportunities": 15},
+            "thresholds": {
+                "opportunities_per_game_delta": 3.0,
+                "ppr_points_per_game_delta": 3.0,
+                "relative_increase_pct": 25.0,
+            },
+        },
+    }
+
+
+def find_target_opportunity_players(
+    season: int,
+    min_targets: int,
+    position: Optional[str] = None
+) -> Dict[str, Any]:
+    """Find players with high target volume and team target share."""
+    try:
+        position_code = _normalize_position(position, allow_none=True)
+    except ValueError as exc:
+        return {"ok": False, "data": None, "error": str(exc), "meta": {}}
+
+    if min_targets < 1:
+        return {"ok": False, "data": None, "error": "min_targets must be at least 1", "meta": {}}
+
+    weekly = _weekly_research_rows(season, None)
+    if not weekly["ok"]:
+        return weekly
+
+    grouped: Dict[str, Dict[str, Any]] = {}
+    team_targets: Dict[str, int] = {}
+    for row in weekly["data"]:
+        if row["position"] == "QB":
+            continue
+        team = row["team"] or "UNK"
+        team_targets[team] = team_targets.get(team, 0) + row["targets"]
+        if position_code and row["position"] != position_code:
+            continue
+        player_id = row["player_id"]
+        if player_id not in grouped:
+            grouped[player_id] = {
+                "player_id": player_id,
+                "name": row["name"],
+                "team": team,
+                "position": row["position"],
+                "games": 0,
+                "targets": 0,
+                "receptions": 0,
+                "receiving_yards": 0,
+                "receiving_tds": 0,
+                "ppr_points": 0.0,
+            }
+        grouped[player_id]["games"] += 1
+        grouped[player_id]["targets"] += row["targets"]
+        grouped[player_id]["receptions"] += row["receptions"]
+        grouped[player_id]["receiving_yards"] += row["receiving_yards"]
+        grouped[player_id]["receiving_tds"] += row["receiving_tds"]
+        grouped[player_id]["ppr_points"] = round(grouped[player_id]["ppr_points"] + row["ppr_points"], 2)
+
+    data = []
+    for player in grouped.values():
+        if player["targets"] < min_targets:
+            continue
+        team_total_targets = team_targets.get(player["team"], 0)
+        target_share = round(player["targets"] / team_total_targets, 4) if team_total_targets else 0.0
+        player["target_share"] = target_share
+        player["targets_per_game"] = round(player["targets"] / player["games"], 2) if player["games"] else 0.0
+        player["ppr_points_per_game"] = round(player["ppr_points"] / player["games"], 2) if player["games"] else 0.0
+        data.append(player)
+
+    data.sort(key=lambda row: (row["target_share"], row["targets"]), reverse=True)
+
+    return {
+        "ok": True,
+        "data": data,
+        "error": None,
+        "meta": {
+            **weekly["meta"],
+            "position": position_code,
+            "min_targets": min_targets,
+            "sort": "target_share_desc",
+        },
+    }
+
+
+def find_late_season_breakouts(position: str, season: int) -> Dict[str, Any]:
+    """Find players with materially better usage and PPR scoring in weeks 9-17."""
+    try:
+        position_code = _normalize_position(position)
+    except ValueError as exc:
+        return {"ok": False, "data": None, "error": str(exc), "meta": {}}
+
+    weekly = _weekly_research_rows(season, position_code)
+    if not weekly["ok"]:
+        return weekly
+
+    data = _period_change_player_rows(weekly["data"], 1, 8, 9, 17)
+    data.sort(key=lambda row: row["change"]["ppr_points_per_game_delta"], reverse=True)
+
+    return {
+        "ok": True,
+        "data": data,
+        "error": None,
+        "meta": {
+            **weekly["meta"],
+            "position": position_code,
+            "early_weeks": "1-8",
+            "late_weeks": "9-17",
+            "sort": "ppr_points_per_game_delta_desc",
+            "minimums": {"early_opportunities": 10, "late_opportunities": 15},
+            "thresholds": {
+                "opportunities_per_game_delta": 3.0,
+                "ppr_points_per_game_delta": 3.0,
+                "relative_increase_pct": 25.0,
+            },
+        },
+    }

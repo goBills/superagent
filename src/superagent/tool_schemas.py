@@ -14,6 +14,9 @@ from superagent.tools import (
     get_fantasy_player_summary,
     compare_fantasy_players,
     get_player_weekly_usage,
+    find_usage_risers,
+    find_target_opportunity_players,
+    find_late_season_breakouts,
 )
 
 
@@ -171,6 +174,75 @@ TOOL_SCHEMAS = [
             },
             "required": ["player_name", "season"]
         }
+    },
+    {
+        "name": "find_usage_risers",
+        "description": "Find historical fantasy draft research candidates whose opportunities and PPR points rose across a week range. This is research, not a projection.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "position": {
+                    "type": "string",
+                    "description": "Fantasy position to search: RB, WR, TE, QB, or K",
+                    "enum": ["RB", "WR", "TE", "QB", "K"]
+                },
+                "season": {
+                    "type": "integer",
+                    "description": "NFL season year (2020-2025)"
+                },
+                "start_week": {
+                    "type": "integer",
+                    "description": "Start of the full comparison window"
+                },
+                "end_week": {
+                    "type": "integer",
+                    "description": "End of the full comparison window"
+                }
+            },
+            "required": ["position", "season", "start_week", "end_week"]
+        }
+    },
+    {
+        "name": "find_target_opportunity_players",
+        "description": "Find players with at least a target threshold and their team target share. Useful for historical draft research, not projections.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "season": {
+                    "type": "integer",
+                    "description": "NFL season year (2020-2025)"
+                },
+                "min_targets": {
+                    "type": "integer",
+                    "description": "Minimum season targets to include"
+                },
+                "position": {
+                    "type": "string",
+                    "description": "Optional position filter: RB, WR, TE, QB, K, or ALL",
+                    "enum": ["RB", "WR", "TE", "QB", "K", "ALL"]
+                }
+            },
+            "required": ["season", "min_targets"]
+        }
+    },
+    {
+        "name": "find_late_season_breakouts",
+        "description": "Find players whose opportunities and PPR points improved from weeks 1-8 to weeks 9-17. Historical research only, not a prediction.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "position": {
+                    "type": "string",
+                    "description": "Fantasy position to search: RB, WR, TE, QB, or K",
+                    "enum": ["RB", "WR", "TE", "QB", "K"]
+                },
+                "season": {
+                    "type": "integer",
+                    "description": "NFL season year (2020-2025)"
+                }
+            },
+            "required": ["position", "season"]
+        }
     }
 ]
 
@@ -183,6 +255,9 @@ TOOL_DISPATCH: Dict[str, Callable] = {
     "get_fantasy_player_summary": get_fantasy_player_summary,
     "compare_fantasy_players": compare_fantasy_players,
     "get_player_weekly_usage": get_player_weekly_usage,
+    "find_usage_risers": find_usage_risers,
+    "find_target_opportunity_players": find_target_opportunity_players,
+    "find_late_season_breakouts": find_late_season_breakouts,
 }
 
 

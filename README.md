@@ -10,6 +10,7 @@ A sellable NFL research assistant that answers natural-language questions about 
 ✅ **Phase 3B: Interactive CLI** — User-facing REPL for natural language questions.
 ✅ **Phase 3C: Conversation Memory** — CLI preserves recent turns for follow-up questions.
 ✅ **Phase 4A: Fantasy Research Tools** — Fantasy scoring summaries, comparisons, and weekly usage.
+✅ **Phase 4B: Draft Research Tools** — Usage risers, target opportunity, and late-season breakouts.
 
 ## Quick Start
 
@@ -115,6 +116,16 @@ Agent: Here's James Cook's weekly usage by carries, targets, receptions, yards, 
 📊 Tools Used:
   ✅ get_player_weekly_usage
 
+You: Which WRs had 100+ targets in 2024?
+Agent: Here are the high-target WRs with team target share...
+📊 Tools Used:
+  ✅ find_target_opportunity_players
+
+You: Find late-season RB breakouts in 2024
+Agent: Here are RBs whose opportunities and PPR scoring rose from weeks 1-8 to 9-17...
+📊 Tools Used:
+  ✅ find_late_season_breakouts
+
 You: help
 Agent: [shows available question types]
 
@@ -135,6 +146,9 @@ Goodbye! 👋
    - `get_fantasy_player_summary` — fantasy points by standard, half-PPR, or PPR scoring
    - `compare_fantasy_players` — side-by-side fantasy comparison
    - `get_player_weekly_usage` — weekly carries, targets, receptions, yards, TDs, and PPR points
+   - `find_usage_risers` — historical players whose opportunities and PPR/game increased
+   - `find_target_opportunity_players` — players above a target threshold with team target share
+   - `find_late_season_breakouts` — players who improved from weeks 1-8 to weeks 9-17
 3. **Superagent executes tools** with deterministic SQL queries
 4. **Claude synthesizes results** and provides a clear answer
 5. **CLI formats and displays** the response with tables and stats
@@ -148,7 +162,7 @@ Goodbye! 👋
 
 **Current scope:**
 - Multi-turn Q&A with recent conversation memory capped at 6 turns
-- Box-score, team EPA, and fantasy research metrics (no projection/prediction)
+- Box-score, team EPA, fantasy research, and historical draft research metrics (no projection/prediction)
 - Historical data only (2020-2025)
 
 ## Project Structure
@@ -179,6 +193,7 @@ superagent/
 │   ├── test_tools.py              # 25 tests: name resolution + tools
 │   ├── test_agent.py              # 15 tests: agent with mocked client
 │   ├── test_cli.py                # 11 tests: CLI formatting
+│   ├── test_draft_research.py     # 19 tests: draft research filters
 │   └── test_fantasy.py            # 22 tests: fantasy scoring + usage tools
 ├── requirements.txt               # Python dependencies
 ├── pyproject.toml                 # Package metadata + console script
@@ -195,24 +210,25 @@ superagent/
 
 ## Test Coverage
 
-All 73 tests passing:
+All 92 tests passing:
 - **Phase 2A (Tools):** 25 tests validating name resolution and 4 core tools
 - **Phase 3A/3C (Agent):** 15 tests of Claude tool-calling and conversation history with mocked client (no API key needed)
 - **Phase 3B (CLI):** 11 tests of formatting functions
 - **Phase 4A (Fantasy):** 22 tests of fantasy scoring, player summaries, comparisons, and weekly usage
+- **Phase 4B (Draft Research):** 19 tests of usage risers, target opportunity, late-season breakouts, and tool schemas
 
 Run tests:
 ```bash
 pytest                    # Run all tests
 pytest tests/test_cli.py  # Run CLI tests only
 pytest tests/test_fantasy.py  # Run fantasy tests only
+pytest tests/test_draft_research.py  # Run draft research tests only
 pytest -v                 # Verbose output
 ```
 
 ## Future Phases (Out of Scope)
 
 Potential enhancements beyond MVP:
-- **Phase 4B:** Draft research tools (sleepers, usage risers, target opportunity)
 - **Phase 4C:** Historical waiver and trend finder
 - **Phase 5:** Player EPA metrics and richer player analytics
 - **Phase 6:** Web API (FastAPI) instead of CLI-only
@@ -232,7 +248,7 @@ Potential enhancements beyond MVP:
 - Historical data through 2025 season only (no live/current-week updates)
 - No injury data, depth charts, or Vegas lines
 - No betting picks, fantasy projections, or predictions
-- Fantasy tools are research tools, not start/sit or waiver pickup advice
+- Fantasy and draft tools are research tools, not start/sit, waiver pickup, or draft-pick advice
 - No ML models; Claude only orchestrates deterministic tools
 
 **These are not bugs—they're intentional scope decisions. Persistent memory and player EPA metrics are future enhancements.**
