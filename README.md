@@ -193,12 +193,14 @@ pytest -v                 # Verbose output
 ## Future Phases (Out of Scope)
 
 Potential enhancements beyond MVP:
-- **Phase 4:** Web API (FastAPI) instead of CLI-only
-- **Phase 5:** Live/current-week data integration
-- **Phase 6:** Injury status, depth charts, Vegas lines (informational-only)
-- **Phase 7:** Multi-user support with auth
-- **Phase 8:** Caching layer for performance
-- **Phase 9:** Fine-tuned model for domain-specific reasoning
+- **Phase 3C:** Conversation memory for multi-turn follow-ups
+- **Phase 4:** Player EPA metrics and richer player analytics
+- **Phase 5:** Web API (FastAPI) instead of CLI-only
+- **Phase 6:** Live/current-week data integration
+- **Phase 7:** Injury status, depth charts, Vegas lines (informational-only)
+- **Phase 8:** Multi-user support with auth
+- **Phase 9:** Caching layer for performance
+- **Phase 10:** Fine-tuned model for domain-specific reasoning
 
 ## Known Limitations
 
