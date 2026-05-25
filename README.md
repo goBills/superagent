@@ -12,6 +12,7 @@ A sellable NFL research assistant that answers natural-language questions about 
 ✅ **Phase 4A: Fantasy Research Tools** — Fantasy scoring summaries, comparisons, and weekly usage.
 ✅ **Phase 4B: Draft Research Tools** — Usage risers, target opportunity, and late-season breakouts.
 ✅ **Phase 5: Player EPA & Advanced Analytics** — Player EPA/play, success rate, CPOE, and position splits.
+✅ **Phase 6: Web API & Demo UI** — FastAPI backend with browser-based chat interface and example prompts.
 
 ## Quick Start
 
@@ -146,6 +147,73 @@ Goodbye! 👋
 
 **Note on multi-turn:** The CLI preserves the last 6 turns of conversation, so follow-ups like "Compare him to Lamar" can use recent context.
 
+## Phase 6: Web API & Demo UI
+
+A lightweight browser interface to Superagent, perfect for demos and sharing.
+
+### Start the Web Server
+
+Once Phase 1 data is loaded and your API key is set:
+
+```bash
+python -m superagent.api
+```
+
+Then open **http://localhost:8000** in your browser.
+
+### Features
+
+- **Chat interface** — Ask questions in your browser
+- **Session memory** — Browser stores session ID in `localStorage`, backend keeps last 6 turns per session
+- **Tools sidebar** — Collapsible list of tools used for each answer
+- **Example buttons** — Quick-start queries:
+  - "Josh Allen EPA/play"
+  - "Bills RB usage"
+  - "WR target opportunities"
+  - "RB late-season breakouts"
+- **Disclaimer** — Clear footer stating "Historical research. Not betting/start-sit advice."
+
+### Architecture
+
+- **Backend:** FastAPI (wraps existing `run_agent()`)
+- **Frontend:** Single HTML file with vanilla JS (no build, no node_modules)
+- **Sessions:** In-memory per-session history (no database persistence)
+- **CORS:** Localhost only (`http://localhost:8000`, `http://127.0.0.1:8000`)
+
+### API Endpoints
+
+**`GET /health`**
+```bash
+curl http://localhost:8000/health
+```
+
+**`POST /chat`**
+```bash
+curl -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "What is Josh Allen EPa per play in 2024?",
+    "session_id": "optional-uuid"
+  }'
+```
+
+Response:
+```json
+{
+  "ok": true,
+  "answer": "Josh Allen's EPA/play in 2024 was 0.259, meaning...",
+  "tools_used": [
+    {
+      "name": "get_player_advanced_summary",
+      "input": {"player_name": "Josh Allen", "season": 2024},
+      "result": {"ok": true, "data": {...}}
+    }
+  ],
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "error": null
+}
+```
+
 ### How It Works
 
 1. **You ask a question** in natural language
@@ -193,6 +261,9 @@ superagent/
 │   ├── agent.py                   # Claude tool-calling agent
 │   ├── cli.py                     # CLI formatting functions
 │   ├── main.py                    # Interactive CLI entry point
+│   ├── api.py                     # FastAPI web backend
+│   ├── static/
+│   │   └── index.html             # Web chat UI (single-page)
 │   └── data/
 │       ├── fetch_nflverse.py     # Download nflverse parquet files
 │       └── build_database.py     # Load parquet → DuckDB
@@ -208,7 +279,8 @@ superagent/
 │   ├── test_agent.py              # 15 tests: agent with mocked client
 │   ├── test_cli.py                # 11 tests: CLI formatting
 │   ├── test_draft_research.py     # 19 tests: draft research filters
-│   └── test_fantasy.py            # 22 tests: fantasy scoring + usage tools
+│   ├── test_fantasy.py            # 22 tests: fantasy scoring + usage tools
+│   └── test_api.py                # 9 tests: FastAPI endpoints + sessions
 ├── requirements.txt               # Python dependencies
 ├── pyproject.toml                 # Package metadata + console script
 ├── .env.example                   # Environment template
@@ -224,13 +296,14 @@ superagent/
 
 ## Test Coverage
 
-All 106 tests passing:
+All 115 tests passing:
 - **Phase 2A (Tools):** 25 tests validating name resolution and 4 core tools
 - **Phase 3A/3C (Agent):** 15 tests of Claude tool-calling and conversation history with mocked client (no API key needed)
 - **Phase 3B (CLI):** 11 tests of formatting functions
 - **Phase 4A (Fantasy):** 22 tests of fantasy scoring, player summaries, comparisons, and weekly usage
 - **Phase 4B (Draft Research):** 19 tests of usage risers, target opportunity, late-season breakouts, and tool schemas
 - **Phase 5 (Advanced):** 14 tests of player EPA, success rate, CPOE, small samples, comparisons, and tool schemas
+- **Phase 6 (API):** 9 tests of FastAPI endpoints, session management, and CORS
 
 Run tests:
 ```bash
@@ -246,10 +319,9 @@ pytest -v                 # Verbose output
 
 Potential enhancements beyond MVP:
 - **Phase 4C:** Historical waiver and trend finder
-- **Phase 6:** Web API (FastAPI) instead of CLI-only
-- **Phase 7:** Live/current-week data integration
-- **Phase 8:** Injury status, depth charts, Vegas lines (informational-only)
-- **Phase 9:** Multi-user support with auth
+- **Phase 7:** Live/current-week data integration (injuries, depth charts, bye weeks, snap counts)
+- **Phase 8:** Product layer (auth, saved chats, rate limits)
+- **Phase 9:** Deployment to cloud (server, domain, scaling)
 - **Phase 10:** Caching layer for performance
 - **Phase 11:** Fine-tuned model for domain-specific reasoning
 
