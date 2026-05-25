@@ -33,6 +33,7 @@ Agent: Josh Allen plays for Buffalo, whose bye week is...
 ✅ **Phase 7A: Schedule + Bye Week Context** — Team schedules, bye weeks, and games from a specified week onward.
 ✅ **Phase 7C-lite: Fantasy Schedule Context** — Fantasy metrics + schedule context, no external data sources.
 ✅ **Phase 8: Product Layer** — User auth, persistent conversations, saved sessions, rate limits, and deployment-ready config.
+✅ **Phase 9A: Deployable Package** — Docker, Compose, health checks, and deployment docs for hosted launch.
 
 ## Quick Start
 
@@ -406,6 +407,17 @@ The script requires `ANTHROPIC_API_KEY` because it exercises the real Claude too
 
 See [docs/API.md](docs/API.md) for request/response formats, error behavior, curl examples, and the full deterministic tool list.
 
+## Deployment
+
+Superagent includes a Dockerfile, Docker Compose config, startup script, and deployment guide.
+
+```bash
+docker compose up --build
+bash scripts/healthcheck.sh http://localhost:8000
+```
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) and [PRODUCTION_CHECKLIST.md](PRODUCTION_CHECKLIST.md) before deploying to Render, Railway, Heroku, or another host.
+
 ## Known Limitations
 
 **Current scope:**
@@ -426,7 +438,7 @@ These are intentional scope decisions, not bugs.
 ## Future Phases (Post-Phase 8)
 
 - **Phase 7B: Injuries & Depth** — Legitimate injury/depth source, treated as an enrichment plugin once a source is chosen.
-- **Phase 9: Deployment** — Production reverse proxy, hosted database, domain, monitoring, and stricter CORS.
+- **Phase 9B: Live Deployment** — Production reverse proxy, hosted database, domain, monitoring, and stricter CORS.
 - **Beyond** — Password reset, OAuth, admin controls, caching, commercial licensing, and domain-specific model tuning.
 
 ## Development
