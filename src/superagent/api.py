@@ -6,11 +6,13 @@ Wraps the CLI agent in a web service with session management.
 
 import json
 import os
+import tempfile
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -19,7 +21,9 @@ from sqlalchemy.orm import Session
 
 from superagent.agent import run_agent
 from superagent.auth import create_token, hash_password, verify_password, verify_token
+from superagent.canonical_resolution import seed_canonical_players_from_nflverse
 from superagent.config import HOST, PORT, get_config
+from superagent.data.ingest_draft_sheets import DraftIngestionError, ingest_draft_market_file
 from superagent.db import get_db, init_db
 from superagent.espn_integration import ingest_espn_league
 from superagent.models import (
@@ -668,6 +672,74 @@ def admin_draft_mappings(
             }
         )
     return results
+
+
+@app.post("/admin/seed-canonical")
+def admin_seed_canonical(
+    token: Optional[str] = None,
+    season: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Seed canonical players from nflverse data without requiring production shell access.
+
+    Render free instances do not provide shell access, so production operators can
+    trigger the same deterministic seeding path through this protected endpoint.
+    """
+    _require_admin_token(token)
+    if season is not None and (season < 2020 or season > 2030):
+        raise HTTPException(status_code=400, detail="Invalid season")
+
+    seasons = [season] if season is not None else None
+    try:
+        summary = seed_canonical_players_from_nflverse(seasons=seasons)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Canonical seed failed: {exc}") from exc
+
+    return {
+        "ok": True,
+        "season": season,
+        "summary": summary,
+    }
+
+
+@app.post("/admin/draft-import")
+async def admin_draft_import(
+    token: Optional[str] = None,
+    source: str = "draftsheetsv6",
+    season: int = 2025,
+    sheet: Optional[str] = "DATA",
+    file: UploadFile = File(...),
+) -> Dict[str, Any]:
+    """
+    Upload and import DraftSheets-style market data without production shell access.
+
+    The uploaded file is written to a temporary path and then passed through the
+    same strict importer used by the CLI, so validation and canonical mapping
+    behavior stay identical across local and deployed environments.
+    """
+    _require_admin_token(token)
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Upload filename is required")
+
+    try:
+        uploaded_name = Path(file.filename).name
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir) / uploaded_name
+            tmp_path.write_bytes(await file.read())
+            summary = ingest_draft_market_file(
+                file_path=str(tmp_path),
+                source=source,
+                season=season,
+                sheet_name=sheet,
+            )
+        return {
+            "ok": True,
+            "summary": summary,
+        }
+    except DraftIngestionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Draft import failed: {exc}") from exc
 
 
 @app.get("/sessions", response_model=List[SessionSummary])

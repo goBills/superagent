@@ -358,6 +358,58 @@ Example response:
 }
 ```
 
+### POST /admin/seed-canonical
+
+Seed canonical players from nflverse into the product database. This is the production-safe replacement for running `python -m superagent.data.seed_canonical_players` when shell access is unavailable.
+
+```bash
+curl -X POST "https://superagent-ph31.onrender.com/admin/seed-canonical?token=$ADMIN_TOKEN&season=2025"
+```
+
+Example response:
+
+```json
+{
+  "ok": true,
+  "season": 2025,
+  "summary": {
+    "players_created": 128,
+    "players_seen": 2834,
+    "player_seasons_created": 2812,
+    "aliases_created": 391
+  }
+}
+```
+
+### POST /admin/draft-import
+
+Upload and import a DraftSheets CSV/XLSX file through the same strict importer used by the CLI. This is useful on Render Free, where shell access is unavailable.
+
+```bash
+curl -X POST "https://superagent-ph31.onrender.com/admin/draft-import?token=$ADMIN_TOKEN&source=draftsheetsv6&season=2025&sheet=DATA" \
+  -F "file=@/path/to/Copy of DraftSheets Fantasy Tool.xlsx"
+```
+
+Malformed files return `400` with the strict validation error. Unknown or ambiguous players are imported into the existing review queue instead of being silently guessed.
+
+Example response:
+
+```json
+{
+  "ok": true,
+  "summary": {
+    "ok": true,
+    "source": "draftsheetsv6",
+    "season": 2025,
+    "file_name": "Copy of DraftSheets Fantasy Tool.xlsx",
+    "sheet_name": "DATA",
+    "rows_seen": 966,
+    "rows_imported": 891,
+    "rows_needing_review": 75
+  }
+}
+```
+
 ### GET /admin/draft-mappings
 
 Return low-confidence draft source mappings queued for review:

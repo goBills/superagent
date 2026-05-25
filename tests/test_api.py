@@ -303,6 +303,90 @@ class TestAdminQuestions:
         assert match["source_player_name"] == "Future Rookie"
         assert match["candidates"][0]["confidence"] == 0.61
 
+    def test_admin_seed_canonical_requires_token(self, monkeypatch):
+        use_admin_token(monkeypatch)
+
+        response = client.post("/admin/seed-canonical?season=2025")
+
+        assert response.status_code == 401
+
+    def test_admin_seed_canonical_correct_token(self, monkeypatch):
+        token = use_admin_token(monkeypatch)
+
+        def fake_seed(seasons=None):
+            assert seasons == [2025]
+            return {
+                "players_created": 1,
+                "players_seen": 1,
+                "player_seasons_created": 1,
+                "aliases_created": 2,
+            }
+
+        monkeypatch.setattr("superagent.api.seed_canonical_players_from_nflverse", fake_seed)
+
+        response = client.post(f"/admin/seed-canonical?token={token}&season=2025")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert data["season"] == 2025
+        assert data["summary"]["players_created"] == 1
+
+    def test_admin_draft_import_requires_token(self, monkeypatch):
+        use_admin_token(monkeypatch)
+
+        response = client.post(
+            "/admin/draft-import?source=draftsheetsv6&season=2025&sheet=DATA",
+            files={
+                "file": (
+                    "draft.csv",
+                    b"Player,Team,POS\nJosh Allen,BUF,QB1\n",
+                    "text/csv",
+                )
+            },
+        )
+
+        assert response.status_code == 401
+
+    def test_admin_draft_import_correct_token(self, monkeypatch):
+        token = use_admin_token(monkeypatch)
+        captured = {}
+
+        def fake_import(file_path, source, season, sheet_name=None):
+            assert Path(file_path).exists()
+            captured["source"] = source
+            captured["season"] = season
+            captured["sheet_name"] = sheet_name
+            return {
+                "ok": True,
+                "rows_seen": 1,
+                "rows_imported": 1,
+                "rows_needing_review": 0,
+            }
+
+        monkeypatch.setattr("superagent.api.ingest_draft_market_file", fake_import)
+
+        response = client.post(
+            f"/admin/draft-import?token={token}&source=draftsheetsv6&season=2025&sheet=DATA",
+            files={
+                "file": (
+                    "draft.csv",
+                    b"Player,Team,POS\nJosh Allen,BUF,QB1\n",
+                    "text/csv",
+                )
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert data["summary"]["rows_imported"] == 1
+        assert captured == {
+            "source": "draftsheetsv6",
+            "season": 2025,
+            "sheet_name": "DATA",
+        }
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
