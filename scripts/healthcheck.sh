@@ -2,6 +2,7 @@
 set -e
 
 HOST="${1:-http://localhost:8000}"
+HOST="${HOST%/}"
 
 echo "Health check for ${HOST}"
 echo ""
