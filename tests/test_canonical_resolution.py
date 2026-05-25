@@ -327,6 +327,26 @@ def test_seed_uses_existing_canonical_id_when_nflverse_id_matches(db_session, tm
     assert season is not None
 
 
+def test_seed_can_skip_weekly_and_pbp_alias_enrichment(db_session, tmp_path):
+    duckdb_path = tmp_path / "seed_quick.duckdb"
+    create_seed_duckdb(duckdb_path)
+
+    seed_canonical_players_from_nflverse(
+        seasons=[2024],
+        db=db_session,
+        duckdb_path=str(duckdb_path),
+        include_alias_enrichment=False,
+    )
+
+    aliases = {
+        alias.alias
+        for alias in db_session.query(CanonicalPlayerAlias).all()
+    }
+    assert "Joshua Allen" in aliases
+    assert "J. Allen" not in aliases
+    assert "G. Davis" not in aliases
+
+
 def test_multiple_sources_for_same_player(db_session):
     add_player(db_session, "nfl_00_0034857", "Josh Allen", nflverse_player_id="00-0034857")
 

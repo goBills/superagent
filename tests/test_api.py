@@ -313,8 +313,9 @@ class TestAdminQuestions:
     def test_admin_seed_canonical_correct_token(self, monkeypatch):
         token = use_admin_token(monkeypatch)
 
-        def fake_seed(seasons=None):
+        def fake_seed(seasons=None, include_alias_enrichment=True):
             assert seasons == [2025]
+            assert include_alias_enrichment is False
             return {
                 "players_created": 1,
                 "players_seen": 1,
@@ -335,7 +336,9 @@ class TestAdminQuestions:
     def test_admin_seed_canonical_background_job(self, monkeypatch):
         token = use_admin_token(monkeypatch)
 
-        def fake_seed(seasons=None):
+        def fake_seed(seasons=None, include_alias_enrichment=True):
+            assert seasons == [2025]
+            assert include_alias_enrichment is False
             return {
                 "players_created": 1,
                 "players_seen": 1,
@@ -358,6 +361,28 @@ class TestAdminQuestions:
         assert job["type"] == "seed_canonical"
         assert job["status"] == "completed"
         assert job["result"]["players_created"] == 1
+
+    def test_admin_seed_canonical_full_aliases_option(self, monkeypatch):
+        token = use_admin_token(monkeypatch)
+
+        def fake_seed(seasons=None, include_alias_enrichment=True):
+            assert seasons == [2025]
+            assert include_alias_enrichment is True
+            return {
+                "players_created": 1,
+                "players_seen": 1,
+                "player_seasons_created": 1,
+                "aliases_created": 2,
+            }
+
+        monkeypatch.setattr("superagent.api.seed_canonical_players_from_nflverse", fake_seed)
+
+        response = client.post(
+            f"/admin/seed-canonical?token={token}&season=2025&wait=true&full_aliases=true"
+        )
+
+        assert response.status_code == 200
+        assert response.json()["summary"]["aliases_created"] == 2
 
     def test_admin_draft_import_requires_token(self, monkeypatch):
         use_admin_token(monkeypatch)

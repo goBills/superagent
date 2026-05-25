@@ -385,6 +385,7 @@ def seed_canonical_players_from_nflverse(
     seasons: list[int] | None = None,
     db: Session | None = None,
     duckdb_path: str | None = None,
+    include_alias_enrichment: bool = True,
 ) -> dict[str, int]:
     """
     Seed product DB canonical identity from existing DuckDB nflverse tables.
@@ -470,6 +471,11 @@ def seed_canonical_players_from_nflverse(
             _upsert_alias(db, canonical_player_id, football_name, "nflverse_rosters")
 
         db.commit()
+
+        if not include_alias_enrichment:
+            after_aliases = db.query(CanonicalPlayerAlias).count()
+            summary["aliases_created"] = max(after_aliases - before_aliases, 0)
+            return summary
 
         weekly_rows = conn.execute(
             f"""

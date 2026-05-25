@@ -287,13 +287,20 @@ def _create_admin_job(job_type: str, payload: Dict[str, Any]) -> str:
     return job_id
 
 
-def _run_seed_canonical_job(job_id: str, seasons: Optional[List[int]]) -> None:
+def _run_seed_canonical_job(
+    job_id: str,
+    seasons: Optional[List[int]],
+    include_alias_enrichment: bool,
+) -> None:
     """Run canonical seeding outside the request/response cycle."""
     job = ADMIN_JOBS[job_id]
     job["status"] = "running"
     job["started_at"] = utc_now().isoformat()
     try:
-        job["result"] = seed_canonical_players_from_nflverse(seasons=seasons)
+        job["result"] = seed_canonical_players_from_nflverse(
+            seasons=seasons,
+            include_alias_enrichment=include_alias_enrichment,
+        )
         job["status"] = "completed"
     except Exception as exc:
         job["error"] = str(exc)
@@ -713,14 +720,16 @@ def admin_seed_canonical(
     token: Optional[str] = None,
     season: Optional[int] = None,
     wait: bool = False,
+    full_aliases: bool = False,
 ) -> Dict[str, Any]:
     """
     Seed canonical players from nflverse data without requiring production shell access.
 
     Render free instances do not provide shell access, so production operators can
     trigger the same deterministic seeding path through this protected endpoint.
-    By default it runs as a background job so the request does not hang while
-    Postgres is being populated.
+    By default it runs as a background job and skips expensive weekly/play alias
+    enrichment. Roster identity is enough for DraftSheets imports; set
+    full_aliases=true later if you want the slower enrichment pass.
     """
     _require_admin_token(token)
     if season is not None and (season < 2020 or season > 2030):
@@ -730,9 +739,13 @@ def admin_seed_canonical(
     if not wait:
         job_id = _create_admin_job(
             "seed_canonical",
-            {"season": season, "seasons": seasons},
+            {
+                "season": season,
+                "seasons": seasons,
+                "full_aliases": full_aliases,
+            },
         )
-        background_tasks.add_task(_run_seed_canonical_job, job_id, seasons)
+        background_tasks.add_task(_run_seed_canonical_job, job_id, seasons, full_aliases)
         return {
             "ok": True,
             "job_id": job_id,
@@ -741,7 +754,10 @@ def admin_seed_canonical(
         }
 
     try:
-        summary = seed_canonical_players_from_nflverse(seasons=seasons)
+        summary = seed_canonical_players_from_nflverse(
+            seasons=seasons,
+            include_alias_enrichment=full_aliases,
+        )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Canonical seed failed: {exc}") from exc
 

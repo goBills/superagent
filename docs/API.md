@@ -362,6 +362,8 @@ Example response:
 
 Seed canonical players from nflverse into the product database. This is the production-safe replacement for running `python -m superagent.data.seed_canonical_players` when shell access is unavailable.
 
+By default this endpoint runs a quick roster-only seed, which is enough for DraftSheets imports. Add `full_aliases=true` later to run slower weekly/play-by-play alias enrichment.
+
 ```bash
 curl -X POST "https://superagent-ph31.onrender.com/admin/seed-canonical?token=$ADMIN_TOKEN&season=2025"
 ```
