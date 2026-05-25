@@ -16,9 +16,17 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from superagent.canonical_resolution import auto_map_external_player
+from superagent.canonical_resolution import normalize_player_name
 from superagent.db import SessionLocal
-from superagent.models import DraftMarketImport, DraftPlayerMarket, DraftSourceRank
+from superagent.models import (
+    CanonicalPlayerAlias,
+    DraftImportReview,
+    DraftMarketImport,
+    DraftPlayerMarket,
+    DraftSourceRank,
+    ExternalPlayerMapping,
+    PlayerSeason,
+)
 
 
 class DraftIngestionError(ValueError):
@@ -317,6 +325,150 @@ def _upsert_market_row(
             source_rank.rank_value = rank_value
 
 
+def _build_exact_alias_index(db: Session, season: int) -> dict[str, list[dict[str, Any]]]:
+    """Preload exact alias candidates once for fast draft import mapping."""
+    seasons_by_player: dict[str, list[PlayerSeason]] = {}
+    for player_season in db.query(PlayerSeason).filter(PlayerSeason.season == season).all():
+        seasons_by_player.setdefault(player_season.canonical_player_id, []).append(player_season)
+
+    candidates_by_alias: dict[str, list[dict[str, Any]]] = {}
+    aliases = db.query(CanonicalPlayerAlias).all()
+    seen = set()
+    for alias in aliases:
+        player = alias.canonical_player
+        season_contexts = seasons_by_player.get(player.canonical_player_id, [])
+        if not season_contexts:
+            season_contexts = [None]
+        for context in season_contexts:
+            key = (
+                alias.normalized_alias,
+                player.canonical_player_id,
+                context.position if context else None,
+                context.team if context else None,
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            candidates_by_alias.setdefault(alias.normalized_alias, []).append(
+                {
+                    "canonical_player_id": player.canonical_player_id,
+                    "full_name": player.full_name,
+                    "position": context.position if context else None,
+                    "team": context.team if context else None,
+                    "confidence": 1.0,
+                    "source": "exact_alias",
+                }
+            )
+    return candidates_by_alias
+
+
+def _upsert_external_mapping(
+    db: Session,
+    source: str,
+    season: int,
+    source_player_name: str,
+    canonical_player_id: str,
+    confidence: float,
+) -> None:
+    mapping = (
+        db.query(ExternalPlayerMapping)
+        .filter(
+            ExternalPlayerMapping.source == source,
+            ExternalPlayerMapping.season == season,
+            ExternalPlayerMapping.source_player_name == source_player_name,
+            ExternalPlayerMapping.source_player_id.is_(None),
+        )
+        .first()
+    )
+    if mapping is None:
+        mapping = ExternalPlayerMapping(
+            source=source,
+            season=season,
+            source_player_name=source_player_name,
+            source_player_id=None,
+        )
+        db.add(mapping)
+    mapping.canonical_player_id = canonical_player_id
+    mapping.confidence = confidence
+    mapping.status = "auto"
+
+
+def _queue_draft_review(
+    db: Session,
+    source: str,
+    season: int,
+    source_player_name: str,
+    candidates: list[dict[str, Any]],
+) -> None:
+    db.add(
+        DraftImportReview(
+            source=source,
+            season=season,
+            source_player_name=source_player_name,
+            source_player_id=None,
+            candidates=json.dumps(candidates),
+            status="pending",
+        )
+    )
+
+
+def _map_draft_player_exact(
+    db: Session,
+    source: str,
+    season: int,
+    source_player_name: str,
+    position: str | None,
+    alias_index: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    normalized = normalize_player_name(source_player_name)
+    candidates = alias_index.get(normalized, [])
+    if position:
+        position_matches = [
+            candidate
+            for candidate in candidates
+            if candidate.get("position")
+            and str(candidate["position"]).upper() == position.upper()
+        ]
+        if position_matches:
+            candidates = position_matches
+
+    unique_by_player = {}
+    for candidate in candidates:
+        unique_by_player.setdefault(candidate["canonical_player_id"], candidate)
+    candidates = list(unique_by_player.values())
+
+    if len(candidates) == 1:
+        candidate = candidates[0]
+        _upsert_external_mapping(
+            db=db,
+            source=source,
+            season=season,
+            source_player_name=source_player_name,
+            canonical_player_id=candidate["canonical_player_id"],
+            confidence=candidate["confidence"],
+        )
+        return {
+            "ok": True,
+            "canonical_player_id": candidate["canonical_player_id"],
+            "confidence": candidate["confidence"],
+            "status": "auto",
+        }
+
+    _queue_draft_review(
+        db=db,
+        source=source,
+        season=season,
+        source_player_name=source_player_name,
+        candidates=candidates[:5],
+    )
+    return {
+        "ok": False,
+        "error": "needs_review" if candidates else "no_exact_alias",
+        "needs_review": True,
+        "candidates": candidates[:5],
+    }
+
+
 def ingest_draft_market_file(
     file_path: str,
     source: str,
@@ -367,15 +519,16 @@ def ingest_draft_market_file(
         rows_imported = 0
         rows_needing_review = 0
         review_rows = []
+        alias_index = _build_exact_alias_index(db, season)
         for index, row in enumerate(rows, start=2):
             payload = _draft_row_payload(row, index)
-            mapping = auto_map_external_player(
+            mapping = _map_draft_player_exact(
+                db=db,
                 source=source,
                 season=season,
                 source_player_name=payload["source_player_name"],
-                source_player_id=None,
                 position=payload["position"],
-                db=db,
+                alias_index=alias_index,
             )
             if not mapping["ok"]:
                 rows_needing_review += 1
