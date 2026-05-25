@@ -36,6 +36,7 @@ class Config:
         "SECRET_KEY",
         "dev-secret-key-change-in-production-min-32-chars",
     )
+    ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
     TOKEN_EXPIRY_DAYS = int(os.getenv("TOKEN_EXPIRY_DAYS", "30"))
     RATE_LIMIT_PER_HOUR = int(os.getenv("RATE_LIMIT_PER_HOUR", "100"))
     HOST = os.getenv("HOST", "127.0.0.1")
@@ -68,6 +69,7 @@ ANTHROPIC_API_KEY = Config.ANTHROPIC_API_KEY
 ANTHROPIC_MODEL = Config.ANTHROPIC_MODEL
 DATABASE_URL = Config.PRODUCT_DATABASE_URL
 SECRET_KEY = Config.SECRET_KEY
+ADMIN_TOKEN = Config.ADMIN_TOKEN
 TOKEN_EXPIRY_DAYS = Config.TOKEN_EXPIRY_DAYS
 RATE_LIMIT_PER_HOUR = Config.RATE_LIMIT_PER_HOUR
 HOST = Config.HOST

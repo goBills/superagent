@@ -7,6 +7,7 @@ Run through this before going live.
 - [ ] `ANTHROPIC_API_KEY` is a valid API key.
 - [ ] `ANTHROPIC_MODEL` is set or intentionally using the default.
 - [ ] `SECRET_KEY` is a strong random string, not the development default.
+- [ ] `ADMIN_TOKEN` is a strong random string before enabling `/admin`.
 - [ ] `DATABASE_URL` points to PostgreSQL for shared production hosts.
 - [ ] `ENVIRONMENT=production`.
 - [ ] `TOKEN_EXPIRY_DAYS` is configured.

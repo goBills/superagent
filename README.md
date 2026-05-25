@@ -34,6 +34,7 @@ Agent: Josh Allen plays for Buffalo, whose bye week is...
 ✅ **Phase 7C-lite: Fantasy Schedule Context** — Fantasy metrics + schedule context, no external data sources.
 ✅ **Phase 8: Product Layer** — User auth, persistent conversations, saved sessions, rate limits, and deployment-ready config.
 ✅ **Phase 9A: Deployable Package** — Docker, Compose, health checks, and deployment docs for hosted launch.
+✅ **Phase 9A.2: Admin Question Review** — Protected admin surface for reviewing recent user questions.
 
 ## Quick Start
 
@@ -369,7 +370,7 @@ superagent/
 
 ## Test Coverage
 
-All 161 tests passing:
+All 169 tests passing:
 - **Phase 2A (Tools):** 25 tests validating name resolution and 4 core tools
 - **Phase 3A/3C (Agent):** 15 tests of Claude tool-calling and conversation history with mocked client (no API key needed)
 - **Phase 3B (CLI):** 11 tests of formatting functions
@@ -380,6 +381,7 @@ All 161 tests passing:
 - **Phase 7A (Schedule):** 19 tests of team schedules, bye weeks, games from week N onward, JSON safety, and tool schemas
 - **Phase 7C-lite (Fantasy Context):** 17 tests of player fantasy schedule context, comparisons, missing-context notes, and tool schemas
 - **Phase 8 (Product Layer):** 10 tests of auth, rate limits, persistent sessions, export, and delete
+- **Phase 9A.2 (Admin Review):** 7 tests of token protection, admin page serving, question review, and summary counts
 
 Run tests:
 ```bash
@@ -406,6 +408,22 @@ The script requires `ANTHROPIC_API_KEY` because it exercises the real Claude too
 ## API Documentation
 
 See [docs/API.md](docs/API.md) for request/response formats, error behavior, curl examples, and the full deterministic tool list.
+
+## Admin Question Review
+
+Superagent stores user and assistant messages in the product database. To review recent user questions without direct database access, set an admin token:
+
+```bash
+ADMIN_TOKEN=your-random-admin-token
+```
+
+Then visit:
+
+```text
+http://localhost:8000/admin?token=your-random-admin-token
+```
+
+The admin page shows recent questions, user email, session ID, tools used, and summary counts. It reads the existing `messages` table; no duplicate question table is created.
 
 ## Deployment
 

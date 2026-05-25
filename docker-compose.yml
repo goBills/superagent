@@ -8,6 +8,7 @@ services:
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}
       DATABASE_URL: sqlite:////app/data/superagent_product.db
       SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production-min-32-chars}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
       TOKEN_EXPIRY_DAYS: ${TOKEN_EXPIRY_DAYS:-30}
       RATE_LIMIT_PER_HOUR: ${RATE_LIMIT_PER_HOUR:-100}
       BOOTSTRAP_NFL_DATA: ${BOOTSTRAP_NFL_DATA:-true}

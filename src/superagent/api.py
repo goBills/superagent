@@ -14,6 +14,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from superagent.agent import run_agent
@@ -186,6 +187,33 @@ def _serialize_message(message: Message) -> Dict[str, Any]:
     }
 
 
+def _require_admin_token(token: Optional[str]) -> None:
+    """Validate admin dashboard access with an out-of-band token."""
+    admin_token = get_config().ADMIN_TOKEN
+    if not admin_token:
+        raise HTTPException(status_code=503, detail="Admin dashboard is not configured")
+    if not token or token != admin_token:
+        raise HTTPException(status_code=401, detail="Invalid admin token")
+
+
+def _parse_tool_names(tools_used_json: Optional[str]) -> List[str]:
+    """Return readable tool names from a persisted assistant message."""
+    if not tools_used_json:
+        return []
+    try:
+        tools = json.loads(tools_used_json)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(tools, list):
+        return []
+
+    names = []
+    for tool in tools:
+        if isinstance(tool, dict) and tool.get("name"):
+            names.append(str(tool["name"]))
+    return names
+
+
 @app.get("/health")
 def health_check():
     """Health check endpoint."""
@@ -343,6 +371,110 @@ def chat(
             error=f"Agent error: {str(e)}",
             session_id=session.id
         )
+
+
+@app.get("/admin")
+def admin_page() -> FileResponse:
+    """Serve the admin question review page."""
+    static_path = os.path.join(os.path.dirname(__file__), "static", "admin.html")
+    if not os.path.exists(static_path):
+        raise HTTPException(status_code=404, detail="Admin page not found")
+    return FileResponse(static_path, media_type="text/html")
+
+
+@app.get("/admin/questions")
+def admin_questions(
+    token: Optional[str] = None,
+    limit: int = 100,
+    skip: int = 0,
+    db: Session = Depends(get_db),
+) -> List[Dict[str, Any]]:
+    """Return recent persisted user questions for admin review."""
+    _require_admin_token(token)
+    limit = max(1, min(limit, 500))
+    skip = max(0, skip)
+
+    user_messages = (
+        db.query(Message)
+        .filter(Message.role == "user")
+        .order_by(Message.created_at.desc(), Message.id.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+    results = []
+    for message in user_messages:
+        session = (
+            db.query(ConversationSession)
+            .filter(ConversationSession.id == message.session_id)
+            .first()
+        )
+        user = None
+        if session is not None:
+            user = db.query(User).filter(User.id == session.user_id).first()
+
+        assistant_message = (
+            db.query(Message)
+            .filter(
+                Message.session_id == message.session_id,
+                Message.role == "assistant",
+                Message.id > message.id,
+            )
+            .order_by(Message.id.asc())
+            .first()
+        )
+
+        results.append(
+            {
+                "id": message.id,
+                "user_email": user.email if user else "unknown",
+                "user_id": user.id if user else None,
+                "timestamp": message.created_at.isoformat(),
+                "question": message.content,
+                "session_id": message.session_id,
+                "tools_used": _parse_tool_names(
+                    assistant_message.tools_used if assistant_message else None
+                ),
+                "response_preview": (
+                    assistant_message.content[:240] if assistant_message else None
+                ),
+            }
+        )
+    return results
+
+
+@app.get("/admin/questions/summary")
+def admin_questions_summary(
+    token: Optional[str] = None,
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Return aggregate question counts for admin review."""
+    _require_admin_token(token)
+
+    total_questions = (
+        db.query(func.count(Message.id))
+        .filter(Message.role == "user")
+        .scalar()
+    )
+    unique_sessions = (
+        db.query(func.count(func.distinct(Message.session_id)))
+        .filter(Message.role == "user")
+        .scalar()
+    )
+    unique_users = (
+        db.query(func.count(func.distinct(ConversationSession.user_id)))
+        .join(Message, Message.session_id == ConversationSession.id)
+        .filter(Message.role == "user")
+        .scalar()
+    )
+
+    return {
+        "total_questions": int(total_questions or 0),
+        "unique_sessions": int(unique_sessions or 0),
+        "unique_users": int(unique_users or 0),
+        "timestamp": utc_now().isoformat(),
+    }
 
 
 @app.get("/sessions", response_model=List[SessionSummary])

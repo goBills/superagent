@@ -6,7 +6,7 @@ This guide packages Superagent for local Docker use and simple hosted deployment
 
 ```bash
 cp .env.example .env
-# Edit .env and set ANTHROPIC_API_KEY and SECRET_KEY.
+# Edit .env and set ANTHROPIC_API_KEY, SECRET_KEY, and ADMIN_TOKEN.
 
 docker compose up --build
 ```
@@ -22,6 +22,7 @@ docker run -p 8000:8000 \
   -e ANTHROPIC_API_KEY=sk-... \
   -e DATABASE_URL=sqlite:////app/data/superagent_product.db \
   -e SECRET_KEY=change-me-to-a-long-random-secret \
+  -e ADMIN_TOKEN=change-me-to-a-random-admin-token \
   -e BOOTSTRAP_NFL_DATA=true \
   -e HOST=0.0.0.0 \
   -e PORT=8000 \
@@ -43,6 +44,7 @@ docker run -p 8000:8000 \
    - `ANTHROPIC_MODEL=claude-sonnet-4-20250514`
    - `DATABASE_URL` from Render PostgreSQL
    - `SECRET_KEY` as a strong random string
+   - `ADMIN_TOKEN` as a strong random string for `/admin`
    - `BOOTSTRAP_NFL_DATA=true`
    - `ENVIRONMENT=production`
    - `TOKEN_EXPIRY_DAYS=30`
@@ -72,6 +74,7 @@ PYTHONPATH=src python -m superagent.api
 3. Set environment variables:
    - `ANTHROPIC_API_KEY`
    - `SECRET_KEY`
+   - `ADMIN_TOKEN`
    - `ENVIRONMENT=production`
    - `HOST=0.0.0.0`
    - `PORT=8000`
@@ -86,6 +89,7 @@ heroku create superagent-yourusername
 heroku addons:create heroku-postgresql:mini -a superagent-yourusername
 heroku config:set ANTHROPIC_API_KEY=sk-... -a superagent-yourusername
 heroku config:set SECRET_KEY=change-me-to-a-long-random-secret -a superagent-yourusername
+heroku config:set ADMIN_TOKEN=change-me-to-a-random-admin-token -a superagent-yourusername
 heroku config:set ENVIRONMENT=production -a superagent-yourusername
 heroku config:set HOST=0.0.0.0 -a superagent-yourusername
 git push heroku main
@@ -102,6 +106,7 @@ PYTHONPATH=src python -m superagent.api
 
 - `ANTHROPIC_API_KEY` is set.
 - `SECRET_KEY` is strong and not the development default.
+- `ADMIN_TOKEN` is set to a strong random string before using `/admin`.
 - `DATABASE_URL` points to PostgreSQL for shared production hosts.
 - `BOOTSTRAP_NFL_DATA=true` for first deploy, unless you preloaded `data/superagent.duckdb`.
 - Persistent disk mounted at `/app/data` if the host supports it.

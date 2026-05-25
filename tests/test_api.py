@@ -14,6 +14,8 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from superagent.api import app
+from superagent.db import SessionLocal
+from superagent.models import ConversationSession, Message, User
 
 client = TestClient(app)
 
@@ -28,6 +30,52 @@ def auth_headers() -> dict:
     assert response.status_code == 200
     token = response.json()["token"]
     return {"Authorization": f"Bearer {token}"}
+
+
+def use_admin_token(monkeypatch, token: str = "test-admin-token") -> str:
+    """Configure admin endpoints for a test."""
+
+    class TestConfig:
+        ADMIN_TOKEN = token
+        ANTHROPIC_API_KEY = "test-key"
+
+    monkeypatch.setattr("superagent.api.get_config", lambda: TestConfig)
+    return token
+
+
+def create_persisted_question(question: str = "What's Josh Allen's EPA?") -> dict:
+    """Create a user, session, question, and assistant tool record."""
+    email = f"admin-{uuid.uuid4().hex}@example.com"
+    register = client.post(
+        "/auth/register",
+        json={"email": email, "password": "password123"},
+    )
+    assert register.status_code == 200
+
+    with SessionLocal() as db:
+        user = db.query(User).filter(User.email == email).first()
+        session = ConversationSession(id=str(uuid.uuid4()), user_id=user.id)
+        db.add(session)
+        db.commit()
+
+        user_message = Message(
+            session_id=session.id,
+            role="user",
+            content=question,
+        )
+        db.add(user_message)
+        db.commit()
+
+        assistant_message = Message(
+            session_id=session.id,
+            role="assistant",
+            content="Josh Allen's EPA/play was 0.259.",
+            tools_used='[{"name": "get_player_advanced_summary"}]',
+        )
+        db.add(assistant_message)
+        db.commit()
+
+        return {"email": email, "session_id": session.id}
 
 
 class TestAPIHealth:
@@ -159,6 +207,71 @@ class TestAPICORS:
         else:
             data = response.json()
             assert "message" in data or "ok" in data
+
+
+class TestAdminQuestions:
+    """Test protected admin question review endpoints."""
+
+    def test_admin_page_serves_html(self):
+        response = client.get("/admin")
+
+        assert response.status_code == 200
+        assert "text/html" in response.headers["content-type"]
+        assert "Superagent Admin" in response.text
+
+    def test_admin_questions_requires_token(self, monkeypatch):
+        use_admin_token(monkeypatch)
+
+        response = client.get("/admin/questions")
+
+        assert response.status_code == 401
+
+    def test_admin_questions_wrong_token(self, monkeypatch):
+        use_admin_token(monkeypatch)
+
+        response = client.get("/admin/questions?token=wrong-token")
+
+        assert response.status_code == 401
+
+    def test_admin_questions_requires_configured_token(self, monkeypatch):
+        use_admin_token(monkeypatch, token="")
+
+        response = client.get("/admin/questions?token=anything")
+
+        assert response.status_code == 503
+
+    def test_admin_questions_correct_token(self, monkeypatch):
+        token = use_admin_token(monkeypatch)
+        record = create_persisted_question()
+
+        response = client.get(f"/admin/questions?token={token}&limit=10")
+
+        assert response.status_code == 200
+        data = response.json()
+        match = next(item for item in data if item["session_id"] == record["session_id"])
+        assert match["question"] == "What's Josh Allen's EPA?"
+        assert match["user_email"] == record["email"]
+        assert match["tools_used"] == ["get_player_advanced_summary"]
+
+    def test_admin_summary_requires_token(self, monkeypatch):
+        use_admin_token(monkeypatch)
+
+        response = client.get("/admin/questions/summary")
+
+        assert response.status_code == 401
+
+    def test_admin_summary_correct_token(self, monkeypatch):
+        token = use_admin_token(monkeypatch)
+        create_persisted_question("Question 1")
+        create_persisted_question("Question 2")
+
+        response = client.get(f"/admin/questions/summary?token={token}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total_questions"] >= 2
+        assert data["unique_sessions"] >= 2
+        assert data["unique_users"] >= 2
 
 
 if __name__ == "__main__":

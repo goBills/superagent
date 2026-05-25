@@ -220,6 +220,62 @@ curl -X DELETE http://localhost:8000/sessions/550e8400-e29b-41d4-a716-4466554400
   -H "Authorization: Bearer $SUPERAGENT_TOKEN"
 ```
 
+## Admin Question Review
+
+Admin endpoints are protected by the `ADMIN_TOKEN` environment variable. They are intended for the operator to review product feedback and should not be shared publicly.
+
+### GET /admin
+
+Serve the browser admin page:
+
+```text
+http://localhost:8000/admin?token=your-admin-token
+```
+
+### GET /admin/questions
+
+Return recent user questions from the existing persisted `messages` table.
+
+```bash
+curl "http://localhost:8000/admin/questions?token=$ADMIN_TOKEN&limit=100"
+```
+
+Example response:
+
+```json
+[
+  {
+    "id": 42,
+    "user_email": "rob@example.com",
+    "user_id": 1,
+    "timestamp": "2026-05-25T18:30:00",
+    "question": "What was Josh Allen's EPA per play in 2024?",
+    "session_id": "550e8400-e29b-41d4-a716-446655440000",
+    "tools_used": ["get_player_advanced_summary"],
+    "response_preview": "Josh Allen's EPA/play was 0.259..."
+  }
+]
+```
+
+### GET /admin/questions/summary
+
+Return aggregate counts:
+
+```bash
+curl "http://localhost:8000/admin/questions/summary?token=$ADMIN_TOKEN"
+```
+
+Example response:
+
+```json
+{
+  "total_questions": 128,
+  "unique_sessions": 47,
+  "unique_users": 12,
+  "timestamp": "2026-05-25T18:35:00"
+}
+```
+
 ## Tools Available
 
 The agent can call these deterministic tools:
@@ -251,6 +307,7 @@ export ANTHROPIC_API_KEY=sk-...
 export ANTHROPIC_MODEL=claude-sonnet-4-20250514
 export DATABASE_URL=sqlite:///./data/superagent_product.db
 export SECRET_KEY=change-me-to-a-long-random-secret
+export ADMIN_TOKEN=change-me-to-a-random-admin-token
 export TOKEN_EXPIRY_DAYS=30
 export RATE_LIMIT_PER_HOUR=100
 export HOST=127.0.0.1

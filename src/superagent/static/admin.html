@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Superagent Admin - Questions</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: #f6f7f9;
+            color: #1f2933;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            padding: 24px;
+        }
+
+        .container {
+            margin: 0 auto;
+            max-width: 1180px;
+        }
+
+        header {
+            margin-bottom: 24px;
+        }
+
+        h1 {
+            font-size: 28px;
+            line-height: 1.2;
+            margin-bottom: 6px;
+        }
+
+        .subtitle {
+            color: #68717f;
+            font-size: 14px;
+        }
+
+        .error {
+            background: #fee2e2;
+            border: 1px solid #fecaca;
+            border-radius: 6px;
+            color: #991b1b;
+            display: none;
+            margin-bottom: 18px;
+            padding: 12px 14px;
+        }
+
+        .summary {
+            display: none;
+            gap: 14px;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            margin-bottom: 24px;
+        }
+
+        .stat {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 18px;
+        }
+
+        .stat-value {
+            font-size: 30px;
+            font-weight: 700;
+        }
+
+        .stat-label {
+            color: #68717f;
+            font-size: 13px;
+            margin-top: 4px;
+        }
+
+        .panel {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .loading {
+            color: #68717f;
+            display: none;
+            padding: 36px;
+            text-align: center;
+        }
+
+        table {
+            border-collapse: collapse;
+            display: none;
+            width: 100%;
+        }
+
+        th,
+        td {
+            border-bottom: 1px solid #edf1f5;
+            font-size: 13px;
+            padding: 12px 14px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th {
+            background: #fafbfc;
+            color: #46515f;
+            font-weight: 650;
+        }
+
+        tr:last-child td {
+            border-bottom: 0;
+        }
+
+        .timestamp,
+        .session {
+            color: #68717f;
+            white-space: nowrap;
+        }
+
+        .session {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 12px;
+        }
+
+        .question {
+            max-width: 460px;
+            word-break: break-word;
+        }
+
+        .tool {
+            background: #e0f2fe;
+            border-radius: 999px;
+            color: #075985;
+            display: inline-block;
+            font-size: 12px;
+            margin: 0 4px 4px 0;
+            padding: 3px 8px;
+        }
+
+        .empty {
+            color: #8a94a3;
+        }
+
+        @media (max-width: 820px) {
+            body {
+                padding: 14px;
+            }
+
+            .summary {
+                grid-template-columns: 1fr;
+            }
+
+            th,
+            td {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="container">
+        <header>
+            <h1>Superagent Admin</h1>
+            <p class="subtitle">Recent user questions from persisted conversations.</p>
+        </header>
+
+        <div id="error" class="error"></div>
+
+        <section id="summary" class="summary">
+            <div class="stat">
+                <div id="totalQuestions" class="stat-value">-</div>
+                <div class="stat-label">Total Questions</div>
+            </div>
+            <div class="stat">
+                <div id="uniqueSessions" class="stat-value">-</div>
+                <div class="stat-label">Unique Sessions</div>
+            </div>
+            <div class="stat">
+                <div id="uniqueUsers" class="stat-value">-</div>
+                <div class="stat-label">Unique Users</div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div id="loading" class="loading">Loading questions...</div>
+            <table id="questionsTable">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>User</th>
+                        <th>Question</th>
+                        <th>Session</th>
+                        <th>Tools</th>
+                    </tr>
+                </thead>
+                <tbody id="questionsBody"></tbody>
+            </table>
+        </section>
+    </main>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const token = params.get("token");
+
+        function showError(message) {
+            const el = document.getElementById("error");
+            el.textContent = message;
+            el.style.display = "block";
+            document.getElementById("loading").style.display = "none";
+        }
+
+        function escapeHtml(value) {
+            const div = document.createElement("div");
+            div.textContent = value || "";
+            return div.innerHTML;
+        }
+
+        function renderTools(tools) {
+            if (!tools || tools.length === 0) {
+                return '<span class="empty">-</span>';
+            }
+            return tools.map((tool) => `<span class="tool">${escapeHtml(tool)}</span>`).join("");
+        }
+
+        async function loadSummary() {
+            const response = await fetch(`/admin/questions/summary?token=${encodeURIComponent(token)}`);
+            if (!response.ok) {
+                throw new Error("Invalid or missing admin token");
+            }
+            const data = await response.json();
+            document.getElementById("totalQuestions").textContent = data.total_questions;
+            document.getElementById("uniqueSessions").textContent = data.unique_sessions;
+            document.getElementById("uniqueUsers").textContent = data.unique_users;
+            document.getElementById("summary").style.display = "grid";
+        }
+
+        async function loadQuestions() {
+            document.getElementById("loading").style.display = "block";
+            document.getElementById("questionsTable").style.display = "none";
+
+            const response = await fetch(`/admin/questions?token=${encodeURIComponent(token)}&limit=100`);
+            if (!response.ok) {
+                throw new Error("Invalid or missing admin token");
+            }
+            const questions = await response.json();
+            const body = document.getElementById("questionsBody");
+            body.innerHTML = questions.map((q) => `
+                <tr>
+                    <td class="timestamp">${new Date(q.timestamp).toLocaleString()}</td>
+                    <td>${escapeHtml(q.user_email || "unknown")}</td>
+                    <td class="question">${escapeHtml(q.question)}</td>
+                    <td class="session">${escapeHtml((q.session_id || "").slice(0, 8))}</td>
+                    <td>${renderTools(q.tools_used)}</td>
+                </tr>
+            `).join("");
+
+            document.getElementById("loading").style.display = "none";
+            document.getElementById("questionsTable").style.display = "table";
+        }
+
+        async function refresh() {
+            try {
+                await loadSummary();
+                await loadQuestions();
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        if (!token) {
+            showError("Missing token. Use /admin?token=YOUR_ADMIN_TOKEN.");
+        } else {
+            refresh();
+            setInterval(refresh, 60000);
+        }
+    </script>
+</body>
+</html>
