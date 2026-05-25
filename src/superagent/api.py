@@ -276,8 +276,11 @@ def chat(
             .first()
         )
         if session is None:
-            raise HTTPException(status_code=404, detail="Session not found")
-        if session.expires_at < now:
+            # Browser-local session ids can outlive a database reset, redeploy, or
+            # sign-in change. Treat missing chat sessions as a fresh conversation
+            # instead of blocking the user with a stale localStorage value.
+            session = None
+        elif session.expires_at < now:
             session = None
 
     if session is None:

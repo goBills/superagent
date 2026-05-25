@@ -165,3 +165,21 @@ def test_expired_session_creates_new_session(monkeypatch):
 
     assert second.status_code == 200
     assert second.json()["session_id"] != old_session_id
+
+
+def test_missing_session_id_creates_new_session(monkeypatch):
+    enable_agent(monkeypatch)
+    headers = auth_headers()
+
+    response = client.post(
+        "/chat",
+        json={
+            "question": "Tell me about Josh Allen",
+            "session_id": str(uuid.uuid4()),
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    assert response.json()["session_id"]

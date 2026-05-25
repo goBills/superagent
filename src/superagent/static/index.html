@@ -577,6 +577,11 @@
             });
         }
 
+        function resetSessionId() {
+            sessionId = generateUUID();
+            localStorage.setItem('superagent_session_id', sessionId);
+        }
+
         function handleKeyPress(event) {
             if (event.key === 'Enter' && !isWaiting) {
                 sendMessage();
@@ -641,6 +646,8 @@
                 const data = await authenticate('/auth/login', email, password);
                 authToken = data.token;
                 localStorage.setItem('superagent_token', authToken);
+                resetSessionId();
+                clearChat();
                 updateAuthView();
             } catch (error) {
                 showAuthError('loginError', error.message);
@@ -655,6 +662,8 @@
                 const data = await authenticate('/auth/register', email, password);
                 authToken = data.token;
                 localStorage.setItem('superagent_token', authToken);
+                resetSessionId();
+                clearChat();
                 updateAuthView();
             } catch (error) {
                 showAuthError('registerError', error.message);
@@ -664,6 +673,9 @@
         function logout() {
             authToken = null;
             localStorage.removeItem('superagent_token');
+            localStorage.removeItem('superagent_session_id');
+            sessionId = null;
+            clearChat();
             updateAuthView();
         }
 
@@ -762,10 +774,16 @@
 
                 if (response.status === 401) {
                     localStorage.removeItem('superagent_token');
+                    localStorage.removeItem('superagent_session_id');
                     authToken = null;
+                    sessionId = null;
                     addMessage('error', `Error: ${formatApiError(data, response)}. Please sign in again.`);
                     updateAuthView();
                 } else if (response.ok && data.ok) {
+                    if (data.session_id && data.session_id !== sessionId) {
+                        sessionId = data.session_id;
+                        localStorage.setItem('superagent_session_id', sessionId);
+                    }
                     // Add answer
                     addMessage('assistant', data.answer);
 
