@@ -13,6 +13,7 @@ A sellable NFL research assistant that answers natural-language questions about 
 ✅ **Phase 4B: Draft Research Tools** — Usage risers, target opportunity, and late-season breakouts.
 ✅ **Phase 5: Player EPA & Advanced Analytics** — Player EPA/play, success rate, CPOE, and position splits.
 ✅ **Phase 6: Web API & Demo UI** — FastAPI backend with browser-based chat interface and example prompts.
+✅ **Phase 7A: Schedule + Bye Week Context** — Team schedules, bye weeks, and games from a specified week onward.
 
 ## Quick Start
 
@@ -138,6 +139,21 @@ Agent: Here are RBs whose opportunities and PPR scoring rose from weeks 1-8 to 9
 📊 Tools Used:
   ✅ find_late_season_breakouts
 
+You: When are the Bills on bye in 2025?
+Agent: The Bills are on bye in Week...
+📊 Tools Used:
+  ✅ get_bye_weeks
+
+You: Show the Bills schedule for 2025
+Agent: Here's Buffalo's 2025 schedule...
+📊 Tools Used:
+  ✅ get_team_schedule_context
+
+You: Who do the Bills play from Week 10 on in 2025?
+Agent: From Week 10 onward, Buffalo plays...
+📊 Tools Used:
+  ✅ get_upcoming_games
+
 You: help
 Agent: [shows available question types]
 
@@ -171,6 +187,10 @@ Then open **http://localhost:8000** in your browser.
   - "Bills RB usage"
   - "WR target opportunities"
   - "RB late-season breakouts"
+  - "Bills bye week"
+  - "Bills schedule"
+  - "From Week 10"
+  - "All bye weeks"
 - **Disclaimer** — Clear footer stating "Historical research. Not betting/start-sit advice."
 
 ### Architecture
@@ -230,6 +250,9 @@ Response:
    - `find_late_season_breakouts` — players who improved from weeks 1-8 to weeks 9-17
    - `get_player_advanced_summary` — EPA/play, success rate, CPOE, and position-specific splits
    - `compare_player_advanced` — side-by-side advanced player metrics
+   - `get_team_schedule_context` — full team schedule with bye week, results, and scores
+   - `get_bye_weeks` — team-specific or league-wide bye weeks
+   - `get_upcoming_games` — games from an explicit week onward
 3. **Superagent executes tools** with deterministic SQL queries
 4. **Claude synthesizes results** and provides a clear answer
 5. **CLI formats and displays** the response with tables and stats
@@ -243,7 +266,7 @@ Response:
 
 **Current scope:**
 - Multi-turn Q&A with recent conversation memory capped at 6 turns
-- Box-score, EPA, success rate, CPOE, fantasy research, and historical draft research metrics (no projection/prediction)
+- Box-score, EPA, success rate, CPOE, fantasy research, historical draft research, schedule, and bye-week context (no projection/prediction)
 - Historical data only (2020-2025)
 
 ## Project Structure
@@ -280,7 +303,8 @@ superagent/
 │   ├── test_cli.py                # 11 tests: CLI formatting
 │   ├── test_draft_research.py     # 19 tests: draft research filters
 │   ├── test_fantasy.py            # 22 tests: fantasy scoring + usage tools
-│   └── test_api.py                # 9 tests: FastAPI endpoints + sessions
+│   ├── test_api.py                # 9 tests: FastAPI endpoints + sessions
+│   └── test_schedule_context.py   # 19 tests: schedule + bye week tools
 ├── requirements.txt               # Python dependencies
 ├── pyproject.toml                 # Package metadata + console script
 ├── .env.example                   # Environment template
@@ -296,7 +320,7 @@ superagent/
 
 ## Test Coverage
 
-All 115 tests passing:
+All 134 tests passing:
 - **Phase 2A (Tools):** 25 tests validating name resolution and 4 core tools
 - **Phase 3A/3C (Agent):** 15 tests of Claude tool-calling and conversation history with mocked client (no API key needed)
 - **Phase 3B (CLI):** 11 tests of formatting functions
@@ -304,6 +328,7 @@ All 115 tests passing:
 - **Phase 4B (Draft Research):** 19 tests of usage risers, target opportunity, late-season breakouts, and tool schemas
 - **Phase 5 (Advanced):** 14 tests of player EPA, success rate, CPOE, small samples, comparisons, and tool schemas
 - **Phase 6 (API):** 9 tests of FastAPI endpoints, session management, and CORS
+- **Phase 7A (Schedule):** 19 tests of team schedules, bye weeks, games from week N onward, JSON safety, and tool schemas
 
 Run tests:
 ```bash
@@ -312,6 +337,7 @@ pytest tests/test_advanced.py  # Run advanced analytics tests only
 pytest tests/test_cli.py  # Run CLI tests only
 pytest tests/test_fantasy.py  # Run fantasy tests only
 pytest tests/test_draft_research.py  # Run draft research tests only
+pytest tests/test_schedule_context.py  # Run schedule context tests only
 pytest -v                 # Verbose output
 ```
 
@@ -319,7 +345,8 @@ pytest -v                 # Verbose output
 
 Potential enhancements beyond MVP:
 - **Phase 4C:** Historical waiver and trend finder
-- **Phase 7:** Live/current-week data integration (injuries, depth charts, bye weeks, snap counts)
+- **Phase 7B:** Injuries and depth charts from an external source
+- **Phase 7C:** Fantasy context tools combining schedule, injuries, depth, and player metrics
 - **Phase 8:** Product layer (auth, saved chats, rate limits)
 - **Phase 9:** Deployment to cloud (server, domain, scaling)
 - **Phase 10:** Caching layer for performance
@@ -327,9 +354,9 @@ Potential enhancements beyond MVP:
 
 ## Known Limitations
 
-**Phase 3C (Current):**
+**Current:**
 - ⚠️ **Short-term memory only:** CLI preserves recent turns in memory during the current session only. No persistence across sessions.
-- ⚠️ **No player EPA/play:** `get_player_summary` returns box-score stats (yards, TDs, etc.), not EPA metrics. Team EPA available via `get_team_epa_trend`.
+- ⚠️ **Schedule context is not live-current aware:** `get_upcoming_games` uses an explicit `from_week` and defaults to Week 1. It does not infer today's NFL week.
 
 **MVP Scope:**
 - Historical data through 2025 season only (no live/current-week updates)

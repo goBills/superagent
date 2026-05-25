@@ -1918,6 +1918,7 @@ def get_team_schedule_context(team: str, season: int) -> Dict[str, Any]:
         ORDER BY week
         """
         all_weeks = [row[0] for row in conn.execute(all_weeks_query, [season]).fetchall()]
+        conn.close()
 
         # Find bye week by checking which weeks the team didn't play
         weeks_played = set(row[0] for row in games)
@@ -2048,6 +2049,7 @@ def get_bye_weeks(season: int, team: Optional[str] = None) -> Dict[str, Any]:
             # Resolve team first
             team_result = resolve_team(team)
             if not team_result["ok"]:
+                conn.close()
                 return {
                     "ok": False,
                     "data": None,
@@ -2066,6 +2068,7 @@ def get_bye_weeks(season: int, team: Optional[str] = None) -> Dict[str, Any]:
             """
             weeks_played = [row[0] for row in conn.execute(query, [season, team_abbr, team_abbr]).fetchall()]
             weeks_played_set = set(weeks_played)
+            conn.close()
 
             # Find bye week
             bye_week = None
@@ -2117,6 +2120,12 @@ def get_bye_weeks(season: int, team: Optional[str] = None) -> Dict[str, Any]:
                             bye_weeks[week_key] = []
                         bye_weeks[week_key].append(team_abbr)
                         break
+            conn.close()
+
+            bye_weeks = {
+                week: sorted(teams)
+                for week, teams in sorted(bye_weeks.items(), key=lambda item: int(item[0]))
+            }
 
             return {
                 "ok": True,
@@ -2185,7 +2194,15 @@ def get_upcoming_games(
         }
 
     team_abbr = team_result["team"]
-    from_week = from_week or 1
+    if from_week is None:
+        from_week = 1
+    if from_week < 1 or from_week > 22:
+        return {
+            "ok": False,
+            "data": None,
+            "error": "from_week must be between 1 and 22",
+            "meta": {},
+        }
 
     try:
         conn = get_db_connection()
@@ -2208,6 +2225,7 @@ def get_upcoming_games(
         """
 
         games = conn.execute(query, [season, team_abbr, team_abbr, from_week]).fetchall()
+        conn.close()
 
         upcoming = []
         for row in games:
@@ -2231,10 +2249,13 @@ def get_upcoming_games(
 
             upcoming.append({
                 "week": int(week),
+                "game_id": game_id,
                 "opponent": opponent,
                 "location": location,
                 "game_date": gameday,
                 "result": result,
+                "team_score": team_score,
+                "opponent_score": opp_score,
             })
 
         return {
