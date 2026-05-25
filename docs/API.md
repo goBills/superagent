@@ -425,6 +425,7 @@ Example response:
 ```
 
 Poll `/admin/jobs/{job_id}` for the final import summary.
+While the job is running, the response includes a `progress` object with the current stage, row counts, and `updated_at` timestamp.
 
 ### GET /admin/draft-mappings
 

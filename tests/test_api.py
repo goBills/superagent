@@ -442,8 +442,10 @@ class TestAdminQuestions:
     def test_admin_draft_import_background_job(self, monkeypatch):
         token = use_admin_token(monkeypatch)
 
-        def fake_import(file_path, source, season, sheet_name=None):
+        def fake_import(file_path, source, season, sheet_name=None, progress_callback=None):
             assert Path(file_path).exists()
+            if progress_callback:
+                progress_callback({"stage": "test_import"})
             return {
                 "ok": True,
                 "rows_seen": 1,
@@ -474,6 +476,7 @@ class TestAdminQuestions:
         job = status.json()
         assert job["type"] == "draft_import"
         assert job["status"] == "completed"
+        assert job["progress"]["stage"] == "test_import"
         assert job["result"]["rows_imported"] == 1
 
 

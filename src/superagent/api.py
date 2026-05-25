@@ -280,6 +280,7 @@ def _create_admin_job(job_type: str, payload: Dict[str, Any]) -> str:
         "payload": payload,
         "result": None,
         "error": None,
+        "progress": None,
         "created_at": utc_now().isoformat(),
         "started_at": None,
         "completed_at": None,
@@ -321,11 +322,19 @@ def _run_draft_import_job(
     job["status"] = "running"
     job["started_at"] = utc_now().isoformat()
     try:
+        def update_progress(progress: Dict[str, Any]) -> None:
+            job["progress"] = {
+                **progress,
+                "updated_at": utc_now().isoformat(),
+            }
+            print(f"Draft import job {job_id}: {progress}", flush=True)
+
         job["result"] = ingest_draft_market_file(
             file_path=file_path,
             source=source,
             season=season,
             sheet_name=sheet,
+            progress_callback=update_progress,
         )
         job["status"] = "completed"
     except Exception as exc:

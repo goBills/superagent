@@ -12,7 +12,7 @@ import csv
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from sqlalchemy.orm import Session
 
@@ -540,9 +540,15 @@ def ingest_draft_market_file(
     season: int,
     sheet_name: str | None = None,
     db: Session | None = None,
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Import DraftSheets-style market data, mapping rows through canonical identity."""
+    def progress(stage: str, **kwargs: Any) -> None:
+        if progress_callback:
+            progress_callback({"stage": stage, **kwargs})
+
     path = Path(file_path)
+    progress("validating_file", file_name=path.name)
     if not path.exists():
         raise DraftIngestionError(f"Draft market file not found: {file_path}")
     if not source.strip():
@@ -551,6 +557,7 @@ def ingest_draft_market_file(
         raise DraftIngestionError(f"Invalid draft market season: {season}")
 
     rows, actual_sheet_name = _load_rows(path, sheet_name)
+    progress("loaded_rows", rows_seen=len(rows), sheet_name=actual_sheet_name)
     if not rows:
         raise DraftIngestionError("Draft market file has no player rows")
 
@@ -580,11 +587,13 @@ def ingest_draft_market_file(
         )
         db.add(import_batch)
         db.flush()
+        progress("created_import_batch", import_id=import_batch.id, rows_seen=len(rows))
 
         rows_imported = 0
         rows_needing_review = 0
         review_rows = []
         alias_index = _build_exact_alias_index(db, season)
+        progress("built_alias_index", alias_keys=len(alias_index))
         mapping_cache = {
             mapping.source_player_name: mapping
             for mapping in db.query(ExternalPlayerMapping)
@@ -595,6 +604,7 @@ def ingest_draft_market_file(
             )
             .all()
         }
+        progress("loaded_mapping_cache", mappings=len(mapping_cache))
         market_cache = {
             market.canonical_player_id: market
             for market in db.query(DraftPlayerMarket)
@@ -604,6 +614,7 @@ def ingest_draft_market_file(
             )
             .all()
         }
+        progress("loaded_market_cache", markets=len(market_cache))
         market_rank_payloads = []
         for index, row in enumerate(rows, start=2):
             payload = _draft_row_payload(row, index)
@@ -643,8 +654,21 @@ def ingest_draft_market_file(
             _apply_market_payload(market, import_batch, payload)
             market_rank_payloads.append((market, payload["source_ranks"]))
             rows_imported += 1
+            if rows_imported % 100 == 0:
+                progress(
+                    "mapped_rows",
+                    rows_imported=rows_imported,
+                    rows_needing_review=rows_needing_review,
+                    rows_seen=len(rows),
+                )
 
+        progress(
+            "flushing_markets",
+            rows_imported=rows_imported,
+            rows_needing_review=rows_needing_review,
+        )
         db.flush()
+        progress("applying_source_ranks", markets_with_ranks=len(market_rank_payloads))
         _apply_source_ranks(db, market_rank_payloads)
 
         import_batch.rows_imported = rows_imported
@@ -652,6 +676,12 @@ def ingest_draft_market_file(
         if rows_needing_review:
             import_batch.status = "completed_with_review"
         db.commit()
+        progress(
+            "completed",
+            rows_seen=len(rows),
+            rows_imported=rows_imported,
+            rows_needing_review=rows_needing_review,
+        )
         return {
             "ok": True,
             "import_id": import_batch.id,
