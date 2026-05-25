@@ -397,3 +397,86 @@ class LeagueSettings(Base):
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
     league = relationship("League", back_populates="settings")
+
+
+class LeagueExternalSource(Base):
+    """External fantasy platform link for a league."""
+
+    __tablename__ = "league_external_sources"
+    __table_args__ = (
+        UniqueConstraint("source", "external_league_id", "season", name="uq_external_league_source"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    league_id = Column(Integer, ForeignKey("leagues.id", ondelete="CASCADE"), nullable=False, index=True)
+    source = Column(String, nullable=False, index=True)
+    external_league_id = Column(String, nullable=False, index=True)
+    season = Column(Integer, nullable=False, index=True)
+    metadata_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    league = relationship("League")
+
+
+class LeagueRosterPlayer(Base):
+    """Current roster player imported from a fantasy platform."""
+
+    __tablename__ = "league_roster_players"
+    __table_args__ = (
+        UniqueConstraint(
+            "league_id",
+            "season",
+            "fantasy_team_name",
+            "source_player_name",
+            name="uq_league_roster_player",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    league_id = Column(Integer, ForeignKey("leagues.id", ondelete="CASCADE"), nullable=False, index=True)
+    season = Column(Integer, nullable=False, index=True)
+    fantasy_team_name = Column(String, nullable=False, index=True)
+    roster_slot = Column(String, nullable=True)
+    source_player_name = Column(String, nullable=False)
+    position = Column(String, nullable=True)
+    canonical_player_id = Column(
+        String,
+        ForeignKey("canonical_players.canonical_player_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    mapping_status = Column(String, default="needs_review", nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    league = relationship("League")
+    canonical_player = relationship("CanonicalPlayer")
+
+
+class LeagueDraftPick(Base):
+    """Draft pick imported from a fantasy platform."""
+
+    __tablename__ = "league_draft_picks"
+    __table_args__ = (
+        UniqueConstraint("league_id", "season", "round_num", "pick_num", name="uq_league_draft_pick"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    league_id = Column(Integer, ForeignKey("leagues.id", ondelete="CASCADE"), nullable=False, index=True)
+    season = Column(Integer, nullable=False, index=True)
+    round_num = Column(Integer, nullable=True)
+    pick_num = Column(Integer, nullable=True)
+    fantasy_team_name = Column(String, nullable=True)
+    source_player_name = Column(String, nullable=False)
+    position = Column(String, nullable=True)
+    canonical_player_id = Column(
+        String,
+        ForeignKey("canonical_players.canonical_player_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    mapping_status = Column(String, default="needs_review", nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    league = relationship("League")
+    canonical_player = relationship("CanonicalPlayer")

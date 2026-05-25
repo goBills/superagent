@@ -38,6 +38,7 @@ Agent: Josh Allen plays for Buffalo, whose bye week is...
 ✅ **Phase 10A: Canonical Player Identity** — Product DB identity layer for cross-source draft/player mapping.
 ✅ **Phase 10B: Strict Draft Market Ingestion** — DraftSheets CSV/XLSX import mapped through canonical identity.
 ✅ **Phase 10C: League Settings** — Persistent per-user league settings for personalized draft value.
+✅ **Phase 10D: ESPN League Integration + Draft Tools** — ESPN sync plus league-aware draft target/context tools.
 
 ## Quick Start
 
@@ -328,6 +329,8 @@ superagent/
 │   ├── name_resolution.py         # Player/team fuzzy matching
 │   ├── canonical_resolution.py    # Product DB canonical player identity + source mappings
 │   ├── draft_value.py             # League-specific draft value adjustment
+│   ├── draft_tools.py             # League-aware draft decision support tools
+│   ├── espn_integration.py        # ESPN league sync into product DB
 │   ├── tools.py                   # deterministic NFL + fantasy query tools
 │   ├── tool_schemas.py            # Claude tool definitions
 │   ├── agent.py                   # Claude tool-calling agent
@@ -362,7 +365,9 @@ superagent/
 │   ├── test_api.py                # 18 tests: FastAPI endpoints, auth-aware chat, admin review
 │   ├── test_auth.py               # 6 tests: auth + rate limit behavior
 │   ├── test_canonical_resolution.py # 8 tests: canonical identity, ambiguity, source mapping
+│   ├── test_draft_decision_tools.py # 6 tests: league-aware draft tools + agent registration
 │   ├── test_draft_ingestion.py    # 9 tests: strict DraftSheets import + review queue
+│   ├── test_espn_integration.py   # 3 tests: ESPN sync + API endpoint
 │   ├── test_league_settings.py    # 9 tests: league CRUD + draft value adjustment
 │   ├── test_persistence.py        # 5 tests: persistent sessions + export/delete
 │   ├── test_schedule_context.py   # 19 tests: schedule + bye week tools
@@ -382,7 +387,7 @@ superagent/
 
 ## Test Coverage
 
-All 215 tests passing:
+All 224 tests passing:
 - **Phase 2A (Tools):** 25 tests validating name resolution and 4 core tools
 - **Phase 3A/3C (Agent):** 15 tests of Claude tool-calling and conversation history with mocked client (no API key needed)
 - **Phase 3B (CLI):** 11 tests of formatting functions
@@ -398,6 +403,7 @@ All 215 tests passing:
 - **Phase 10A (Canonical Identity):** 8 tests of canonical identity, ambiguous names, source mapping, and roster-first seeding
 - **Phase 10B (Draft Market Ingestion):** 11 tests of strict CSV/XLSX ingestion, source ranks, review queues, and admin mapping review
 - **Phase 10C (League Settings):** 9 tests of league CRUD, permissions, scoring updates, and value adjustment
+- **Phase 10D (ESPN + Draft Tools):** 9 tests of ESPN sync, draft targets, comparisons, draft context, bye analysis, and agent registration
 
 Run tests:
 ```bash
@@ -489,6 +495,29 @@ curl -X POST http://localhost:8000/leagues \
   }'
 ```
 
+## ESPN League Sync + Draft Tools
+
+Phase 10D can sync an ESPN fantasy football league into the product DB, then use stored league settings, rosters, draft picks, and imported DraftSheets market rows for draft decision support.
+
+```bash
+curl -X POST http://localhost:8000/integrations/espn/leagues \
+  -H "Authorization: Bearer $SUPERAGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "espn_league_id": 123456,
+    "season": 2025,
+    "espn_s2": "optional-private-league-cookie",
+    "swid": "optional-private-league-cookie"
+  }'
+```
+
+Claude can now call:
+
+- `find_draft_targets` — available values by league, position, ADP, value delta, and bye-week filters
+- `compare_draft_options` — side-by-side league-adjusted comparisons
+- `get_draft_context` — league settings, recent picks, drafted count, and top available values
+- `get_bye_week_analysis` — bye-week concentration warnings for picked players
+
 ## Deployment
 
 Superagent includes a Dockerfile, Docker Compose config, startup script, and deployment guide.
@@ -521,7 +550,7 @@ These are intentional scope decisions, not bugs.
 
 ## Future Phases
 
-- **Phase 10D: Draft Decision Tools** — Value queries and live draft-room assistance powered by market data plus historical context.
+- **Phase 10E: Draft Room UX** — Live draft state, selected-player tracking, and browser workflow polish.
 - **Phase 7B: Injuries & Depth** — Legitimate injury/depth source, treated as an enrichment plugin once a source is chosen.
 - **Beyond** — Password reset, OAuth, admin controls, caching, commercial licensing, and domain-specific model tuning.
 

@@ -282,6 +282,26 @@ curl -X PUT http://localhost:8000/leagues/1 \
   }'
 ```
 
+## ESPN Integration
+
+### POST /integrations/espn/leagues
+
+Fetch an ESPN fantasy football league and store its settings, rosters, and draft picks.
+
+```bash
+curl -X POST http://localhost:8000/integrations/espn/leagues \
+  -H "Authorization: Bearer $SUPERAGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "espn_league_id": 123456,
+    "season": 2025,
+    "espn_s2": "optional-private-league-cookie",
+    "swid": "optional-private-league-cookie"
+  }'
+```
+
+Public leagues may not need `espn_s2`/`swid`. Private leagues do.
+
 ## Admin Question Review
 
 Admin endpoints are protected by the `ADMIN_TOKEN` environment variable. They are intended for the operator to review product feedback and should not be shared publicly.
@@ -385,6 +405,10 @@ The agent can call these deterministic tools:
 - `get_upcoming_games` — Games from an explicit week onward.
 - `get_fantasy_schedule_context` — Player fantasy usage plus schedule context.
 - `compare_fantasy_context` — Multi-player fantasy schedule context.
+- `find_draft_targets` — League-aware draft target search using imported market data.
+- `compare_draft_options` — Compare specific players in a league context.
+- `get_draft_context` — League settings, recent picks, drafted count, and top available values.
+- `get_bye_week_analysis` — Bye-week concentration warnings for selected players.
 
 ## Deployment Notes
 

@@ -25,6 +25,12 @@ from superagent.tools import (
     get_fantasy_schedule_context,
     compare_fantasy_context,
 )
+from superagent.draft_tools import (
+    find_draft_targets,
+    compare_draft_options,
+    get_draft_context,
+    get_bye_week_analysis,
+)
 
 
 TOOL_SCHEMAS = [
@@ -396,6 +402,82 @@ TOOL_SCHEMAS = [
             },
             "required": ["player_names", "season"]
         }
+    },
+    {
+        "name": "find_draft_targets",
+        "description": "Find available draft targets for a stored league using imported draft market data and league settings. Historical decision support, not a projection.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "league_id": {"type": "integer", "description": "Stored Superagent league id"},
+                "position": {"type": "string", "description": "Optional position filter: QB, RB, WR, TE, K, DST"},
+                "max_adp": {"type": "number", "description": "Optional maximum ADP to include"},
+                "min_value_delta": {"type": "number", "description": "Optional minimum value delta"},
+                "bye_week_filters": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "description": "Optional bye weeks to exclude"
+                },
+                "season": {"type": "integer", "description": "Draft season"},
+                "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"},
+                "limit": {"type": "integer", "description": "Maximum rows to return"}
+            },
+            "required": ["league_id"]
+        }
+    },
+    {
+        "name": "compare_draft_options",
+        "description": "Compare specific players as draft options in a stored league context using imported market data and league settings.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "league_id": {"type": "integer", "description": "Stored Superagent league id"},
+                "player_names": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Player names to compare"
+                },
+                "season": {"type": "integer", "description": "Draft season"},
+                "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"}
+            },
+            "required": ["league_id", "player_names"]
+        }
+    },
+    {
+        "name": "get_draft_context",
+        "description": "Summarize a stored league's draft settings, recent picks, drafted count, and top available values.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "league_id": {"type": "integer", "description": "Stored Superagent league id"},
+                "drafted_player_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional extra canonical player ids already drafted"
+                },
+                "season": {"type": "integer", "description": "Draft season"},
+                "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"}
+            },
+            "required": ["league_id"]
+        }
+    },
+    {
+        "name": "get_bye_week_analysis",
+        "description": "Analyze bye-week concentration for players already drafted or selected in a league.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "league_id": {"type": "integer", "description": "Stored Superagent league id"},
+                "picked_so_far": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional canonical player ids already picked"
+                },
+                "season": {"type": "integer", "description": "Draft season"},
+                "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"}
+            },
+            "required": ["league_id"]
+        }
     }
 ]
 
@@ -418,6 +500,10 @@ TOOL_DISPATCH: Dict[str, Callable] = {
     "get_upcoming_games": get_upcoming_games,
     "get_fantasy_schedule_context": get_fantasy_schedule_context,
     "compare_fantasy_context": compare_fantasy_context,
+    "find_draft_targets": find_draft_targets,
+    "compare_draft_options": compare_draft_options,
+    "get_draft_context": get_draft_context,
+    "get_bye_week_analysis": get_bye_week_analysis,
 }
 
 

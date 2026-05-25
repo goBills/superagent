@@ -21,6 +21,7 @@ from superagent.agent import run_agent
 from superagent.auth import create_token, hash_password, verify_password, verify_token
 from superagent.config import HOST, PORT, get_config
 from superagent.db import get_db, init_db
+from superagent.espn_integration import ingest_espn_league
 from superagent.models import (
     ConversationSession,
     DraftImportReview,
@@ -165,6 +166,15 @@ class LeagueResponse(BaseModel):
     created_at: str
     updated_at: str
     settings: Dict[str, Any]
+
+
+class ESPNLeagueSyncRequest(BaseModel):
+    """Sync ESPN league request."""
+
+    espn_league_id: int
+    season: int
+    espn_s2: Optional[str] = None
+    swid: Optional[str] = None
 
 
 def _extract_bearer_token(authorization: Optional[str]) -> Optional[str]:
@@ -809,6 +819,26 @@ def update_league(
     db.commit()
     db.refresh(league)
     return _league_to_response(league)
+
+
+@app.post("/integrations/espn/leagues")
+def sync_espn_league(
+    request: ESPNLeagueSyncRequest,
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Fetch and persist ESPN league settings, rosters, and draft picks."""
+    if request.season < 2020 or request.season > 2030:
+        raise HTTPException(status_code=400, detail="Invalid ESPN season")
+    try:
+        return ingest_espn_league(
+            espn_league_id=request.espn_league_id,
+            season=request.season,
+            user_id=current_user.id,
+            espn_s2=request.espn_s2,
+            swid=request.swid,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"ESPN sync failed: {exc}") from exc
 
 
 @app.delete("/sessions/{session_id}")
