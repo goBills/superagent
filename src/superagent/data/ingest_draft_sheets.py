@@ -369,17 +369,20 @@ def _upsert_external_mapping(
     source_player_name: str,
     canonical_player_id: str,
     confidence: float,
+    mapping_cache: dict[str, ExternalPlayerMapping] | None = None,
 ) -> None:
-    mapping = (
-        db.query(ExternalPlayerMapping)
-        .filter(
-            ExternalPlayerMapping.source == source,
-            ExternalPlayerMapping.season == season,
-            ExternalPlayerMapping.source_player_name == source_player_name,
-            ExternalPlayerMapping.source_player_id.is_(None),
+    mapping = mapping_cache.get(source_player_name) if mapping_cache is not None else None
+    if mapping is None and mapping_cache is None:
+        mapping = (
+            db.query(ExternalPlayerMapping)
+            .filter(
+                ExternalPlayerMapping.source == source,
+                ExternalPlayerMapping.season == season,
+                ExternalPlayerMapping.source_player_name == source_player_name,
+                ExternalPlayerMapping.source_player_id.is_(None),
+            )
+            .first()
         )
-        .first()
-    )
     if mapping is None:
         mapping = ExternalPlayerMapping(
             source=source,
@@ -388,6 +391,8 @@ def _upsert_external_mapping(
             source_player_id=None,
         )
         db.add(mapping)
+        if mapping_cache is not None:
+            mapping_cache[source_player_name] = mapping
     mapping.canonical_player_id = canonical_player_id
     mapping.confidence = confidence
     mapping.status = "auto"
@@ -419,6 +424,7 @@ def _map_draft_player_exact(
     source_player_name: str,
     position: str | None,
     alias_index: dict[str, list[dict[str, Any]]],
+    mapping_cache: dict[str, ExternalPlayerMapping] | None = None,
 ) -> dict[str, Any]:
     normalized = normalize_player_name(source_player_name)
     candidates = alias_index.get(normalized, [])
@@ -446,6 +452,7 @@ def _map_draft_player_exact(
             source_player_name=source_player_name,
             canonical_player_id=candidate["canonical_player_id"],
             confidence=candidate["confidence"],
+            mapping_cache=mapping_cache,
         )
         return {
             "ok": True,
@@ -467,6 +474,64 @@ def _map_draft_player_exact(
         "needs_review": True,
         "candidates": candidates[:5],
     }
+
+
+def _apply_market_payload(
+    market: DraftPlayerMarket,
+    import_batch: DraftMarketImport,
+    payload: dict[str, Any],
+) -> None:
+    """Assign all mutable market fields from a parsed draft row."""
+    market.import_id = import_batch.id
+    market.source_player_name = payload["source_player_name"]
+    market.team = payload["team"]
+    market.position = payload["position"]
+    market.position_rank = payload["position_rank"]
+    market.bye_week = payload["bye_week"]
+    market.overall_rank = payload["overall_rank"]
+    market.adp = payload["adp"]
+    market.ecr = payload["ecr"]
+    market.avg_rank = payload["avg_rank"]
+    market.best_rank = payload["best_rank"]
+    market.worst_rank = payload["worst_rank"]
+    market.std_dev = payload["std_dev"]
+    market.ecr_vs_adp = payload["ecr_vs_adp"]
+    market.floor = payload["floor"]
+    market.ceiling = payload["ceiling"]
+    market.value = payload["value"]
+    market.injury_risk = payload["injury_risk"]
+    market.raw_data = json.dumps(payload["raw_data"], default=str)
+
+
+def _apply_source_ranks(
+    db: Session,
+    market_rank_payloads: list[tuple[DraftPlayerMarket, dict[str, float]]],
+) -> None:
+    """Upsert provider rank rows after market ids have been assigned."""
+    market_ids = [market.id for market, _ in market_rank_payloads if market.id is not None]
+    existing_ranks = {}
+    if market_ids:
+        existing_ranks = {
+            (rank.market_id, rank.rank_source): rank
+            for rank in db.query(DraftSourceRank)
+            .filter(DraftSourceRank.market_id.in_(market_ids))
+            .all()
+        }
+
+    for market, source_ranks in market_rank_payloads:
+        for rank_source, rank_value in source_ranks.items():
+            key = (market.id, rank_source)
+            source_rank = existing_ranks.get(key)
+            if source_rank is None:
+                source_rank = DraftSourceRank(
+                    market_id=market.id,
+                    rank_source=rank_source,
+                    rank_value=rank_value,
+                )
+                db.add(source_rank)
+                existing_ranks[key] = source_rank
+            else:
+                source_rank.rank_value = rank_value
 
 
 def ingest_draft_market_file(
@@ -520,6 +585,26 @@ def ingest_draft_market_file(
         rows_needing_review = 0
         review_rows = []
         alias_index = _build_exact_alias_index(db, season)
+        mapping_cache = {
+            mapping.source_player_name: mapping
+            for mapping in db.query(ExternalPlayerMapping)
+            .filter(
+                ExternalPlayerMapping.source == source,
+                ExternalPlayerMapping.season == season,
+                ExternalPlayerMapping.source_player_id.is_(None),
+            )
+            .all()
+        }
+        market_cache = {
+            market.canonical_player_id: market
+            for market in db.query(DraftPlayerMarket)
+            .filter(
+                DraftPlayerMarket.source == source,
+                DraftPlayerMarket.season == season,
+            )
+            .all()
+        }
+        market_rank_payloads = []
         for index, row in enumerate(rows, start=2):
             payload = _draft_row_payload(row, index)
             mapping = _map_draft_player_exact(
@@ -529,6 +614,7 @@ def ingest_draft_market_file(
                 source_player_name=payload["source_player_name"],
                 position=payload["position"],
                 alias_index=alias_index,
+                mapping_cache=mapping_cache,
             )
             if not mapping["ok"]:
                 rows_needing_review += 1
@@ -542,15 +628,24 @@ def ingest_draft_market_file(
                 )
                 continue
 
-            _upsert_market_row(
-                db=db,
-                import_batch=import_batch,
-                source=source,
-                season=season,
-                canonical_player_id=mapping["canonical_player_id"],
-                payload=payload,
-            )
+            canonical_player_id = mapping["canonical_player_id"]
+            market = market_cache.get(canonical_player_id)
+            if market is None:
+                market = DraftPlayerMarket(
+                    import_id=import_batch.id,
+                    source=source,
+                    season=season,
+                    canonical_player_id=canonical_player_id,
+                    source_player_name=payload["source_player_name"],
+                )
+                db.add(market)
+                market_cache[canonical_player_id] = market
+            _apply_market_payload(market, import_batch, payload)
+            market_rank_payloads.append((market, payload["source_ranks"]))
             rows_imported += 1
+
+        db.flush()
+        _apply_source_ranks(db, market_rank_payloads)
 
         import_batch.rows_imported = rows_imported
         import_batch.rows_needing_review = rows_needing_review
