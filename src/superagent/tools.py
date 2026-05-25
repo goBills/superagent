@@ -1842,3 +1842,421 @@ def compare_player_advanced(
             "minimum_sample_for_rates": MINIMUM_ADVANCED_SAMPLE,
         },
     }
+
+
+def get_team_schedule_context(team: str, season: int) -> Dict[str, Any]:
+    """
+    Get a team's full season schedule with results.
+
+    Args:
+        team: Team name or abbreviation (e.g., "Bills", "BUF")
+        season: NFL season year
+
+    Returns:
+        {
+            "ok": bool,
+            "data": {
+                "team": "BUF",
+                "season": 2025,
+                "bye_week": 9,
+                "schedule": [
+                    {
+                        "week": 1,
+                        "game_id": "...",
+                        "opponent": "MIA",
+                        "location": "home" | "away",
+                        "game_date": "2025-09-07",
+                        "result": "W" | "L" | null,
+                        "team_score": 31 | null,
+                        "opponent_score": 24 | null
+                    },
+                    ...
+                ]
+            },
+            "meta": {...}
+        }
+    """
+    # Resolve team
+    team_result = resolve_team(team)
+    if not team_result["ok"]:
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"Could not resolve team: {team}",
+            "meta": {}
+        }
+
+    team_abbr = team_result["team"]
+
+    try:
+        conn = get_db_connection()
+
+        # Query games where team played
+        query = """
+        SELECT
+            week,
+            game_id,
+            home_team,
+            away_team,
+            home_score,
+            away_score,
+            gameday
+        FROM games
+        WHERE season = ?
+            AND (home_team = ? OR away_team = ?)
+            AND game_type = 'REG'
+        ORDER BY week ASC
+        """
+
+        games = conn.execute(query, [season, team_abbr, team_abbr]).fetchall()
+
+        # Get all weeks in season (typically 1-17)
+        all_weeks_query = """
+        SELECT DISTINCT week
+        FROM games
+        WHERE season = ? AND game_type = 'REG'
+        ORDER BY week
+        """
+        all_weeks = [row[0] for row in conn.execute(all_weeks_query, [season]).fetchall()]
+
+        # Find bye week by checking which weeks the team didn't play
+        weeks_played = set(row[0] for row in games)
+        bye_week = None
+        for week in all_weeks:
+            if week not in weeks_played:
+                bye_week = week
+                break
+
+        # Build schedule with results
+        schedule = []
+        for row in games:
+            week, game_id, home_team, away_team, home_score, away_score, gameday = row
+
+            is_home = home_team == team_abbr
+            opponent = away_team if is_home else home_team
+            location = "home" if is_home else "away"
+            team_score = home_score if is_home else away_score
+            opp_score = away_score if is_home else home_score
+
+            # Determine result
+            result = None
+            if team_score is not None and opp_score is not None:
+                if team_score > opp_score:
+                    result = "W"
+                elif team_score < opp_score:
+                    result = "L"
+                else:
+                    result = "T"
+
+            schedule.append({
+                "week": int(week),
+                "game_id": game_id,
+                "opponent": opponent,
+                "location": location,
+                "game_date": gameday,
+                "result": result,
+                "team_score": team_score,
+                "opponent_score": opp_score,
+            })
+
+        # Add bye week as synthetic row if present
+        if bye_week:
+            # Insert at the correct position (week - 1 index)
+            bye_row = {
+                "week": int(bye_week),
+                "bye": True,
+                "opponent": None,
+                "location": None,
+                "game_date": None,
+                "result": None,
+                "team_score": None,
+                "opponent_score": None,
+            }
+            # Find correct insertion point
+            for i, game in enumerate(schedule):
+                if game["week"] > bye_week:
+                    schedule.insert(i, bye_row)
+                    break
+            else:
+                schedule.append(bye_row)
+
+        return {
+            "ok": True,
+            "data": {
+                "team": team_abbr,
+                "season": season,
+                "bye_week": bye_week,
+                "schedule": schedule,
+            },
+            "error": None,
+            "meta": {
+                "source": "games table",
+                "schedule_count": len(schedule),
+                "regular_season_only": True,
+            }
+        }
+
+    except Exception as e:
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"Error fetching schedule: {str(e)}",
+            "meta": {}
+        }
+
+
+def get_bye_weeks(season: int, team: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Get bye weeks for a season.
+
+    Args:
+        season: NFL season year
+        team: Optional team abbreviation. If provided, returns only that team's bye week.
+
+    Returns:
+        {
+            "ok": bool,
+            "data": {
+                "season": 2025,
+                "bye_weeks": {
+                    "8": ["BUF", "NE", "NYJ"],
+                    "9": ["KC", "LAC", "OAK"],
+                    ...
+                }
+                OR if team specified:
+                {
+                    "team": "BUF",
+                    "bye_week": 9
+                }
+            },
+            "meta": {...}
+        }
+    """
+    try:
+        conn = get_db_connection()
+
+        # Get all weeks in season
+        all_weeks_query = """
+        SELECT DISTINCT week
+        FROM games
+        WHERE season = ? AND game_type = 'REG'
+        ORDER BY week
+        """
+        all_weeks = [row[0] for row in conn.execute(all_weeks_query, [season]).fetchall()]
+
+        if team:
+            # Resolve team first
+            team_result = resolve_team(team)
+            if not team_result["ok"]:
+                return {
+                    "ok": False,
+                    "data": None,
+                    "error": f"Could not resolve team: {team}",
+                    "meta": {}
+                }
+            team_abbr = team_result["team"]
+
+            # Get weeks team played
+            query = """
+            SELECT DISTINCT week
+            FROM games
+            WHERE season = ?
+                AND (home_team = ? OR away_team = ?)
+                AND game_type = 'REG'
+            """
+            weeks_played = [row[0] for row in conn.execute(query, [season, team_abbr, team_abbr]).fetchall()]
+            weeks_played_set = set(weeks_played)
+
+            # Find bye week
+            bye_week = None
+            for week in all_weeks:
+                if week not in weeks_played_set:
+                    bye_week = week
+                    break
+
+            return {
+                "ok": True,
+                "data": {
+                    "season": season,
+                    "team": team_abbr,
+                    "bye_week": bye_week,
+                },
+                "error": None,
+                "meta": {
+                    "source": "games table",
+                    "note": "null if team has no bye week or data unavailable",
+                }
+            }
+        else:
+            # Get all teams in season
+            teams_query = """
+            SELECT DISTINCT home_team
+            FROM games
+            WHERE season = ? AND game_type = 'REG'
+            """
+            all_teams = [row[0] for row in conn.execute(teams_query, [season]).fetchall()]
+
+            # Group teams by bye week
+            bye_weeks = {}
+            for team_abbr in all_teams:
+                weeks_query = """
+                SELECT DISTINCT week
+                FROM games
+                WHERE season = ?
+                    AND (home_team = ? OR away_team = ?)
+                    AND game_type = 'REG'
+                """
+                weeks_played = [row[0] for row in conn.execute(weeks_query, [season, team_abbr, team_abbr]).fetchall()]
+                weeks_played_set = set(weeks_played)
+
+                # Find bye week for this team
+                for week in all_weeks:
+                    if week not in weeks_played_set:
+                        week_key = str(int(week))
+                        if week_key not in bye_weeks:
+                            bye_weeks[week_key] = []
+                        bye_weeks[week_key].append(team_abbr)
+                        break
+
+            return {
+                "ok": True,
+                "data": {
+                    "season": season,
+                    "bye_weeks": bye_weeks,
+                },
+                "error": None,
+                "meta": {
+                    "source": "games table",
+                    "teams_count": len(set(t for teams in bye_weeks.values() for t in teams)),
+                }
+            }
+
+    except Exception as e:
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"Error fetching bye weeks: {str(e)}",
+            "meta": {}
+        }
+
+
+def get_upcoming_games(
+    team: str,
+    season: int,
+    from_week: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Get a team's games from a specified week onward.
+
+    Args:
+        team: Team name or abbreviation
+        season: NFL season year
+        from_week: Starting week (default: 1). Games from this week onward.
+
+    Returns:
+        {
+            "ok": bool,
+            "data": {
+                "team": "BUF",
+                "season": 2025,
+                "from_week": 10,
+                "games": [
+                    {
+                        "week": 10,
+                        "opponent": "KC",
+                        "location": "away",
+                        "game_date": "2025-11-09",
+                        "result": null
+                    },
+                    ...
+                ]
+            },
+            "meta": {...}
+        }
+    """
+    # Resolve team
+    team_result = resolve_team(team)
+    if not team_result["ok"]:
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"Could not resolve team: {team}",
+            "meta": {}
+        }
+
+    team_abbr = team_result["team"]
+    from_week = from_week or 1
+
+    try:
+        conn = get_db_connection()
+
+        query = """
+        SELECT
+            week,
+            game_id,
+            home_team,
+            away_team,
+            home_score,
+            away_score,
+            gameday
+        FROM games
+        WHERE season = ?
+            AND (home_team = ? OR away_team = ?)
+            AND game_type = 'REG'
+            AND week >= ?
+        ORDER BY week ASC
+        """
+
+        games = conn.execute(query, [season, team_abbr, team_abbr, from_week]).fetchall()
+
+        upcoming = []
+        for row in games:
+            week, game_id, home_team, away_team, home_score, away_score, gameday = row
+
+            is_home = home_team == team_abbr
+            opponent = away_team if is_home else home_team
+            location = "home" if is_home else "away"
+            team_score = home_score if is_home else away_score
+            opp_score = away_score if is_home else home_score
+
+            # Determine result
+            result = None
+            if team_score is not None and opp_score is not None:
+                if team_score > opp_score:
+                    result = "W"
+                elif team_score < opp_score:
+                    result = "L"
+                else:
+                    result = "T"
+
+            upcoming.append({
+                "week": int(week),
+                "opponent": opponent,
+                "location": location,
+                "game_date": gameday,
+                "result": result,
+            })
+
+        return {
+            "ok": True,
+            "data": {
+                "team": team_abbr,
+                "season": season,
+                "from_week": from_week,
+                "games": upcoming,
+            },
+            "error": None,
+            "meta": {
+                "source": "games table",
+                "games_count": len(upcoming),
+                "from_week_default": "1 when not provided",
+            }
+        }
+
+    except Exception as e:
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"Error fetching upcoming games: {str(e)}",
+            "meta": {}
+        }

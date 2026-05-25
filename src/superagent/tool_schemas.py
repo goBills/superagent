@@ -19,6 +19,9 @@ from superagent.tools import (
     find_late_season_breakouts,
     get_player_advanced_summary,
     compare_player_advanced,
+    get_team_schedule_context,
+    get_bye_weeks,
+    get_upcoming_games,
 )
 
 
@@ -288,6 +291,64 @@ TOOL_SCHEMAS = [
             },
             "required": ["player_names", "season"]
         }
+    },
+    {
+        "name": "get_team_schedule_context",
+        "description": "Get a team's full season schedule with game dates, opponents, locations, and results. Includes bye week.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "team": {
+                    "type": "string",
+                    "description": "Team name or abbreviation (e.g., 'Bills', 'BUF')"
+                },
+                "season": {
+                    "type": "integer",
+                    "description": "NFL season year (2020-2025)"
+                }
+            },
+            "required": ["team", "season"]
+        }
+    },
+    {
+        "name": "get_bye_weeks",
+        "description": "Get bye weeks for a season. If team is specified, returns that team's bye week. Otherwise returns all teams' bye weeks.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "season": {
+                    "type": "integer",
+                    "description": "NFL season year (2020-2025)"
+                },
+                "team": {
+                    "type": "string",
+                    "description": "Optional team name or abbreviation. If provided, returns only that team's bye week."
+                }
+            },
+            "required": ["season"]
+        }
+    },
+    {
+        "name": "get_upcoming_games",
+        "description": "Get a team's games from a specified week onward. Useful for analyzing schedule difficulty from a point forward.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "team": {
+                    "type": "string",
+                    "description": "Team name or abbreviation (e.g., 'Bills', 'BUF')"
+                },
+                "season": {
+                    "type": "integer",
+                    "description": "NFL season year (2020-2025)"
+                },
+                "from_week": {
+                    "type": "integer",
+                    "description": "Starting week (default: 1). Games from this week onward."
+                }
+            },
+            "required": ["team", "season"]
+        }
     }
 ]
 
@@ -305,6 +366,9 @@ TOOL_DISPATCH: Dict[str, Callable] = {
     "find_late_season_breakouts": find_late_season_breakouts,
     "get_player_advanced_summary": get_player_advanced_summary,
     "compare_player_advanced": compare_player_advanced,
+    "get_team_schedule_context": get_team_schedule_context,
+    "get_bye_weeks": get_bye_weeks,
+    "get_upcoming_games": get_upcoming_games,
 }
 
 
