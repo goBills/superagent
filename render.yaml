@@ -3,19 +3,19 @@ services:
     name: superagent
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt && pip install -e .
     startCommand: bash start.sh
     envVars:
       - key: PYTHON_VERSION
         value: "3.10"
       - key: ANTHROPIC_API_KEY
-        scope: build,runtime
+        sync: false
       - key: ANTHROPIC_MODEL
         value: claude-sonnet-4-20250514
       - key: SECRET_KEY
-        scope: build,runtime
+        sync: false
       - key: ADMIN_TOKEN
-        scope: build,runtime
+        sync: false
       - key: TOKEN_EXPIRY_DAYS
         value: "30"
       - key: RATE_LIMIT_PER_HOUR
@@ -27,13 +27,9 @@ services:
           name: superagent-postgres
           property: connectionString
     healthCheckPath: /health
-    disk:
-      name: data
-      mountPath: /app/data
-      sizeGB: 10
 
-  - type: pserv
-    name: superagent-postgres
-    runtime: postgres15
+databases:
+  - name: superagent-postgres
     plan: free
-    ipAllowList: []  # Allow from all
+    databaseName: superagent
+    user: superagent

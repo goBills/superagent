@@ -22,8 +22,8 @@ Run through this before going live.
 - [ ] Automatic backups are enabled.
 - [ ] Connection string is correct.
 - [ ] Tables initialize on startup via `init_db()`.
-- [ ] Persistent disk is mounted at `/app/data` if the host supports it.
-- [ ] NFL DuckDB exists at `/app/data/superagent.duckdb` after first startup.
+- [ ] Optional: persistent disk is mounted for `data/` if the host/plan supports it.
+- [ ] NFL DuckDB exists at the app's `data/superagent.duckdb` path after first startup.
 
 ## Security
 

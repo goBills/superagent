@@ -41,20 +41,23 @@ docker run -p 8000:8000 \
 3. Render will auto-detect `render.yaml` and create:
    - Web service (superagent)
    - PostgreSQL database (superagent-postgres)
-   - Persistent disk at `/app/data` (10GB)
 4. Render auto-wires `DATABASE_URL` to the PostgreSQL instance.
 5. Set remaining environment variables (see below).
+
+This free-plan blueprint persists product data in PostgreSQL. Free Render web services cannot attach persistent disks, so the NFL DuckDB may rebuild on redeploy/restart unless you upgrade the web service and add a disk.
 
 **Option B: Manual**
 
 1. Push the repo to GitHub.
 2. In Render, create a new Web Service from the repo.
 3. Choose Docker deployment if using the included `Dockerfile`.
-4. **Important: Add a PostgreSQL database** in Render (not optional for persistence).
+4. **Important: Add a PostgreSQL database** in Render (not optional for product persistence).
    - This ensures user questions and sessions persist across deploys.
    - Without it, the admin dashboard resets on each redeploy (ephemeral storage).
-5. Add a persistent disk mounted at `/app/data` (10GB minimum).
-   - Keeps the NFL DuckDB across deploys/restarts.
+5. Optional on a paid Render web service: add a persistent disk for NFL data.
+   - Native Python runtime mount path: `/opt/render/project/src/data`
+   - Docker runtime mount path: `/app/data`
+   - Free web services cannot attach disks; they can still use PostgreSQL.
 6. Set environment variables:
    - `ANTHROPIC_API_KEY`
    - `ANTHROPIC_MODEL=claude-sonnet-4-20250514`
@@ -71,18 +74,19 @@ docker run -p 8000:8000 \
 
 **Important: Persistent Database for Production**
 
-Without PostgreSQL or a persistent disk, the following are lost on each redeploy:
+Without PostgreSQL, the following product data is lost on each redeploy:
 - User authentication sessions
 - Chat message history
 - Admin dashboard question log
 - Rate limit tracking
 
-On first deploy, Superagent downloads nflverse parquet files and builds `data/superagent.duckdb` if it is missing. This can take several minutes. `player_stats_2025.parquet` is optional because Superagent derives 2025 player stats from play-by-play when weekly player stats are unavailable. Without a persistent disk, the app may need to rebuild this database after deploys or cold starts.
+On first deploy, Superagent downloads nflverse parquet files and builds `data/superagent.duckdb` if it is missing. This can take several minutes. `player_stats_2025.parquet` is optional because Superagent derives 2025 player stats from play-by-play when weekly player stats are unavailable. Without a persistent disk, the app may need to rebuild this NFL DuckDB after deploys or cold starts.
 
 If using Render's native Python environment instead of Docker:
 
 ```bash
 pip install -r requirements.txt
+pip install -e .
 ```
 
 Start command:
@@ -133,7 +137,7 @@ PYTHONPATH=src python -m superagent.api
 - `ADMIN_TOKEN` is set to a strong random string before using `/admin`.
 - `DATABASE_URL` points to PostgreSQL for shared production hosts.
 - `BOOTSTRAP_NFL_DATA=true` for first deploy, unless you preloaded `data/superagent.duckdb`.
-- Persistent disk mounted at `/app/data` if the host supports it.
+- Optional: persistent disk mounted for `data/` if the host/plan supports it.
 - `ENVIRONMENT=production` is set.
 - `TOKEN_EXPIRY_DAYS` is configured.
 - `RATE_LIMIT_PER_HOUR` is configured.
