@@ -370,6 +370,19 @@
             font-weight: 700;
         }
 
+        .draft-room-status {
+            color: #15803d;
+            font-size: 11px;
+            font-weight: 700;
+            margin-left: 8px;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .draft-room-status.visible {
+            opacity: 1;
+        }
+
         .draft-room-actions {
             display: flex;
             flex-wrap: wrap;
@@ -378,7 +391,7 @@
 
         .draft-room-grid {
             display: grid;
-            grid-template-columns: 90px 90px 1fr;
+            grid-template-columns: 120px 120px 1fr;
             gap: 8px;
             margin-bottom: 8px;
         }
@@ -397,10 +410,11 @@
 
         .draft-room input {
             min-width: 0;
-            padding: 10px 12px;
+            padding: 12px 14px;
             border: 1px solid #d0d7e2;
             border-radius: 8px;
-            font-size: 13px;
+            font-size: 16px;
+            font-weight: 700;
         }
 
         .draft-room textarea:focus,
@@ -414,6 +428,28 @@
             color: #64748b;
             font-size: 11px;
             line-height: 1.35;
+        }
+
+        .draft-room-footer {
+            align-items: center;
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .draft-room-clear {
+            background: transparent;
+            border: none;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 0;
+        }
+
+        .draft-room-clear:hover {
+            background: transparent;
+            color: #1a73e8;
+            text-decoration: underline;
         }
 
         input[type="text"] {
@@ -656,7 +692,10 @@
         <div class="input-area">
             <div class="draft-room" id="draftRoom">
                 <div class="draft-room-header">
-                    <div class="draft-room-title">Draft Room</div>
+                    <div>
+                        <span class="draft-room-title">Draft Room</span>
+                        <span class="draft-room-status" id="draftRoomStatus">Saved</span>
+                    </div>
                     <div class="draft-room-actions">
                         <button class="example-btn" onclick="draftRoomAsk('next')">Next pick</button>
                         <button class="example-btn" onclick="draftRoomAsk('needs')">Position needs</button>
@@ -669,8 +708,11 @@
                     <input type="text" id="draftPick" placeholder="Pick #" oninput="saveDraftRoomState()">
                     <textarea id="draftRoster" placeholder="Paste roster: Josh Allen, James Cook, ..." oninput="saveDraftRoomState()"></textarea>
                 </div>
-                <div class="draft-room-note">
-                    Saved in this browser. Paste comma-separated or line-separated players, then use a shortcut during your draft.
+                <div class="draft-room-footer">
+                    <div class="draft-room-note">
+                        Saved in this browser. Paste comma-separated or line-separated players, then use a shortcut during your draft.
+                    </div>
+                    <button class="draft-room-clear" onclick="clearDraftRoom()" type="button">Clear draft room</button>
                 </div>
             </div>
 
@@ -731,10 +773,12 @@
         const draftLeagueId = document.getElementById('draftLeagueId');
         const draftPick = document.getElementById('draftPick');
         const draftRoster = document.getElementById('draftRoster');
+        const draftRoomStatus = document.getElementById('draftRoomStatus');
         let sessionId = null;
         let authToken = null;
         let isWaiting = false;
         let requestTimeout = null;
+        let draftRoomStatusTimer = null;
 
         // Initialize session ID from localStorage
         function initializeSession() {
@@ -810,6 +854,15 @@
                 pick: draftPick.value.trim(),
                 roster: draftRoster.value.trim()
             }));
+            showDraftRoomSaved();
+        }
+
+        function showDraftRoomSaved() {
+            clearTimeout(draftRoomStatusTimer);
+            draftRoomStatus.classList.add('visible');
+            draftRoomStatusTimer = setTimeout(() => {
+                draftRoomStatus.classList.remove('visible');
+            }, 1200);
         }
 
         function loadDraftRoomState() {
@@ -823,6 +876,14 @@
             } catch (error) {
                 localStorage.removeItem('superagent_draft_room');
             }
+        }
+
+        function clearDraftRoom() {
+            draftLeagueId.value = '1';
+            draftPick.value = '';
+            draftRoster.value = '';
+            saveDraftRoomState();
+            draftPick.focus();
         }
 
         function draftRoomPrompt(kind) {
