@@ -362,7 +362,7 @@ superagent/
 │   ├── test_draft_research.py     # 19 tests: draft research filters
 │   ├── test_fantasy.py            # 22 tests: fantasy scoring + usage tools
 │   ├── test_fantasy_schedule_context.py # 17 tests: fantasy schedule context
-│   ├── test_api.py                # 22 tests: FastAPI endpoints, auth-aware chat, admin review/import
+│   ├── test_api.py                # 23 tests: FastAPI endpoints, auth-aware chat, admin review/import
 │   ├── test_auth.py               # 6 tests: auth + rate limit behavior
 │   ├── test_canonical_resolution.py # 9 tests: canonical identity, ambiguity, source mapping
 │   ├── test_draft_decision_tools.py # 7 tests: league-aware draft tools + agent registration
@@ -387,7 +387,7 @@ superagent/
 
 ## Test Coverage
 
-All 230 tests passing:
+All 231 tests passing:
 - **Phase 2A (Tools):** 25 tests validating name resolution and 4 core tools
 - **Phase 3A/3C (Agent):** 15 tests of Claude tool-calling and conversation history with mocked client (no API key needed)
 - **Phase 3B (CLI):** 11 tests of formatting functions
@@ -398,7 +398,7 @@ All 230 tests passing:
 - **Phase 7A (Schedule):** 19 tests of team schedules, bye weeks, games from week N onward, JSON safety, and tool schemas
 - **Phase 7C-lite (Fantasy Context):** 17 tests of player fantasy schedule context, comparisons, missing-context notes, and tool schemas
 - **Phase 8 (Product Layer):** 11 tests of auth, rate limits, persistent sessions, export, and delete
-- **Phase 9A.2 (Admin Review):** 13 tests of token protection, admin page serving, question review, summary counts, draft mapping review, and production seed/import endpoints
+- **Phase 9A.2 (Admin Review):** 14 tests of token protection, admin page serving, question review, summary counts, draft mapping review, production seed/import endpoints, and background seed jobs
 - **Phase 9B (Playoff Week Labels):** 18 tests of playoff week naming and ranges
 - **Phase 10A (Canonical Identity):** 9 tests of canonical identity, ambiguous names, source mapping, roster-first seeding, and existing-ID seed stability
 - **Phase 10B (Draft Market Ingestion):** 11 tests of strict CSV/XLSX ingestion, source ranks, review queues, and admin mapping review
@@ -459,6 +459,12 @@ On Render Free, where shell access is unavailable, trigger the same seed path th
 
 ```bash
 curl -X POST "https://your-app.onrender.com/admin/seed-canonical?token=$ADMIN_TOKEN&season=2025"
+```
+
+The endpoint returns a job ID immediately. Poll it until `status` is `completed`:
+
+```bash
+curl "https://your-app.onrender.com/admin/jobs/JOB_ID?token=$ADMIN_TOKEN"
 ```
 
 The seed uses nflverse rosters first so rookies, backups, and handcuffs are captured even when they have no plays. Weekly stats and play-by-play names then enrich aliases. Low-confidence external names are queued in `draft_import_review` for Phase 10B review/import workflows.

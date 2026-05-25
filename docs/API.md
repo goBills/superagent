@@ -371,13 +371,32 @@ Example response:
 ```json
 {
   "ok": true,
-  "season": 2025,
-  "summary": {
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "queued",
+  "status_url": "/admin/jobs/550e8400-e29b-41d4-a716-446655440000?token=YOUR_ADMIN_TOKEN"
+}
+```
+
+Poll job status:
+
+```bash
+curl "https://superagent-ph31.onrender.com/admin/jobs/550e8400-e29b-41d4-a716-446655440000?token=$ADMIN_TOKEN"
+```
+
+Completed response:
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "type": "seed_canonical",
+  "status": "completed",
+  "result": {
     "players_created": 128,
     "players_seen": 2834,
     "player_seasons_created": 2812,
     "aliases_created": 391
-  }
+  },
+  "error": null
 }
 ```
 

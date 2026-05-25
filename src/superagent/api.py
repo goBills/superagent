@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -71,6 +71,7 @@ app.add_middleware(
 )
 
 MAX_HISTORY_ITEMS = 12
+ADMIN_JOBS: Dict[str, Dict[str, Any]] = {}
 
 
 init_db()
@@ -267,6 +268,38 @@ def _require_admin_token(token: Optional[str]) -> None:
         raise HTTPException(status_code=503, detail="Admin dashboard is not configured")
     if not token or token != admin_token:
         raise HTTPException(status_code=401, detail="Invalid admin token")
+
+
+def _create_admin_job(job_type: str, payload: Dict[str, Any]) -> str:
+    """Create an in-memory admin job record for long-running operator tasks."""
+    job_id = str(uuid.uuid4())
+    ADMIN_JOBS[job_id] = {
+        "id": job_id,
+        "type": job_type,
+        "status": "queued",
+        "payload": payload,
+        "result": None,
+        "error": None,
+        "created_at": utc_now().isoformat(),
+        "started_at": None,
+        "completed_at": None,
+    }
+    return job_id
+
+
+def _run_seed_canonical_job(job_id: str, seasons: Optional[List[int]]) -> None:
+    """Run canonical seeding outside the request/response cycle."""
+    job = ADMIN_JOBS[job_id]
+    job["status"] = "running"
+    job["started_at"] = utc_now().isoformat()
+    try:
+        job["result"] = seed_canonical_players_from_nflverse(seasons=seasons)
+        job["status"] = "completed"
+    except Exception as exc:
+        job["error"] = str(exc)
+        job["status"] = "failed"
+    finally:
+        job["completed_at"] = utc_now().isoformat()
 
 
 def _parse_tool_names(tools_used_json: Optional[str]) -> List[str]:
@@ -676,20 +709,37 @@ def admin_draft_mappings(
 
 @app.post("/admin/seed-canonical")
 def admin_seed_canonical(
+    background_tasks: BackgroundTasks,
     token: Optional[str] = None,
     season: Optional[int] = None,
+    wait: bool = False,
 ) -> Dict[str, Any]:
     """
     Seed canonical players from nflverse data without requiring production shell access.
 
     Render free instances do not provide shell access, so production operators can
     trigger the same deterministic seeding path through this protected endpoint.
+    By default it runs as a background job so the request does not hang while
+    Postgres is being populated.
     """
     _require_admin_token(token)
     if season is not None and (season < 2020 or season > 2030):
         raise HTTPException(status_code=400, detail="Invalid season")
 
     seasons = [season] if season is not None else None
+    if not wait:
+        job_id = _create_admin_job(
+            "seed_canonical",
+            {"season": season, "seasons": seasons},
+        )
+        background_tasks.add_task(_run_seed_canonical_job, job_id, seasons)
+        return {
+            "ok": True,
+            "job_id": job_id,
+            "status": "queued",
+            "status_url": f"/admin/jobs/{job_id}?token=YOUR_ADMIN_TOKEN",
+        }
+
     try:
         summary = seed_canonical_players_from_nflverse(seasons=seasons)
     except Exception as exc:
@@ -700,6 +750,19 @@ def admin_seed_canonical(
         "season": season,
         "summary": summary,
     }
+
+
+@app.get("/admin/jobs/{job_id}")
+def admin_job_status(
+    job_id: str,
+    token: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Return status for an in-memory admin background job."""
+    _require_admin_token(token)
+    job = ADMIN_JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Admin job not found")
+    return job
 
 
 @app.post("/admin/draft-import")

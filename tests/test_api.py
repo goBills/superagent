@@ -324,13 +324,40 @@ class TestAdminQuestions:
 
         monkeypatch.setattr("superagent.api.seed_canonical_players_from_nflverse", fake_seed)
 
-        response = client.post(f"/admin/seed-canonical?token={token}&season=2025")
+        response = client.post(f"/admin/seed-canonical?token={token}&season=2025&wait=true")
 
         assert response.status_code == 200
         data = response.json()
         assert data["ok"] is True
         assert data["season"] == 2025
         assert data["summary"]["players_created"] == 1
+
+    def test_admin_seed_canonical_background_job(self, monkeypatch):
+        token = use_admin_token(monkeypatch)
+
+        def fake_seed(seasons=None):
+            return {
+                "players_created": 1,
+                "players_seen": 1,
+                "player_seasons_created": 1,
+                "aliases_created": 2,
+            }
+
+        monkeypatch.setattr("superagent.api.seed_canonical_players_from_nflverse", fake_seed)
+
+        response = client.post(f"/admin/seed-canonical?token={token}&season=2025")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert data["job_id"]
+
+        status = client.get(f"/admin/jobs/{data['job_id']}?token={token}")
+        assert status.status_code == 200
+        job = status.json()
+        assert job["type"] == "seed_canonical"
+        assert job["status"] == "completed"
+        assert job["result"]["players_created"] == 1
 
     def test_admin_draft_import_requires_token(self, monkeypatch):
         use_admin_token(monkeypatch)
