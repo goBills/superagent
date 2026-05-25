@@ -48,6 +48,10 @@ DOWNLOAD_CONFIGS = {
         "file_template": "player_stats_{season}.parquet",
         "release_tag": "player_stats",
         "seasons": config.NFL_SEASONS,
+        # nflverse has not published this file yet in the observed release feed.
+        # Superagent derives 2025 player stats from play-by-play, so bootstrap
+        # should continue when this optional file is absent.
+        "optional_seasons": [2025],
     },
     "rosters": {
         "description": "Weekly rosters with positions and teams",
@@ -155,9 +159,11 @@ def fetch_nflverse_data() -> Tuple[bool, List[str]]:
     console.print("\n[bold]Step 2: Downloading Season-Specific Files[/bold]")
     downloaded_files = []
     failed_files = []
+    skipped_optional_files = []
 
     for dataset_name, config_info in DOWNLOAD_CONFIGS.items():
         console.print(f"\n📦 {dataset_name} ({config_info['description']}):")
+        optional_seasons = set(config_info.get("optional_seasons", []))
 
         for season in config_info["seasons"]:
             filename = config_info["file_template"].format(season=season)
@@ -174,6 +180,12 @@ def fetch_nflverse_data() -> Tuple[bool, List[str]]:
             success = download_file(url, destination, filename)
             if success:
                 downloaded_files.append(str(destination))
+            elif season in optional_seasons:
+                console.print(
+                    f"      ⚠️  Optional file unavailable; continuing without {filename}",
+                    style="yellow",
+                )
+                skipped_optional_files.append(filename)
             else:
                 failed_files.append(filename)
 
@@ -182,7 +194,14 @@ def fetch_nflverse_data() -> Tuple[bool, List[str]]:
     console.print("[bold]Download Summary[/bold]")
     console.print("=" * 80)
     console.print(f"✅ Downloaded: {len(downloaded_files)} file(s)")
+    if skipped_optional_files:
+        console.print(f"⚠️  Optional unavailable: {len(skipped_optional_files)} file(s)")
     console.print(f"❌ Failed: {len(failed_files)} file(s)")
+
+    if skipped_optional_files:
+        console.print("\n[yellow]Optional files skipped:[/yellow]")
+        for name in skipped_optional_files:
+            console.print(f"   • {name}")
 
     if failed_files:
         console.print("\n[yellow]Failed files:[/yellow]")

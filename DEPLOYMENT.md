@@ -51,7 +51,7 @@ docker run -p 8000:8000 \
    - `PORT=8000`
 6. Deploy and verify `/health`.
 
-On first deploy, Superagent downloads nflverse parquet files and builds `data/superagent.duckdb` if it is missing. This can take several minutes. Without a persistent disk, the app may need to rebuild this database after deploys or cold starts.
+On first deploy, Superagent downloads nflverse parquet files and builds `data/superagent.duckdb` if it is missing. This can take several minutes. `player_stats_2025.parquet` is optional because Superagent derives 2025 player stats from play-by-play when weekly player stats are unavailable. Without a persistent disk, the app may need to rebuild this database after deploys or cold starts.
 
 If using Render's native Python environment instead of Docker:
 
