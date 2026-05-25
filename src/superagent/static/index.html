@@ -348,6 +348,74 @@
             margin-bottom: 12px;
         }
 
+        .draft-room {
+            border: 1px solid #dbe3ef;
+            border-radius: 8px;
+            background: #f8fbff;
+            margin-bottom: 12px;
+            padding: 12px;
+        }
+
+        .draft-room-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+
+        .draft-room-title {
+            color: #1f2937;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .draft-room-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .draft-room-grid {
+            display: grid;
+            grid-template-columns: 90px 90px 1fr;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .draft-room textarea {
+            min-height: 58px;
+            resize: vertical;
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d0d7e2;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 13px;
+            line-height: 1.35;
+        }
+
+        .draft-room input {
+            min-width: 0;
+            padding: 10px 12px;
+            border: 1px solid #d0d7e2;
+            border-radius: 8px;
+            font-size: 13px;
+        }
+
+        .draft-room textarea:focus,
+        .draft-room input:focus {
+            outline: none;
+            border-color: #1a73e8;
+            box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.1);
+        }
+
+        .draft-room-note {
+            color: #64748b;
+            font-size: 11px;
+            line-height: 1.35;
+        }
+
         input[type="text"] {
             flex: 1;
             padding: 12px 16px;
@@ -516,6 +584,12 @@
             .tools-section {
                 max-width: 90%;
             }
+            .draft-room-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+            .draft-room-grid textarea {
+                grid-column: 1 / -1;
+            }
             .input-area {
                 padding: 12px 16px;
             }
@@ -580,6 +654,26 @@
         </div>
 
         <div class="input-area">
+            <div class="draft-room" id="draftRoom">
+                <div class="draft-room-header">
+                    <div class="draft-room-title">Draft Room</div>
+                    <div class="draft-room-actions">
+                        <button class="example-btn" onclick="draftRoomAsk('next')">Next pick</button>
+                        <button class="example-btn" onclick="draftRoomAsk('needs')">Position needs</button>
+                        <button class="example-btn" onclick="draftRoomAsk('byes')">Bye check</button>
+                        <button class="example-btn" onclick="draftRoomAsk('rb')">RB values</button>
+                    </div>
+                </div>
+                <div class="draft-room-grid">
+                    <input type="text" id="draftLeagueId" placeholder="League ID" value="1" oninput="saveDraftRoomState()">
+                    <input type="text" id="draftPick" placeholder="Pick #" oninput="saveDraftRoomState()">
+                    <textarea id="draftRoster" placeholder="Paste roster: Josh Allen, James Cook, ..." oninput="saveDraftRoomState()"></textarea>
+                </div>
+                <div class="draft-room-note">
+                    Saved in this browser. Paste comma-separated or line-separated players, then use a shortcut during your draft.
+                </div>
+            </div>
+
             <div class="examples">
                 <button class="example-btn" onclick="askQuestion('What\\'s Josh Allen\\'s EPA per play in 2024?')">Josh Allen EPA/play</button>
                 <button class="example-btn" onclick="askQuestion('Compare Bills RB usage in 2024')">Bills RB usage</button>
@@ -634,6 +728,9 @@
         const inputArea = document.querySelector('.input-area');
         const authArea = document.getElementById('authArea');
         const signOutButton = document.getElementById('signOutButton');
+        const draftLeagueId = document.getElementById('draftLeagueId');
+        const draftPick = document.getElementById('draftPick');
+        const draftRoster = document.getElementById('draftRoster');
         let sessionId = null;
         let authToken = null;
         let isWaiting = false;
@@ -648,6 +745,7 @@
                 localStorage.setItem('superagent_session_id', stored);
             }
             sessionId = stored;
+            loadDraftRoomState();
             updateAuthView();
         }
 
@@ -692,6 +790,66 @@
             }
             questionInput.value = question;
             sendMessage();
+        }
+
+        function rosterNames() {
+            return draftRoster.value
+                .split(/[\n,]+/)
+                .map(name => name.trim())
+                .filter(Boolean);
+        }
+
+        function rosterPhrase() {
+            const names = rosterNames();
+            return names.length ? names.join(', ') : '';
+        }
+
+        function saveDraftRoomState() {
+            localStorage.setItem('superagent_draft_room', JSON.stringify({
+                leagueId: draftLeagueId.value.trim(),
+                pick: draftPick.value.trim(),
+                roster: draftRoster.value.trim()
+            }));
+        }
+
+        function loadDraftRoomState() {
+            try {
+                const raw = localStorage.getItem('superagent_draft_room');
+                if (!raw) return;
+                const state = JSON.parse(raw);
+                draftLeagueId.value = state.leagueId || draftLeagueId.value || '1';
+                draftPick.value = state.pick || '';
+                draftRoster.value = state.roster || '';
+            } catch (error) {
+                localStorage.removeItem('superagent_draft_room');
+            }
+        }
+
+        function draftRoomPrompt(kind) {
+            const leagueId = draftLeagueId.value.trim() || '1';
+            const pick = draftPick.value.trim();
+            const roster = rosterPhrase();
+            const rosterText = roster ? `My current roster is ${roster}. ` : '';
+            const pickText = pick ? `I am at pick ${pick}. ` : '';
+
+            if (kind === 'next') {
+                return `Using league ID ${leagueId}, ${rosterText}${pickText}What positions and players should I target next?`;
+            }
+            if (kind === 'needs') {
+                return `Using league ID ${leagueId}, ${rosterText}what positions am I weak at and what should I prioritize next?`;
+            }
+            if (kind === 'byes') {
+                return `Using league ID ${leagueId}, ${rosterText}check my bye week conflicts and tell me what to avoid next.`;
+            }
+            if (kind === 'rb') {
+                return `Using league ID ${leagueId}, ${rosterText}${pickText}show me RB values with Effective Rank, Rank Source, ECR, adjusted value, and value delta.`;
+            }
+            return `Using league ID ${leagueId}, ${rosterText}${pickText}help me with my next draft pick.`;
+        }
+
+        function draftRoomAsk(kind) {
+            saveDraftRoomState();
+            askQuestion(draftRoomPrompt(kind));
         }
 
         function showAuthError(elementId, message) {
