@@ -343,6 +343,7 @@ def _upsert_alias(
             source=source,
         )
     )
+    db.flush()
 
 
 def _upsert_player_season(
@@ -405,6 +406,11 @@ def seed_canonical_players_from_nflverse(
 
     conn = duckdb.connect(duckdb_path or str(config.DATABASE_PATH))
     try:
+        roster_columns = {
+            row[0] for row in conn.execute("DESCRIBE rosters").fetchall()
+        }
+        age_select = "age" if "age" in roster_columns else "NULL AS age"
+        birth_date_select = "birth_date" if "birth_date" in roster_columns else "NULL AS birth_date"
         season_params = ",".join(["?"] * len(seasons))
         roster_rows = conn.execute(
             f"""
@@ -415,7 +421,8 @@ def seed_canonical_players_from_nflverse(
                 football_name,
                 team,
                 position,
-                age
+                {age_select},
+                {birth_date_select}
             FROM rosters
             WHERE season IN ({season_params})
               AND gsis_id IS NOT NULL
@@ -425,7 +432,7 @@ def seed_canonical_players_from_nflverse(
         ).fetchall()
 
         before_aliases = db.query(CanonicalPlayerAlias).count()
-        for season, player_id, full_name, football_name, team, position, age in roster_rows:
+        for season, player_id, full_name, football_name, team, position, age, birth_date in roster_rows:
             player_id = str(player_id)
             canonical_player_id = canonical_id_from_nflverse(player_id, str(full_name))
             player = db.query(CanonicalPlayer).filter(
@@ -440,9 +447,13 @@ def seed_canonical_players_from_nflverse(
                     nflverse_player_id=player_id,
                     full_name=str(full_name),
                     normalized_name=normalize_player_name(str(full_name)),
+                    birth_date=_safe_str(birth_date),
                 )
                 db.add(player)
+                db.flush()
                 summary["players_created"] += 1
+            elif birth_date and not player.birth_date:
+                player.birth_date = _safe_str(birth_date)
             summary["players_seen"] += 1
 
             if _upsert_player_season(

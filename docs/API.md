@@ -276,6 +276,32 @@ Example response:
 }
 ```
 
+### GET /admin/draft-mappings
+
+Return low-confidence draft source mappings queued for review:
+
+```bash
+curl "http://localhost:8000/admin/draft-mappings?token=$ADMIN_TOKEN&status=pending"
+```
+
+Example response:
+
+```json
+[
+  {
+    "id": 7,
+    "source": "draftsheetsv6",
+    "season": 2025,
+    "source_player_name": "Future Rookie",
+    "source_player_id": null,
+    "status": "pending",
+    "created_at": "2026-05-25T19:10:00",
+    "resolved_at": null,
+    "candidates": []
+  }
+]
+```
+
 ## Tools Available
 
 The agent can call these deterministic tools:

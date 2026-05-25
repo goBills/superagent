@@ -231,3 +231,107 @@ class DraftImportReview(Base):
     status = Column(String, default="pending", nullable=False)
     created_at = Column(DateTime, default=utc_now, nullable=False)
     resolved_at = Column(DateTime, nullable=True)
+
+
+class DraftMarketImport(Base):
+    """A strict draft market data import batch."""
+
+    __tablename__ = "draft_market_imports"
+    __table_args__ = (
+        UniqueConstraint("source", "season", "file_name", name="uq_draft_market_import_file"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    source = Column(String, nullable=False, index=True)
+    season = Column(Integer, nullable=False, index=True)
+    file_name = Column(String, nullable=False)
+    sheet_name = Column(String, nullable=True)
+    status = Column(String, default="completed", nullable=False)
+    rows_seen = Column(Integer, default=0, nullable=False)
+    rows_imported = Column(Integer, default=0, nullable=False)
+    rows_needing_review = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    player_markets = relationship(
+        "DraftPlayerMarket",
+        back_populates="import_batch",
+        cascade="all, delete-orphan",
+    )
+
+
+class DraftPlayerMarket(Base):
+    """Seasonal draft market row for one canonical player from one imported source."""
+
+    __tablename__ = "draft_player_markets"
+    __table_args__ = (
+        UniqueConstraint(
+            "source",
+            "season",
+            "canonical_player_id",
+            name="uq_draft_player_market_source_season_player",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    import_id = Column(
+        Integer,
+        ForeignKey("draft_market_imports.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source = Column(String, nullable=False, index=True)
+    season = Column(Integer, nullable=False, index=True)
+    canonical_player_id = Column(
+        String,
+        ForeignKey("canonical_players.canonical_player_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_player_name = Column(String, nullable=False)
+    team = Column(String, nullable=True)
+    position = Column(String, nullable=True, index=True)
+    position_rank = Column(Integer, nullable=True)
+    bye_week = Column(Integer, nullable=True)
+    overall_rank = Column(Float, nullable=True)
+    adp = Column(Float, nullable=True)
+    ecr = Column(Float, nullable=True)
+    avg_rank = Column(Float, nullable=True)
+    best_rank = Column(Float, nullable=True)
+    worst_rank = Column(Float, nullable=True)
+    std_dev = Column(Float, nullable=True)
+    ecr_vs_adp = Column(Float, nullable=True)
+    floor = Column(Float, nullable=True)
+    ceiling = Column(Float, nullable=True)
+    value = Column(Float, nullable=True)
+    injury_risk = Column(String, nullable=True)
+    raw_data = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    import_batch = relationship("DraftMarketImport", back_populates="player_markets")
+    canonical_player = relationship("CanonicalPlayer")
+    source_ranks = relationship(
+        "DraftSourceRank",
+        back_populates="player_market",
+        cascade="all, delete-orphan",
+    )
+
+
+class DraftSourceRank(Base):
+    """Per-provider rank attached to a draft market player row."""
+
+    __tablename__ = "draft_source_ranks"
+    __table_args__ = (
+        UniqueConstraint("market_id", "rank_source", name="uq_draft_source_rank_market"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    market_id = Column(
+        Integer,
+        ForeignKey("draft_player_markets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    rank_source = Column(String, nullable=False, index=True)
+    rank_value = Column(Float, nullable=False)
+
+    player_market = relationship("DraftPlayerMarket", back_populates="source_ranks")

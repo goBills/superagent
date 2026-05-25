@@ -36,6 +36,7 @@ Agent: Josh Allen plays for Buffalo, whose bye week is...
 ✅ **Phase 9A: Deployable Package** — Docker, Compose, health checks, and deployment docs for hosted launch.
 ✅ **Phase 9A.2: Admin Question Review** — Protected admin surface for reviewing recent user questions.
 ✅ **Phase 10A: Canonical Player Identity** — Product DB identity layer for cross-source draft/player mapping.
+✅ **Phase 10B: Strict Draft Market Ingestion** — DraftSheets CSV/XLSX import mapped through canonical identity.
 
 ## Quick Start
 
@@ -336,6 +337,7 @@ superagent/
 │   └── data/
 │       ├── fetch_nflverse.py     # Download nflverse parquet files
 │       ├── seed_canonical_players.py # Seed product DB canonical players
+│       ├── ingest_draft_sheets.py # Strict DraftSheets CSV/XLSX market import
 │       └── build_database.py     # Load parquet → DuckDB
 ├── data/
 │   ├── raw/                       # Downloaded parquet files (2020-2025)
@@ -355,9 +357,10 @@ superagent/
 │   ├── test_draft_research.py     # 19 tests: draft research filters
 │   ├── test_fantasy.py            # 22 tests: fantasy scoring + usage tools
 │   ├── test_fantasy_schedule_context.py # 17 tests: fantasy schedule context
-│   ├── test_api.py                # 16 tests: FastAPI endpoints, auth-aware chat, admin review
+│   ├── test_api.py                # 18 tests: FastAPI endpoints, auth-aware chat, admin review
 │   ├── test_auth.py               # 6 tests: auth + rate limit behavior
 │   ├── test_canonical_resolution.py # 8 tests: canonical identity, ambiguity, source mapping
+│   ├── test_draft_ingestion.py    # 9 tests: strict DraftSheets import + review queue
 │   ├── test_persistence.py        # 5 tests: persistent sessions + export/delete
 │   ├── test_schedule_context.py   # 19 tests: schedule + bye week tools
 │   └── test_week_utils.py         # 18 tests: playoff week labels + ranges
@@ -376,7 +379,7 @@ superagent/
 
 ## Test Coverage
 
-All 195 tests passing:
+All 206 tests passing:
 - **Phase 2A (Tools):** 25 tests validating name resolution and 4 core tools
 - **Phase 3A/3C (Agent):** 15 tests of Claude tool-calling and conversation history with mocked client (no API key needed)
 - **Phase 3B (CLI):** 11 tests of formatting functions
@@ -390,6 +393,7 @@ All 195 tests passing:
 - **Phase 9A.2 (Admin Review):** 7 tests of token protection, admin page serving, question review, and summary counts
 - **Phase 9B (Playoff Week Labels):** 18 tests of playoff week naming and ranges
 - **Phase 10A (Canonical Identity):** 8 tests of canonical identity, ambiguous names, source mapping, and roster-first seeding
+- **Phase 10B (Draft Market Ingestion):** 11 tests of strict CSV/XLSX ingestion, source ranks, review queues, and admin mapping review
 
 Run tests:
 ```bash
@@ -443,6 +447,24 @@ python -m superagent.data.seed_canonical_players
 
 The seed uses nflverse rosters first so rookies, backups, and handcuffs are captured even when they have no plays. Weekly stats and play-by-play names then enrich aliases. Low-confidence external names are queued in `draft_import_review` for Phase 10B review/import workflows.
 
+## Draft Market Ingestion
+
+Phase 10B imports DraftSheets-style CSV/XLSX market data through canonical identity. It validates required columns and numeric values strictly: clean rows import, unknown/ambiguous players go to `draft_import_review`, and malformed files fail loudly.
+
+```bash
+python -m superagent.data.ingest_draft_sheets \
+  --file "/path/to/Copy of DraftSheets Fantasy Tool.xlsx" \
+  --source draftsheetsv6 \
+  --season 2025 \
+  --sheet DATA
+```
+
+The importer stores one market row per canonical player plus per-provider ranks for sources like ESPN, Sleeper, NFL, Yahoo, and FantasyPros ECR. Review queued mappings at:
+
+```text
+http://localhost:8000/admin/draft-mappings?token=your-random-admin-token
+```
+
 ## Deployment
 
 Superagent includes a Dockerfile, Docker Compose config, startup script, and deployment guide.
@@ -475,7 +497,6 @@ These are intentional scope decisions, not bugs.
 
 ## Future Phases
 
-- **Phase 10B: Draft Market Data Ingestion** — Strict DraftSheets/ADP/ranking imports mapped through canonical player identity.
 - **Phase 10C: League Settings** — PPR/half-PPR/standard, SuperFlex, roster constraints, and personalized scoring.
 - **Phase 10D: Draft Decision Tools** — Value queries and live draft-room assistance powered by market data plus historical context.
 - **Phase 7B: Injuries & Depth** — Legitimate injury/depth source, treated as an enrichment plugin once a source is chosen.

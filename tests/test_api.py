@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from superagent.api import app
 from superagent.db import SessionLocal
-from superagent.models import ConversationSession, Message, User
+from superagent.models import ConversationSession, DraftImportReview, Message, User
 
 client = TestClient(app)
 
@@ -272,6 +272,36 @@ class TestAdminQuestions:
         assert data["total_questions"] >= 2
         assert data["unique_sessions"] >= 2
         assert data["unique_users"] >= 2
+
+    def test_admin_draft_mappings_requires_token(self, monkeypatch):
+        use_admin_token(monkeypatch)
+
+        response = client.get("/admin/draft-mappings")
+
+        assert response.status_code == 401
+
+    def test_admin_draft_mappings_correct_token(self, monkeypatch):
+        token = use_admin_token(monkeypatch)
+        with SessionLocal() as db:
+            review = DraftImportReview(
+                source="draftsheetsv6",
+                season=2025,
+                source_player_name="Future Rookie",
+                candidates='[{"full_name": "Futures Guy", "confidence": 0.61}]',
+                status="pending",
+            )
+            db.add(review)
+            db.commit()
+            review_id = review.id
+
+        response = client.get(f"/admin/draft-mappings?token={token}")
+
+        assert response.status_code == 200
+        data = response.json()
+        match = next(item for item in data if item["id"] == review_id)
+        assert match["source"] == "draftsheetsv6"
+        assert match["source_player_name"] == "Future Rookie"
+        assert match["candidates"][0]["confidence"] == 0.61
 
 
 if __name__ == "__main__":

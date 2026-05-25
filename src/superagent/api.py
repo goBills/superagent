@@ -21,7 +21,7 @@ from superagent.agent import run_agent
 from superagent.auth import create_token, hash_password, verify_password, verify_token
 from superagent.config import HOST, PORT, get_config
 from superagent.db import get_db, init_db
-from superagent.models import ConversationSession, Message, User, utc_now
+from superagent.models import ConversationSession, DraftImportReview, Message, User, utc_now
 from superagent.rate_limit import check_rate_limit
 
 
@@ -485,6 +485,53 @@ def admin_questions_summary(
         "unique_users": int(unique_users or 0),
         "timestamp": utc_now().isoformat(),
     }
+
+
+@app.get("/admin/draft-mappings")
+def admin_draft_mappings(
+    token: Optional[str] = None,
+    limit: int = 100,
+    skip: int = 0,
+    status: str = "pending",
+    db: Session = Depends(get_db),
+) -> List[Dict[str, Any]]:
+    """Return low-confidence draft source mappings queued for admin review."""
+    _require_admin_token(token)
+    limit = max(1, min(limit, 500))
+    skip = max(0, skip)
+
+    query = db.query(DraftImportReview)
+    if status:
+        query = query.filter(DraftImportReview.status == status)
+    reviews = (
+        query.order_by(DraftImportReview.created_at.desc(), DraftImportReview.id.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+    results = []
+    for review in reviews:
+        candidates = []
+        if review.candidates:
+            try:
+                candidates = json.loads(review.candidates)
+            except json.JSONDecodeError:
+                candidates = []
+        results.append(
+            {
+                "id": review.id,
+                "source": review.source,
+                "season": review.season,
+                "source_player_name": review.source_player_name,
+                "source_player_id": review.source_player_id,
+                "status": review.status,
+                "created_at": review.created_at.isoformat(),
+                "resolved_at": review.resolved_at.isoformat() if review.resolved_at else None,
+                "candidates": candidates,
+            }
+        )
+    return results
 
 
 @app.get("/sessions", response_model=List[SessionSummary])
