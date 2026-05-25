@@ -455,6 +455,7 @@ def seed_canonical_players_from_nflverse(
             elif birth_date and not player.birth_date:
                 player.birth_date = _safe_str(birth_date)
             summary["players_seen"] += 1
+            canonical_player_id = player.canonical_player_id
 
             if _upsert_player_season(
                 db,

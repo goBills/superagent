@@ -364,7 +364,7 @@ superagent/
 │   ├── test_fantasy_schedule_context.py # 17 tests: fantasy schedule context
 │   ├── test_api.py                # 22 tests: FastAPI endpoints, auth-aware chat, admin review/import
 │   ├── test_auth.py               # 6 tests: auth + rate limit behavior
-│   ├── test_canonical_resolution.py # 8 tests: canonical identity, ambiguity, source mapping
+│   ├── test_canonical_resolution.py # 9 tests: canonical identity, ambiguity, source mapping
 │   ├── test_draft_decision_tools.py # 7 tests: league-aware draft tools + agent registration
 │   ├── test_draft_ingestion.py    # 9 tests: strict DraftSheets import + review queue
 │   ├── test_espn_integration.py   # 3 tests: ESPN sync + API endpoint
@@ -387,7 +387,7 @@ superagent/
 
 ## Test Coverage
 
-All 229 tests passing:
+All 230 tests passing:
 - **Phase 2A (Tools):** 25 tests validating name resolution and 4 core tools
 - **Phase 3A/3C (Agent):** 15 tests of Claude tool-calling and conversation history with mocked client (no API key needed)
 - **Phase 3B (CLI):** 11 tests of formatting functions
@@ -400,7 +400,7 @@ All 229 tests passing:
 - **Phase 8 (Product Layer):** 11 tests of auth, rate limits, persistent sessions, export, and delete
 - **Phase 9A.2 (Admin Review):** 13 tests of token protection, admin page serving, question review, summary counts, draft mapping review, and production seed/import endpoints
 - **Phase 9B (Playoff Week Labels):** 18 tests of playoff week naming and ranges
-- **Phase 10A (Canonical Identity):** 8 tests of canonical identity, ambiguous names, source mapping, and roster-first seeding
+- **Phase 10A (Canonical Identity):** 9 tests of canonical identity, ambiguous names, source mapping, roster-first seeding, and existing-ID seed stability
 - **Phase 10B (Draft Market Ingestion):** 11 tests of strict CSV/XLSX ingestion, source ranks, review queues, and admin mapping review
 - **Phase 10C (League Settings):** 9 tests of league CRUD, permissions, scoring updates, and value adjustment
 - **Phase 10D (ESPN + Draft Tools):** 10 tests of ESPN sync, draft targets, comparisons, draft context, bye analysis, and agent registration

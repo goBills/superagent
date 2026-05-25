@@ -292,6 +292,41 @@ def test_seed_from_nflverse_rosters_and_aliases(db_session, tmp_path):
     assert "G. Davis" in aliases
 
 
+def test_seed_uses_existing_canonical_id_when_nflverse_id_matches(db_session, tmp_path):
+    duckdb_path = tmp_path / "seed_existing.duckdb"
+    create_seed_duckdb(duckdb_path)
+    add_player(
+        db_session,
+        "nfl_existing_josh_allen",
+        "Josh Allen",
+        nflverse_player_id="00-0034857",
+    )
+
+    summary = seed_canonical_players_from_nflverse(
+        seasons=[2024],
+        db=db_session,
+        duckdb_path=str(duckdb_path),
+    )
+
+    alias = (
+        db_session.query(CanonicalPlayerAlias)
+        .filter(CanonicalPlayerAlias.alias == "Joshua Allen")
+        .first()
+    )
+    season = (
+        db_session.query(PlayerSeason)
+        .filter(
+            PlayerSeason.canonical_player_id == "nfl_existing_josh_allen",
+            PlayerSeason.season == 2024,
+        )
+        .first()
+    )
+    assert summary["players_seen"] == 2
+    assert alias is not None
+    assert alias.canonical_player_id == "nfl_existing_josh_allen"
+    assert season is not None
+
+
 def test_multiple_sources_for_same_player(db_session):
     add_player(db_session, "nfl_00_0034857", "Josh Allen", nflverse_player_id="00-0034857")
 
