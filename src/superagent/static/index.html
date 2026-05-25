@@ -198,12 +198,109 @@
             background: white;
             border: 1px solid #e0e0e0;
             color: #333;
+            max-width: min(82%, 760px);
         }
 
         .message.error .message-bubble {
             background: #f8d7da;
             border: 1px solid #f5c6cb;
             color: #721c24;
+        }
+
+        .assistant-content {
+            color: #222;
+            font-size: 15px;
+            line-height: 1.62;
+        }
+
+        .assistant-content h2,
+        .assistant-content h3 {
+            color: #1f2937;
+            font-size: 16px;
+            line-height: 1.3;
+            margin: 4px 0 10px;
+        }
+
+        .assistant-content h3 {
+            font-size: 15px;
+            margin-top: 14px;
+        }
+
+        .assistant-content p {
+            margin: 0 0 12px;
+        }
+
+        .assistant-content p:last-child,
+        .assistant-content ul:last-child,
+        .assistant-content ol:last-child {
+            margin-bottom: 0;
+        }
+
+        .assistant-content ul,
+        .assistant-content ol {
+            margin: 8px 0 14px 20px;
+            padding: 0;
+        }
+
+        .assistant-content li {
+            margin: 5px 0;
+        }
+
+        .assistant-content strong {
+            color: #111827;
+            font-weight: 700;
+        }
+
+        .assistant-content code {
+            background: #f3f4f6;
+            border: 1px solid #e5e7eb;
+            border-radius: 4px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 12px;
+            padding: 1px 4px;
+        }
+
+        .assistant-content .table-wrap {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            margin: 12px 0 16px;
+            overflow-x: auto;
+            background: white;
+        }
+
+        .assistant-content table {
+            border-collapse: collapse;
+            min-width: 100%;
+            width: max-content;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        .assistant-content th,
+        .assistant-content td {
+            border-bottom: 1px solid #e5e7eb;
+            padding: 9px 10px;
+            text-align: left;
+            vertical-align: top;
+            white-space: nowrap;
+        }
+
+        .assistant-content th {
+            background: #f9fafb;
+            color: #374151;
+            font-weight: 700;
+        }
+
+        .assistant-content tr:last-child td {
+            border-bottom: none;
+        }
+
+        .assistant-content .note-block {
+            background: #f9fafb;
+            border-left: 3px solid #1a73e8;
+            border-radius: 6px;
+            margin-top: 12px;
+            padding: 10px 12px;
         }
 
         /* Tools used */
@@ -701,7 +798,7 @@
             welcomeMsg.className = 'message assistant';
             const bubble = document.createElement('div');
             bubble.className = 'message-bubble';
-            bubble.innerHTML = '👋 Welcome to Superagent! Ask me about NFL stats, player performance, fantasy metrics, or draft research.';
+            bubble.textContent = '👋 Welcome to Superagent! Ask me about NFL stats, player performance, fantasy metrics, or draft research.';
             welcomeMsg.appendChild(bubble);
             chatArea.appendChild(welcomeMsg);
             questionInput.focus();
@@ -740,7 +837,7 @@
             questionInput.value = '';
 
             // Show loading indicator
-            const loadingMsg = addMessage('assistant', '<span class="loading"></span> Thinking...');
+            const loadingMsg = addMessage('assistant', '<span class="loading"></span> Thinking...', {renderHtml: true});
 
             try {
                 // Create abort controller for timeout
@@ -813,13 +910,142 @@
             }
         }
 
-        function addMessage(role, text) {
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text == null ? '' : String(text);
+            return div.innerHTML;
+        }
+
+        function normalizeAssistantText(text) {
+            return String(text || '')
+                .replace(/\r\n/g, '\n')
+                .replace(/\s+(#{2,3}\s+)/g, '\n\n$1')
+                .replace(/\s+(\| ?\*\*?Player\b)/gi, '\n\n$1')
+                .replace(/\s+(\*\*Key (?:Insights|Notes):\*\*)/gi, '\n\n$1\n')
+                .replace(/\s+-\s+(?=\*\*|\w)/g, '\n- ')
+                .trim();
+        }
+
+        function formatInlineMarkdown(text) {
+            return escapeHtml(text)
+                .replace(/`([^`]+)`/g, '<code>$1</code>')
+                .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        }
+
+        function isTableSeparator(line) {
+            return /^\|\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(line.trim());
+        }
+
+        function renderMarkdownTable(lines) {
+            const rows = lines
+                .filter(line => !isTableSeparator(line))
+                .map(line => line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(cell => cell.trim()));
+
+            if (rows.length === 0) return '';
+
+            const header = rows[0];
+            const body = rows.slice(1);
+            let html = '<div class="table-wrap"><table><thead><tr>';
+            html += header.map(cell => `<th>${formatInlineMarkdown(cell)}</th>`).join('');
+            html += '</tr></thead><tbody>';
+            html += body.map(row => (
+                '<tr>' + row.map(cell => `<td>${formatInlineMarkdown(cell)}</td>`).join('') + '</tr>'
+            )).join('');
+            html += '</tbody></table></div>';
+            return html;
+        }
+
+        function renderAssistantText(text) {
+            const lines = normalizeAssistantText(text).split('\n');
+            const blocks = [];
+            let paragraph = [];
+            let listItems = [];
+
+            const flushParagraph = () => {
+                if (paragraph.length) {
+                    blocks.push(`<p>${formatInlineMarkdown(paragraph.join(' '))}</p>`);
+                    paragraph = [];
+                }
+            };
+            const flushList = () => {
+                if (listItems.length) {
+                    blocks.push('<ul>' + listItems.map(item => `<li>${formatInlineMarkdown(item)}</li>`).join('') + '</ul>');
+                    listItems = [];
+                }
+            };
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+
+                if (!line) {
+                    flushParagraph();
+                    flushList();
+                    continue;
+                }
+
+                if (line.startsWith('|')) {
+                    flushParagraph();
+                    flushList();
+                    const tableLines = [];
+                    while (i < lines.length && lines[i].trim().startsWith('|')) {
+                        tableLines.push(lines[i].trim());
+                        i++;
+                    }
+                    i--;
+                    blocks.push(renderMarkdownTable(tableLines));
+                    continue;
+                }
+
+                if (line.startsWith('### ')) {
+                    flushParagraph();
+                    flushList();
+                    blocks.push(`<h3>${formatInlineMarkdown(line.slice(4))}</h3>`);
+                    continue;
+                }
+
+                if (line.startsWith('## ')) {
+                    flushParagraph();
+                    flushList();
+                    blocks.push(`<h2>${formatInlineMarkdown(line.slice(3))}</h2>`);
+                    continue;
+                }
+
+                if (/^[-*]\s+/.test(line)) {
+                    flushParagraph();
+                    listItems.push(line.replace(/^[-*]\s+/, ''));
+                    continue;
+                }
+
+                if (/^\*\*Key (?:Insights|Notes):\*\*/i.test(line)) {
+                    flushParagraph();
+                    flushList();
+                    blocks.push(`<div class="note-block"><p>${formatInlineMarkdown(line)}</p></div>`);
+                    continue;
+                }
+
+                flushList();
+                paragraph.push(line);
+            }
+
+            flushParagraph();
+            flushList();
+
+            return `<div class="assistant-content">${blocks.join('')}</div>`;
+        }
+
+        function addMessage(role, text, options = {}) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${role}`;
 
             const bubble = document.createElement('div');
             bubble.className = 'message-bubble';
-            bubble.innerHTML = text;
+            if (options.renderHtml) {
+                bubble.innerHTML = text;
+            } else if (role === 'assistant') {
+                bubble.innerHTML = renderAssistantText(text);
+            } else {
+                bubble.textContent = text;
+            }
 
             messageDiv.appendChild(bubble);
             chatArea.appendChild(messageDiv);
@@ -837,11 +1063,11 @@
 
             let html = '<details><summary>📊 Tools Used (' + toolsUsed.length + ')</summary><ul>';
             for (const tool of toolsUsed) {
-                const status = tool.result.ok ? '✅' : '❌';
-                const params = Object.entries(tool.input)
-                    .map(([k, v]) => `${k}="${v}"`)
+                const status = tool.result && tool.result.ok ? '✅' : '❌';
+                const params = Object.entries(tool.input || {})
+                    .map(([k, v]) => `${escapeHtml(k)}="${escapeHtml(v)}"`)
                     .join(', ');
-                const toolCall = `${tool.name}(${params})`;
+                const toolCall = `${escapeHtml(tool.name)}(${params})`;
                 html += `<li>${status} <code style="font-family: monospace; font-size: 11px;">${toolCall}</code></li>`;
             }
             html += '</ul></details>';
