@@ -419,7 +419,7 @@ class TestAdminQuestions:
         monkeypatch.setattr("superagent.api.ingest_draft_market_file", fake_import)
 
         response = client.post(
-            f"/admin/draft-import?token={token}&source=draftsheetsv6&season=2025&sheet=DATA",
+            f"/admin/draft-import?token={token}&source=draftsheetsv6&season=2025&sheet=DATA&wait=true",
             files={
                 "file": (
                     "draft.csv",
@@ -438,6 +438,43 @@ class TestAdminQuestions:
             "season": 2025,
             "sheet_name": "DATA",
         }
+
+    def test_admin_draft_import_background_job(self, monkeypatch):
+        token = use_admin_token(monkeypatch)
+
+        def fake_import(file_path, source, season, sheet_name=None):
+            assert Path(file_path).exists()
+            return {
+                "ok": True,
+                "rows_seen": 1,
+                "rows_imported": 1,
+                "rows_needing_review": 0,
+            }
+
+        monkeypatch.setattr("superagent.api.ingest_draft_market_file", fake_import)
+
+        response = client.post(
+            f"/admin/draft-import?token={token}&source=draftsheetsv6&season=2025&sheet=DATA",
+            files={
+                "file": (
+                    "draft.csv",
+                    b"Player,Team,POS\nJosh Allen,BUF,QB1\n",
+                    "text/csv",
+                )
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert data["job_id"]
+
+        status = client.get(f"/admin/jobs/{data['job_id']}?token={token}")
+        assert status.status_code == 200
+        job = status.json()
+        assert job["type"] == "draft_import"
+        assert job["status"] == "completed"
+        assert job["result"]["rows_imported"] == 1
 
 
 if __name__ == "__main__":

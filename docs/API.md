@@ -418,18 +418,13 @@ Example response:
 ```json
 {
   "ok": true,
-  "summary": {
-    "ok": true,
-    "source": "draftsheetsv6",
-    "season": 2025,
-    "file_name": "Copy of DraftSheets Fantasy Tool.xlsx",
-    "sheet_name": "DATA",
-    "rows_seen": 966,
-    "rows_imported": 891,
-    "rows_needing_review": 75
-  }
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "queued",
+  "status_url": "/admin/jobs/550e8400-e29b-41d4-a716-446655440000?token=YOUR_ADMIN_TOKEN"
 }
 ```
+
+Poll `/admin/jobs/{job_id}` for the final import summary.
 
 ### GET /admin/draft-mappings
 

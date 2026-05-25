@@ -362,7 +362,7 @@ superagent/
 │   ├── test_draft_research.py     # 19 tests: draft research filters
 │   ├── test_fantasy.py            # 22 tests: fantasy scoring + usage tools
 │   ├── test_fantasy_schedule_context.py # 17 tests: fantasy schedule context
-│   ├── test_api.py                # 24 tests: FastAPI endpoints, auth-aware chat, admin review/import
+│   ├── test_api.py                # 25 tests: FastAPI endpoints, auth-aware chat, admin review/import
 │   ├── test_auth.py               # 6 tests: auth + rate limit behavior
 │   ├── test_canonical_resolution.py # 10 tests: canonical identity, ambiguity, source mapping
 │   ├── test_draft_decision_tools.py # 7 tests: league-aware draft tools + agent registration
@@ -387,7 +387,7 @@ superagent/
 
 ## Test Coverage
 
-All 233 tests passing:
+All 234 tests passing:
 - **Phase 2A (Tools):** 25 tests validating name resolution and 4 core tools
 - **Phase 3A/3C (Agent):** 15 tests of Claude tool-calling and conversation history with mocked client (no API key needed)
 - **Phase 3B (CLI):** 11 tests of formatting functions
@@ -398,7 +398,7 @@ All 233 tests passing:
 - **Phase 7A (Schedule):** 19 tests of team schedules, bye weeks, games from week N onward, JSON safety, and tool schemas
 - **Phase 7C-lite (Fantasy Context):** 17 tests of player fantasy schedule context, comparisons, missing-context notes, and tool schemas
 - **Phase 8 (Product Layer):** 11 tests of auth, rate limits, persistent sessions, export, and delete
-- **Phase 9A.2 (Admin Review):** 15 tests of token protection, admin page serving, question review, summary counts, draft mapping review, production seed/import endpoints, and background seed jobs
+- **Phase 9A.2 (Admin Review):** 16 tests of token protection, admin page serving, question review, summary counts, draft mapping review, production seed/import endpoints, and background seed/import jobs
 - **Phase 9B (Playoff Week Labels):** 18 tests of playoff week naming and ranges
 - **Phase 10A (Canonical Identity):** 10 tests of canonical identity, ambiguous names, source mapping, roster-first seeding, existing-ID seed stability, and quick seed mode
 - **Phase 10B (Draft Market Ingestion):** 11 tests of strict CSV/XLSX ingestion, source ranks, review queues, and admin mapping review
@@ -488,6 +488,12 @@ On Render Free, upload the workbook through the protected admin API instead:
 ```bash
 curl -X POST "https://your-app.onrender.com/admin/draft-import?token=$ADMIN_TOKEN&source=draftsheetsv6&season=2025&sheet=DATA" \
   -F "file=@/path/to/Copy of DraftSheets Fantasy Tool.xlsx"
+```
+
+The upload returns a job ID immediately after the file is received. Poll it the same way as the canonical seed job:
+
+```bash
+curl "https://your-app.onrender.com/admin/jobs/JOB_ID?token=$ADMIN_TOKEN"
 ```
 
 The importer stores one market row per canonical player plus per-provider ranks for sources like ESPN, Sleeper, NFL, Yahoo, and FantasyPros ECR. Review queued mappings at:

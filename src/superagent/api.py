@@ -309,6 +309,36 @@ def _run_seed_canonical_job(
         job["completed_at"] = utc_now().isoformat()
 
 
+def _run_draft_import_job(
+    job_id: str,
+    file_path: str,
+    source: str,
+    season: int,
+    sheet: Optional[str],
+) -> None:
+    """Run DraftSheets import outside the request/response cycle."""
+    job = ADMIN_JOBS[job_id]
+    job["status"] = "running"
+    job["started_at"] = utc_now().isoformat()
+    try:
+        job["result"] = ingest_draft_market_file(
+            file_path=file_path,
+            source=source,
+            season=season,
+            sheet_name=sheet,
+        )
+        job["status"] = "completed"
+    except Exception as exc:
+        job["error"] = str(exc)
+        job["status"] = "failed"
+    finally:
+        try:
+            os.remove(file_path)
+        except OSError:
+            pass
+        job["completed_at"] = utc_now().isoformat()
+
+
 def _parse_tool_names(tools_used_json: Optional[str]) -> List[str]:
     """Return readable tool names from a persisted assistant message."""
     if not tools_used_json:
@@ -783,10 +813,12 @@ def admin_job_status(
 
 @app.post("/admin/draft-import")
 async def admin_draft_import(
+    background_tasks: BackgroundTasks,
     token: Optional[str] = None,
     source: str = "draftsheetsv6",
     season: int = 2025,
     sheet: Optional[str] = "DATA",
+    wait: bool = False,
     file: UploadFile = File(...),
 ) -> Dict[str, Any]:
     """
@@ -794,7 +826,8 @@ async def admin_draft_import(
 
     The uploaded file is written to a temporary path and then passed through the
     same strict importer used by the CLI, so validation and canonical mapping
-    behavior stay identical across local and deployed environments.
+    behavior stay identical across local and deployed environments. By default
+    the import runs as a background job so Render Free requests do not hang.
     """
     _require_admin_token(token)
     if not file.filename:
@@ -802,15 +835,45 @@ async def admin_draft_import(
 
     try:
         uploaded_name = Path(file.filename).name
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            tmp_path = Path(tmp_dir) / uploaded_name
-            tmp_path.write_bytes(await file.read())
+        tmp_path = Path(tempfile.gettempdir()) / f"superagent-{uuid.uuid4()}-{uploaded_name}"
+        tmp_path.write_bytes(await file.read())
+        if not wait:
+            job_id = _create_admin_job(
+                "draft_import",
+                {
+                    "file_name": uploaded_name,
+                    "source": source,
+                    "season": season,
+                    "sheet": sheet,
+                },
+            )
+            background_tasks.add_task(
+                _run_draft_import_job,
+                job_id,
+                str(tmp_path),
+                source,
+                season,
+                sheet,
+            )
+            return {
+                "ok": True,
+                "job_id": job_id,
+                "status": "queued",
+                "status_url": f"/admin/jobs/{job_id}?token=YOUR_ADMIN_TOKEN",
+            }
+
+        try:
             summary = ingest_draft_market_file(
                 file_path=str(tmp_path),
                 source=source,
                 season=season,
                 sheet_name=sheet,
             )
+        finally:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
         return {
             "ok": True,
             "summary": summary,
