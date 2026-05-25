@@ -518,6 +518,8 @@ Claude can now call:
 - `get_draft_context` — league settings, recent picks, drafted count, and top available values
 - `get_bye_week_analysis` — bye-week concentration warnings for picked players
 
+For natural draft phrasing, use `min_adp` for "after pick 70" and `max_adp` for "before pick 70."
+
 ## Deployment
 
 Superagent includes a Dockerfile, Docker Compose config, startup script, and deployment guide.

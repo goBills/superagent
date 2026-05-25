@@ -162,6 +162,22 @@ def test_find_draft_targets_filters_position_adp_and_bye():
     assert [row["player_name"] for row in result["data"]] == ["Khalil Shakir"]
 
 
+def test_find_draft_targets_supports_after_pick_language_with_min_adp():
+    league_id, season, source = setup_draft_fixture()
+
+    result = find_draft_targets(
+        league_id=league_id,
+        season=season,
+        source=source,
+        position="RB",
+        min_adp=50,
+    )
+
+    assert result["ok"] is True
+    assert [row["player_name"] for row in result["data"]] == ["James Cook"]
+    assert result["meta"]["min_adp"] == 50
+
+
 def test_compare_draft_options_uses_league_adjustments():
     league_id, season, source = setup_draft_fixture()
 

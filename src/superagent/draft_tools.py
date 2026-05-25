@@ -92,6 +92,7 @@ def _market_payload(market: DraftPlayerMarket, settings: LeagueSettings) -> dict
 def find_draft_targets(
     league_id: int,
     position: str | None = None,
+    min_adp: float | None = None,
     max_adp: float | None = None,
     min_value_delta: float | None = None,
     bye_week_filters: list[int] | None = None,
@@ -113,6 +114,8 @@ def find_draft_targets(
         for market in _market_rows(db, season, source=source, position=position):
             if market.canonical_player_id in drafted:
                 continue
+            if min_adp is not None and market.adp is not None and market.adp < min_adp:
+                continue
             if max_adp is not None and market.adp is not None and market.adp > max_adp:
                 continue
             if bye_week_filters and market.bye_week in set(bye_week_filters):
@@ -131,6 +134,8 @@ def find_draft_targets(
                 "season": season,
                 "source": source,
                 "position": position,
+                "min_adp": min_adp,
+                "max_adp": max_adp,
                 "excluded_drafted_players": len(drafted),
                 "historical_research_only": True,
             },
