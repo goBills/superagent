@@ -16,6 +16,7 @@ import duckdb
 from superagent.config import get_config
 from superagent.name_resolution import resolve_team, resolve_player
 from superagent.db_query import get_db_connection, get_player_stats
+from superagent.week_utils import get_week_label, week_range_label
 
 config = get_config()
 
@@ -423,6 +424,7 @@ def get_team_epa_trend(
             "data": [
                 {
                     "week": int,
+                    "week_label": str,  # "Week 1" or "Divisional Round"
                     "offensive_epa": <float>,
                     "defensive_epa": <float>,
                     "net_epa": <float>,
@@ -434,6 +436,7 @@ def get_team_epa_trend(
                 "team_abbr": str,
                 "season": int,
                 "weeks_covered": int,
+                "weeks_range_label": str,  # e.g., "Weeks 6-17"
                 "source": "team_week_epa view"
             },
             "error": None
@@ -485,8 +488,10 @@ def get_team_epa_trend(
         weeks_data = []
         for row in result:
             week, off_epa, def_epa_allowed, net_epa, play_count = row
+            week_int = int(week)
             weeks_data.append({
-                "week": int(week),
+                "week": week_int,
+                "week_label": get_week_label(week_int),
                 "offensive_epa": round(float(off_epa), 2) if off_epa is not None else 0.0,
                 "defensive_epa_allowed": round(float(def_epa_allowed), 2) if def_epa_allowed is not None else 0.0,
                 "net_epa": round(float(net_epa), 2) if net_epa is not None else 0.0,
@@ -497,6 +502,7 @@ def get_team_epa_trend(
             "team_abbr": team_abbr,
             "season": season,
             "weeks_covered": len(weeks_data),
+            "weeks_range_label": week_range_label(start_week, end_week),
             "source": "team_week_epa view"
         }
 
@@ -999,8 +1005,10 @@ def get_player_weekly_usage(
                 scoring="ppr"
             )
 
+            week_int = int(week)
             weeks_data.append({
-                "week": int(week),
+                "week": week_int,
+                "week_label": get_week_label(week_int),
                 "opponent": opponent or "N/A",
                 "carries": int(carries or 0),
                 "targets": int(targets or 0),
@@ -2369,8 +2377,10 @@ def _format_weekly_usage_for_context(weekly_usage: List[Dict[str, Any]]) -> List
     formatted = []
     for week in weekly_usage:
         total_td = int(week.get("tds", 0))
+        week_int = int(week.get("week", 0))
         formatted.append({
-            "week": int(week.get("week", 0)),
+            "week": week_int,
+            "week_label": get_week_label(week_int),
             "opponent": week.get("opponent"),
             "carries": int(week.get("carries", 0)),
             "targets": int(week.get("targets", 0)),
