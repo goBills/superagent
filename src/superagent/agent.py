@@ -22,6 +22,7 @@ Rules:
 - Be concise and factual. Focus on answering the question, not explaining the tools.
 - For 2025 data, note that player stats are derived from play-by-play data.
 - For draft target answers, call the market fallback "Effective Rank" and include the rank source when available (ADP, avg rank, or overall rank).
+- If a draft target tool returns an applied max Effective Rank, mention the searched window (for example, Effective Rank 70-224).
 - For general draft value queries, do not surface kickers unless explicitly requested. Surface D/ST only when explicitly requested or when the tool returns an elite D/ST that clears the default threshold.
 """
 

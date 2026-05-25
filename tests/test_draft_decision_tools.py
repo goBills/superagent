@@ -232,6 +232,41 @@ def test_find_draft_targets_uses_avg_rank_when_adp_missing():
     assert result["data"][0]["draft_position_source"] == "avg rank"
 
 
+def test_find_draft_targets_caps_after_pick_results_to_draftable_range():
+    league_id, season, source = setup_draft_fixture()
+    with SessionLocal() as db:
+        import_batch = db.query(DraftMarketImport).filter(DraftMarketImport.source == source).first()
+        add_player(db, "nfl_deep_rb_tools", "Deep Bench RB", "NYG", "RB", season)
+        db.add(
+            DraftPlayerMarket(
+                import_id=import_batch.id,
+                source=source,
+                season=season,
+                canonical_player_id="nfl_deep_rb_tools",
+                source_player_name="Deep Bench RB",
+                position="RB",
+                team="NYG",
+                avg_rank=310,
+                ecr=150,
+                value=30,
+            )
+        )
+        db.commit()
+
+    result = find_draft_targets(
+        league_id=league_id,
+        season=season,
+        source=source,
+        position="RB",
+        min_effective_rank=50,
+    )
+
+    assert result["ok"] is True
+    assert "Deep Bench RB" not in [row["player_name"] for row in result["data"]]
+    assert result["meta"]["draftable_rank_limit"] == 192
+    assert result["meta"]["applied_max_effective_rank"] == 192
+
+
 def test_find_draft_targets_excludes_k_and_non_elite_dst_by_default():
     league_id, season, source = setup_draft_fixture()
     with SessionLocal() as db:

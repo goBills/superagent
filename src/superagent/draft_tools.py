@@ -17,6 +17,7 @@ from superagent.draft_value import adjust_draft_value
 from superagent.models import DraftPlayerMarket, League, LeagueDraftPick, LeagueSettings
 
 ELITE_DST_EFFECTIVE_RANK_CUTOFF = 140
+DEFAULT_DRAFTABLE_RANK_LIMIT = 240
 
 
 def _response(ok: bool, data: Any = None, error: str | None = None, meta: dict | None = None) -> dict:
@@ -73,6 +74,12 @@ def _effective_rank(market: DraftPlayerMarket) -> tuple[float | None, str | None
     if market.overall_rank is not None:
         return market.overall_rank, "overall rank"
     return None, None
+
+
+def _draftable_rank_limit(settings: LeagueSettings) -> int:
+    num_teams = settings.num_teams or 12
+    roster_spots = settings.roster_spots or 16
+    return max(1, min(int(num_teams * roster_spots), 350))
 
 
 def _is_explicit_special_teams_request(position: str | None) -> bool:
@@ -157,6 +164,10 @@ def find_draft_targets(
         if season is None:
             return _response(False, error="No draft market data imported")
         settings = _league_settings(league)
+        draftable_rank_limit = _draftable_rank_limit(settings)
+        applied_max_effective_rank = max_effective_rank
+        if applied_max_effective_rank is None and not _is_explicit_special_teams_request(position):
+            applied_max_effective_rank = draftable_rank_limit
         drafted = _drafted_ids(db, league_id, season)
         rows = []
         for market in _market_rows(db, season, source=source, position=position):
@@ -165,7 +176,9 @@ def find_draft_targets(
             effective_rank, _ = _effective_rank(market)
             if min_effective_rank is not None and (effective_rank is None or effective_rank < min_effective_rank):
                 continue
-            if max_effective_rank is not None and (effective_rank is None or effective_rank > max_effective_rank):
+            if applied_max_effective_rank is not None and (
+                effective_rank is None or effective_rank > applied_max_effective_rank
+            ):
                 continue
             if bye_week_filters and market.bye_week in set(bye_week_filters):
                 continue
@@ -187,9 +200,14 @@ def find_draft_targets(
                 "position": position,
                 "min_effective_rank": min_effective_rank,
                 "max_effective_rank": max_effective_rank,
+                "applied_max_effective_rank": applied_max_effective_rank,
+                "draftable_rank_limit": draftable_rank_limit,
                 "min_adp": min_adp,
                 "max_adp": max_adp,
-                "rank_semantics": "Effective Rank uses ADP when available, otherwise avg rank, otherwise overall rank.",
+                "rank_semantics": (
+                    "Effective Rank uses ADP when available, otherwise avg rank, otherwise overall rank. "
+                    "Default results are capped at the league's draftable roster range unless a max rank is provided."
+                ),
                 "default_special_teams_filter": (
                     "K excluded unless requested. D/ST excluded unless requested or effective rank <= "
                     f"{ELITE_DST_EFFECTIVE_RANK_CUTOFF} with positive value delta."
