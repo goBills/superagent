@@ -667,6 +667,22 @@
             updateAuthView();
         }
 
+        function formatApiError(data, response) {
+            let message = data && (data.error || data.detail || data.message);
+            if (Array.isArray(message)) {
+                message = message.map(item => item.msg || JSON.stringify(item)).join('; ');
+            } else if (message && typeof message === 'object') {
+                message = JSON.stringify(message);
+            }
+            if (!message) {
+                message = response ? `Request failed with status ${response.status}` : 'Request failed';
+            }
+            if (message.includes('ANTHROPIC_API_KEY')) {
+                return 'Anthropic API key is not configured. Set ANTHROPIC_API_KEY in your environment or .env file, then restart the server.';
+            }
+            return message;
+        }
+
         function clearChat() {
             chatArea.innerHTML = '';
             const welcomeMsg = document.createElement('div');
@@ -733,12 +749,23 @@
                 });
 
                 clearTimeout(requestTimeout);
-                const data = await response.json();
+                const rawResponse = await response.text();
+                let data = {};
+                try {
+                    data = rawResponse ? JSON.parse(rawResponse) : {};
+                } catch (parseError) {
+                    data = {error: rawResponse};
+                }
 
                 // Remove loading message
                 loadingMsg.remove();
 
-                if (data.ok) {
+                if (response.status === 401) {
+                    localStorage.removeItem('superagent_token');
+                    authToken = null;
+                    addMessage('error', `Error: ${formatApiError(data, response)}. Please sign in again.`);
+                    updateAuthView();
+                } else if (response.ok && data.ok) {
                     // Add answer
                     addMessage('assistant', data.answer);
 
@@ -747,12 +774,7 @@
                         addToolsSection(data.tools_used);
                     }
                 } else {
-                    // Customize API key error message
-                    let errorMsg = data.error;
-                    if (data.error && data.error.includes('ANTHROPIC_API_KEY')) {
-                        errorMsg = 'Anthropic API key is not configured. Set ANTHROPIC_API_KEY in your environment or .env file, then restart the server.';
-                    }
-                    addMessage('error', `Error: ${errorMsg}`);
+                    addMessage('error', `Error: ${formatApiError(data, response)}`);
                 }
             } catch (error) {
                 clearTimeout(requestTimeout);
