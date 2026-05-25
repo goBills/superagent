@@ -453,6 +453,40 @@ Example response:
 ]
 ```
 
+### POST /admin/create-default-league
+
+Create a league for an existing user without needing to retrieve a JWT manually.
+
+```bash
+curl -X POST "https://superagent-ph31.onrender.com/admin/create-default-league?token=$ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_email": "rgcapozzi@gmail.com",
+    "league_name": "Your League Name",
+    "league_type": "snake",
+    "num_teams": 14,
+    "roster_spots": 16,
+    "ppr_type": "half_ppr",
+    "passing_td_points": 4,
+    "rushing_td_points": 6,
+    "receiving_td_points": 6,
+    "passing_yards_per_point": 25,
+    "rushing_yards_per_point": 10,
+    "receiving_yards_per_point": 10
+  }'
+```
+
+Example response:
+
+```json
+{
+  "ok": true,
+  "league_id": 1,
+  "user_id": 1,
+  "settings_applied": true
+}
+```
+
 ## Tools Available
 
 The agent can call these deterministic tools:

@@ -173,6 +173,23 @@ class LeagueResponse(BaseModel):
     settings: Dict[str, Any]
 
 
+class AdminDefaultLeagueRequest(BaseModel):
+    """Admin helper request for creating a default league for an existing user."""
+
+    user_email: str
+    league_name: str
+    league_type: str = "snake"
+    num_teams: int = 12
+    roster_spots: int = 16
+    ppr_type: str = "ppr"
+    passing_td_points: float = 4.0
+    rushing_td_points: float = 6.0
+    receiving_td_points: float = 6.0
+    passing_yards_per_point: float = 25.0
+    rushing_yards_per_point: float = 10.0
+    receiving_yards_per_point: float = 10.0
+
+
 class ESPNLeagueSyncRequest(BaseModel):
     """Sync ESPN league request."""
 
@@ -441,6 +458,21 @@ def _league_to_response(league: League) -> LeagueResponse:
 def _apply_settings(settings: LeagueSettings, payload: LeagueSettingsPayload) -> None:
     for field_name, value in payload.model_dump().items():
         setattr(settings, field_name, value)
+
+
+def _admin_default_league_settings(payload: AdminDefaultLeagueRequest) -> LeagueSettingsPayload:
+    """Translate the admin helper's flat payload into the normal settings payload."""
+    return LeagueSettingsPayload(
+        ppr_type=payload.ppr_type,
+        num_teams=payload.num_teams,
+        roster_spots=payload.roster_spots,
+        passing_td_points=payload.passing_td_points,
+        rushing_td_points=payload.rushing_td_points,
+        receiving_td_points=payload.receiving_td_points,
+        pass_yards_per_point=payload.passing_yards_per_point,
+        rush_yards_per_point=payload.rushing_yards_per_point,
+        receiving_yards_per_point=payload.receiving_yards_per_point,
+    )
 
 
 @app.get("/health")
@@ -751,6 +783,48 @@ def admin_draft_mappings(
             }
         )
     return results
+
+
+@app.post("/admin/create-default-league")
+def admin_create_default_league(
+    request: AdminDefaultLeagueRequest,
+    token: Optional[str] = None,
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Create a user-owned league from a flat admin payload."""
+    _require_admin_token(token)
+    email = _normalize_email(request.user_email)
+    user = db.query(User).filter(User.email == email).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    league_request = LeagueRequest(
+        league_name=request.league_name,
+        league_type=request.league_type,
+        settings=_admin_default_league_settings(request),
+    )
+    _validate_league_request(league_request)
+
+    league = League(
+        user_id=user.id,
+        league_name=league_request.league_name.strip(),
+        league_type=league_request.league_type,
+    )
+    db.add(league)
+    db.flush()
+    settings = LeagueSettings(league_id=league.id)
+    _apply_settings(settings, league_request.settings)
+    db.add(settings)
+    db.commit()
+    db.refresh(league)
+
+    return {
+        "ok": True,
+        "league_id": league.id,
+        "user_id": user.id,
+        "settings_applied": league.settings is not None,
+        "settings": _settings_to_dict(league.settings),
+    }
 
 
 @app.post("/admin/seed-canonical")

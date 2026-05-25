@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from superagent.api import app
 from superagent.db import SessionLocal
-from superagent.models import ConversationSession, DraftImportReview, Message, User
+from superagent.models import ConversationSession, DraftImportReview, League, Message, User
 
 client = TestClient(app)
 
@@ -478,6 +478,58 @@ class TestAdminQuestions:
         assert job["status"] == "completed"
         assert job["progress"]["stage"] == "test_import"
         assert job["result"]["rows_imported"] == 1
+
+    def test_admin_create_default_league_requires_token(self, monkeypatch):
+        use_admin_token(monkeypatch)
+
+        response = client.post(
+            "/admin/create-default-league",
+            json={
+                "user_email": "admin-league@example.com",
+                "league_name": "Rob League",
+            },
+        )
+
+        assert response.status_code == 401
+
+    def test_admin_create_default_league_for_existing_user(self, monkeypatch):
+        token = use_admin_token(monkeypatch)
+        email = f"admin-league-{uuid.uuid4().hex}@example.com"
+        register = client.post(
+            "/auth/register",
+            json={"email": email, "password": "password123"},
+        )
+        assert register.status_code == 200
+
+        response = client.post(
+            f"/admin/create-default-league?token={token}",
+            json={
+                "user_email": email,
+                "league_name": "Rob's League",
+                "league_type": "snake",
+                "num_teams": 14,
+                "roster_spots": 16,
+                "ppr_type": "half_ppr",
+                "passing_td_points": 4,
+                "rushing_td_points": 6,
+                "receiving_td_points": 6,
+                "passing_yards_per_point": 25,
+                "rushing_yards_per_point": 10,
+                "receiving_yards_per_point": 10,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert data["settings_applied"] is True
+        assert data["settings"]["num_teams"] == 14
+        assert data["settings"]["ppr_type"] == "half_ppr"
+        assert data["settings"]["pass_yards_per_point"] == 25
+        with SessionLocal() as db:
+            league = db.query(League).filter(League.id == data["league_id"]).first()
+            assert league is not None
+            assert league.league_name == "Rob's League"
 
 
 if __name__ == "__main__":
