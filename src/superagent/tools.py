@@ -1043,6 +1043,7 @@ def get_player_weekly_usage(
 # ============================================================================
 
 FANTASY_POSITIONS = {"RB", "WR", "TE", "QB", "K"}
+MINIMUM_ADVANCED_SAMPLE = 5
 
 
 def _normalize_position(position: Optional[str], allow_none: bool = False) -> Optional[str]:
@@ -1072,6 +1073,20 @@ def _pct_change(old_value: float, new_value: float) -> Optional[float]:
     if old_value == 0:
         return None
     return round(((new_value - old_value) / old_value) * 100, 1)
+
+
+def _rate_or_none(value: Optional[float], sample_size: int, digits: int = 3) -> Optional[float]:
+    """Return a rounded rate only when the sample is large enough."""
+    if sample_size < MINIMUM_ADVANCED_SAMPLE or value is None:
+        return None
+    return round(float(value), digits)
+
+
+def _sample_note(sample_size: int, label: str) -> Optional[str]:
+    """Return a small-sample note for rate fields."""
+    if sample_size < MINIMUM_ADVANCED_SAMPLE:
+        return f"Fewer than {MINIMUM_ADVANCED_SAMPLE} {label}"
+    return None
 
 
 def _weekly_research_rows(season: int, position: Optional[str] = None) -> Dict[str, Any]:
@@ -1558,5 +1573,272 @@ def find_late_season_breakouts(position: str, season: int) -> Dict[str, Any]:
                 "ppr_points_per_game_delta": 3.0,
                 "relative_increase_pct": 25.0,
             },
+        },
+    }
+
+
+# ============================================================================
+# Phase 5: Player EPA & Advanced Analytics
+# ============================================================================
+
+def get_player_advanced_summary(player_name: str, season: int) -> Dict[str, Any]:
+    """
+    Get player EPA, success rate, CPOE, and position-relevant advanced metrics.
+    """
+    player_result = resolve_player(player_name, season)
+    if not player_result["ok"]:
+        return {"ok": False, "data": None, "error": player_result["error"], "meta": {}}
+
+    player_id = player_result["player_id"]
+    canonical_name = player_result["name"]
+    position = player_result["position"]
+    team = player_result["team"]
+
+    try:
+        conn = get_db_connection()
+        pass_row = conn.execute(
+            """
+            SELECT
+                COUNT(*) AS plays,
+                AVG(epa) AS epa_per_play,
+                AVG(qb_epa) AS qb_epa_per_play,
+                AVG(success) AS success_rate,
+                AVG(cpoe) AS cpoe,
+                AVG(cp) AS cp
+            FROM plays
+            WHERE season = ?
+              AND passer_player_id = ?
+              AND play_type = 'pass'
+              AND COALESCE(qb_spike, 0) = 0
+            """,
+            [season, player_id],
+        ).fetchone()
+        rush_row = conn.execute(
+            """
+            SELECT
+                COUNT(*) AS attempts,
+                AVG(epa) AS epa_per_attempt,
+                AVG(success) AS success_rate,
+                SUM(epa) AS total_epa
+            FROM plays
+            WHERE season = ?
+              AND rusher_player_id = ?
+              AND COALESCE(rush_attempt, 0) = 1
+              AND COALESCE(qb_kneel, 0) = 0
+            """,
+            [season, player_id],
+        ).fetchone()
+        receiving_row = conn.execute(
+            """
+            SELECT
+                COUNT(*) AS targets,
+                AVG(epa) AS epa_per_target,
+                AVG(success) AS success_rate,
+                AVG(air_epa) AS air_epa_per_target,
+                AVG(yac_epa) AS yac_epa_per_target,
+                AVG(xyac_epa) AS xyac_epa_per_target,
+                SUM(epa) AS total_epa
+            FROM plays
+            WHERE season = ?
+              AND receiver_player_id = ?
+            """,
+            [season, player_id],
+        ).fetchone()
+        scramble_row = conn.execute(
+            """
+            SELECT
+                COUNT(*) AS scrambles,
+                AVG(epa) AS epa_per_play,
+                AVG(success) AS success_rate,
+                SUM(epa) AS total_epa
+            FROM plays
+            WHERE season = ?
+              AND rusher_player_id = ?
+              AND COALESCE(qb_scramble, 0) = 1
+            """,
+            [season, player_id],
+        ).fetchone()
+        conn.close()
+    except Exception as exc:
+        return {"ok": False, "data": None, "error": str(exc), "meta": {"player_id": player_id}}
+
+    pass_count = int(pass_row[0] or 0)
+    rush_count = int(rush_row[0] or 0)
+    target_count = int(receiving_row[0] or 0)
+    scramble_count = int(scramble_row[0] or 0)
+    total_opportunities = rush_count + target_count
+    total_epa = float(rush_row[3] or 0.0) + float(receiving_row[6] or 0.0)
+    total_epa_per_opportunity = (
+        round(total_epa / total_opportunities, 3)
+        if total_opportunities >= MINIMUM_ADVANCED_SAMPLE
+        else None
+    )
+
+    passing = {
+        "pass_plays": pass_count,
+        "passing_epa_per_play": _rate_or_none(pass_row[1], pass_count, 3),
+        "qb_epa_per_play": _rate_or_none(pass_row[2], pass_count, 3),
+        "pass_success_rate": _rate_or_none(pass_row[3], pass_count, 3),
+        "cpoe": _rate_or_none(pass_row[4], pass_count, 2),
+        "cp": _rate_or_none(pass_row[5], pass_count, 3),
+    }
+    note = _sample_note(pass_count, "pass plays")
+    if note:
+        passing["sample_note"] = note
+
+    rushing = {
+        "rush_attempts": rush_count,
+        "rushing_epa_per_attempt": _rate_or_none(rush_row[1], rush_count, 3),
+        "rush_success_rate": _rate_or_none(rush_row[2], rush_count, 3),
+    }
+    note = _sample_note(rush_count, "rush attempts")
+    if note:
+        rushing["sample_note"] = note
+
+    receiving = {
+        "targets": target_count,
+        "receiving_epa_per_target": _rate_or_none(receiving_row[1], target_count, 3),
+        "receiving_success_rate": _rate_or_none(receiving_row[2], target_count, 3),
+        "air_epa_per_target": _rate_or_none(receiving_row[3], target_count, 3),
+        "yac_epa_per_target": _rate_or_none(receiving_row[4], target_count, 3),
+        "xyac_epa_per_target": _rate_or_none(receiving_row[5], target_count, 3),
+    }
+    note = _sample_note(target_count, "targets")
+    if note:
+        receiving["sample_note"] = note
+
+    scrambles = {
+        "scrambles": scramble_count,
+        "scramble_epa_per_play": _rate_or_none(scramble_row[1], scramble_count, 3),
+        "scramble_success_rate": _rate_or_none(scramble_row[2], scramble_count, 3),
+    }
+    note = _sample_note(scramble_count, "scrambles")
+    if note:
+        scrambles["sample_note"] = note
+
+    data = {
+        "player_id": player_id,
+        "name": canonical_name,
+        "position": position,
+        "team": team,
+        "season": season,
+        "plays_analyzed": pass_count + rush_count + target_count,
+        "total_opportunities": total_opportunities,
+        "total_epa_per_opportunity": total_epa_per_opportunity,
+        "passing": passing,
+        "rushing": rushing,
+        "receiving": receiving,
+        "scrambles": scrambles,
+    }
+
+    if position == "QB":
+        data["primary_metrics"] = {
+            "epa_per_play": passing["qb_epa_per_play"] or passing["passing_epa_per_play"],
+            "success_rate": passing["pass_success_rate"],
+            "cpoe": passing["cpoe"],
+        }
+    elif position == "RB":
+        data["primary_metrics"] = {
+            "epa_per_play": total_epa_per_opportunity,
+            "success_rate": _rate_or_none(
+                (
+                    (float(rush_row[2] or 0.0) * rush_count)
+                    + (float(receiving_row[2] or 0.0) * target_count)
+                ) / total_opportunities
+                if total_opportunities
+                else None,
+                total_opportunities,
+                3,
+            ),
+            "rushing_epa_per_attempt": rushing["rushing_epa_per_attempt"],
+            "receiving_epa_per_target": receiving["receiving_epa_per_target"],
+        }
+    else:
+        data["primary_metrics"] = {
+            "epa_per_play": receiving["receiving_epa_per_target"],
+            "success_rate": receiving["receiving_success_rate"],
+            "air_epa_per_target": receiving["air_epa_per_target"],
+            "yac_epa_per_target": receiving["yac_epa_per_target"],
+        }
+
+    meta = {
+        "player_id": player_id,
+        "source": "plays",
+        "minimum_sample_for_rates": MINIMUM_ADVANCED_SAMPLE,
+        "epa_source": "nflverse precomputed epa/qb_epa",
+        "success_source": "nflverse success column",
+        "cp_scale": "nflverse completion probability scale",
+    }
+    if season == 2025:
+        meta["2025_note"] = "Derived from play-by-play data"
+
+    return {"ok": True, "data": data, "error": None, "meta": meta}
+
+
+def compare_player_advanced(
+    player_names: List[str],
+    season: int,
+    metrics: Optional[List[str]] = None
+) -> Dict[str, Any]:
+    """Compare multiple players by advanced EPA and success-rate metrics."""
+    if not player_names:
+        return {"ok": False, "data": None, "error": "player_names cannot be empty", "meta": {}}
+
+    default_metrics = ["epa_per_play", "success_rate", "cpoe"]
+    selected_metrics = metrics or default_metrics
+
+    comparisons = []
+    for player_name in player_names:
+        result = get_player_advanced_summary(player_name, season)
+        if not result["ok"]:
+            comparisons.append({"name": player_name, "error": result.get("error", "Unknown error")})
+            continue
+
+        data = result["data"]
+        primary = data.get("primary_metrics", {})
+        row = {
+            "player_id": data["player_id"],
+            "name": data["name"],
+            "position": data["position"],
+            "team": data["team"],
+            "season": data["season"],
+            "plays_analyzed": data["plays_analyzed"],
+            "total_opportunities": data["total_opportunities"],
+        }
+        for metric in selected_metrics:
+            if metric in primary:
+                row[metric] = primary.get(metric)
+            elif metric in data:
+                row[metric] = data.get(metric)
+            elif metric in data.get("passing", {}):
+                row[metric] = data["passing"].get(metric)
+            elif metric in data.get("rushing", {}):
+                row[metric] = data["rushing"].get(metric)
+            elif metric in data.get("receiving", {}):
+                row[metric] = data["receiving"].get(metric)
+            elif metric in data.get("scrambles", {}):
+                row[metric] = data["scrambles"].get(metric)
+            else:
+                row[metric] = None
+        comparisons.append(row)
+
+    if all("error" in row for row in comparisons):
+        return {
+            "ok": False,
+            "data": None,
+            "error": "Could not resolve any of the provided player names",
+            "meta": {},
+        }
+
+    return {
+        "ok": True,
+        "data": comparisons,
+        "error": None,
+        "meta": {
+            "season": season,
+            "players_compared": len([row for row in comparisons if "error" not in row]),
+            "metrics": selected_metrics,
+            "source": "plays",
+            "minimum_sample_for_rates": MINIMUM_ADVANCED_SAMPLE,
         },
     }

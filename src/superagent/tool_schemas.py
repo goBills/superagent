@@ -17,6 +17,8 @@ from superagent.tools import (
     find_usage_risers,
     find_target_opportunity_players,
     find_late_season_breakouts,
+    get_player_advanced_summary,
+    compare_player_advanced,
 )
 
 
@@ -243,6 +245,49 @@ TOOL_SCHEMAS = [
             },
             "required": ["position", "season"]
         }
+    },
+    {
+        "name": "get_player_advanced_summary",
+        "description": "Get a player's EPA, success rate, CPOE, and position-specific advanced metrics from nflverse play-by-play.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "player_name": {
+                    "type": "string",
+                    "description": "Player's full name (e.g., 'Josh Allen', 'James Cook', 'Khalil Shakir')"
+                },
+                "season": {
+                    "type": "integer",
+                    "description": "NFL season year (2020-2025)"
+                }
+            },
+            "required": ["player_name", "season"]
+        }
+    },
+    {
+        "name": "compare_player_advanced",
+        "description": "Compare multiple players using EPA/play, success rate, CPOE, and position-relevant advanced metrics.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "player_names": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of player names to compare"
+                },
+                "season": {
+                    "type": "integer",
+                    "description": "NFL season year (2020-2025)"
+                },
+                "metrics": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional metrics to include, such as epa_per_play, success_rate, cpoe, rushing_epa_per_attempt, receiving_epa_per_target",
+                    "default": None
+                }
+            },
+            "required": ["player_names", "season"]
+        }
     }
 ]
 
@@ -258,6 +303,8 @@ TOOL_DISPATCH: Dict[str, Callable] = {
     "find_usage_risers": find_usage_risers,
     "find_target_opportunity_players": find_target_opportunity_players,
     "find_late_season_breakouts": find_late_season_breakouts,
+    "get_player_advanced_summary": get_player_advanced_summary,
+    "compare_player_advanced": compare_player_advanced,
 }
 
 

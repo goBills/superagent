@@ -230,6 +230,8 @@ def print_help():
     print("="*70)
     examples = [
         "Get Josh Allen's fantasy stats for 2024 in PPR.",
+        "What was Josh Allen's EPA per play in 2024?",
+        "Compare Josh Allen and Lamar Jackson by EPA and CPOE in 2024.",
         "Compare Josh Allen and Lamar Jackson in 2024.",
         "Compare James Cook and Khalil Shakir in half-PPR for 2024.",
         "Show James Cook's weekly usage in 2024.",
