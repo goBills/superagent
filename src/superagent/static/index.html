@@ -274,19 +274,22 @@
                     onkeypress="handleKeyPress(event)"
                 >
                 <button onclick="sendMessage()">Send</button>
+                <button onclick="clearChat()" style="background: #f0f0f0; color: #333; border: 1px solid #d0d0d0;">Clear</button>
             </div>
 
             <div class="disclaimer">
-                📊 Historical research tool. Not betting or start/sit advice. Data through 2025 season.
+                Data through 2025 · Historical research only
             </div>
         </div>
     </div>
 
     <script>
+        const REQUEST_TIMEOUT_MS = 30000;
         const chatArea = document.getElementById('chatArea');
         const questionInput = document.getElementById('questionInput');
         let sessionId = null;
         let isWaiting = false;
+        let requestTimeout = null;
 
         // Initialize session ID from localStorage
         function initializeSession() {
@@ -317,6 +320,18 @@
             sendMessage();
         }
 
+        function clearChat() {
+            chatArea.innerHTML = '';
+            const welcomeMsg = document.createElement('div');
+            welcomeMsg.className = 'message assistant';
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble';
+            bubble.innerHTML = '👋 Welcome to Superagent! Ask me about NFL stats, player performance, fantasy metrics, or draft research.';
+            welcomeMsg.appendChild(bubble);
+            chatArea.appendChild(welcomeMsg);
+            questionInput.focus();
+        }
+
         async function sendMessage() {
             const question = questionInput.value.trim();
             if (!question || isWaiting) return;
@@ -333,6 +348,10 @@
             const loadingMsg = addMessage('assistant', '<span class="loading"></span> Thinking...');
 
             try {
+                // Create abort controller for timeout
+                const controller = new AbortController();
+                requestTimeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
                 const response = await fetch('/chat', {
                     method: 'POST',
                     headers: {
@@ -341,9 +360,11 @@
                     body: JSON.stringify({
                         question: question,
                         session_id: sessionId
-                    })
+                    }),
+                    signal: controller.signal
                 });
 
+                clearTimeout(requestTimeout);
                 const data = await response.json();
 
                 // Remove loading message
@@ -358,13 +379,24 @@
                         addToolsSection(data.tools_used);
                     }
                 } else {
-                    // Add error message
-                    addMessage('error', `Error: ${data.error}`);
+                    // Customize API key error message
+                    let errorMsg = data.error;
+                    if (data.error && data.error.includes('ANTHROPIC_API_KEY')) {
+                        errorMsg = 'Anthropic API key is not configured. Set ANTHROPIC_API_KEY in your environment or .env file, then restart the server.';
+                    }
+                    addMessage('error', `Error: ${errorMsg}`);
                 }
             } catch (error) {
+                clearTimeout(requestTimeout);
                 loadingMsg.remove();
-                addMessage('error', `Connection error: ${error.message}`);
+
+                let errorMsg = error.message;
+                if (error.name === 'AbortError') {
+                    errorMsg = 'Request timed out after 30 seconds. The server may be slow or offline.';
+                }
+                addMessage('error', `${errorMsg}`);
             } finally {
+                clearTimeout(requestTimeout);
                 isWaiting = false;
                 questionInput.disabled = false;
                 questionInput.focus();
@@ -398,7 +430,11 @@
             let html = '<details><summary>📊 Tools Used (' + toolsUsed.length + ')</summary><ul>';
             for (const tool of toolsUsed) {
                 const status = tool.result.ok ? '✅' : '❌';
-                html += `<li>${status} ${tool.name}</li>`;
+                const params = Object.entries(tool.input)
+                    .map(([k, v]) => `${k}="${v}"`)
+                    .join(', ');
+                const toolCall = `${tool.name}(${params})`;
+                html += `<li>${status} <code style="font-family: monospace; font-size: 11px;">${toolCall}</code></li>`;
             }
             html += '</ul></details>';
 
