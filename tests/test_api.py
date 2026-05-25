@@ -6,6 +6,7 @@ Tests /health, /chat endpoints and session management.
 
 import sys
 from pathlib import Path
+import uuid
 import pytest
 from fastapi.testclient import TestClient
 
@@ -15,6 +16,18 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from superagent.api import app
 
 client = TestClient(app)
+
+
+def auth_headers() -> dict:
+    """Register a unique test user and return auth headers."""
+    email = f"test-{uuid.uuid4().hex}@example.com"
+    response = client.post(
+        "/auth/register",
+        json={"email": email, "password": "password123"},
+    )
+    assert response.status_code == 200
+    token = response.json()["token"]
+    return {"Authorization": f"Bearer {token}"}
 
 
 class TestAPIHealth:
@@ -43,7 +56,8 @@ class TestAPIChat:
         # For faster tests, mock the agent, but this validates integration
         response = client.post(
             "/chat",
-            json={"question": "What's 2 + 2?"}
+            json={"question": "What's 2 + 2?"},
+            headers=auth_headers(),
         )
         assert response.status_code == 200
         data = response.json()
@@ -55,10 +69,12 @@ class TestAPIChat:
 
     def test_chat_session_persistence(self):
         """Test that session_id persists across calls."""
+        headers = auth_headers()
         # First call
         response1 = client.post(
             "/chat",
-            json={"question": "Tell me about Josh Allen"}
+            json={"question": "Tell me about Josh Allen"},
+            headers=headers,
         )
         assert response1.status_code == 200
         session_id = response1.json()["session_id"]
@@ -69,7 +85,8 @@ class TestAPIChat:
             json={
                 "question": "What about his EPA?",
                 "session_id": session_id
-            }
+            },
+            headers=headers,
         )
         assert response2.status_code == 200
         data2 = response2.json()
@@ -79,7 +96,8 @@ class TestAPIChat:
         """Test that /chat generates a session_id if none provided."""
         response = client.post(
             "/chat",
-            json={"question": "Hello"}
+            json={"question": "Hello"},
+            headers=auth_headers(),
         )
         assert response.status_code == 200
         data = response.json()
@@ -91,7 +109,8 @@ class TestAPIChat:
         """Test that /chat response has correct structure."""
         response = client.post(
             "/chat",
-            json={"question": "Test question"}
+            json={"question": "Test question"},
+            headers=auth_headers(),
         )
         assert response.status_code == 200
         data = response.json()

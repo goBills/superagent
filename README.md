@@ -32,6 +32,7 @@ Agent: Josh Allen plays for Buffalo, whose bye week is...
 ✅ **Phase 6: Web API & Demo UI** — FastAPI backend with browser-based chat interface and example prompts.
 ✅ **Phase 7A: Schedule + Bye Week Context** — Team schedules, bye weeks, and games from a specified week onward.
 ✅ **Phase 7C-lite: Fantasy Schedule Context** — Fantasy metrics + schedule context, no external data sources.
+✅ **Phase 8: Product Layer** — User auth, persistent conversations, saved sessions, rate limits, and deployment-ready config.
 
 ## Quick Start
 
@@ -208,7 +209,10 @@ Then open **http://localhost:8000** in your browser.
 ### Features
 
 - **Chat interface** — Ask questions in your browser
-- **Session memory** — Browser stores session ID in `localStorage`, backend keeps last 6 turns per session
+- **Authentication** — Register or sign in before using chat
+- **Persistent sessions** — Browser stores session ID in `localStorage`, backend persists messages in SQLite/Postgres
+- **Saved conversations** — API endpoints list, retrieve, export, and delete sessions
+- **Rate limits** — Per-user hourly quota protects the API
 - **Tools sidebar** — Collapsible list of tools used for each answer
 - **Example buttons** — Quick-start queries:
   - "Josh Allen EPA/play"
@@ -227,7 +231,8 @@ Then open **http://localhost:8000** in your browser.
 
 - **Backend:** FastAPI (wraps existing `run_agent()`)
 - **Frontend:** Single HTML file with vanilla JS (no build, no node_modules)
-- **Sessions:** In-memory per-session history (no database persistence)
+- **Product database:** SQLite by default, PostgreSQL-ready via `DATABASE_URL`
+- **Sessions:** Persistent per-user conversation history
 - **CORS:** Localhost only (`http://localhost:8000`, `http://127.0.0.1:8000`)
 
 ### API Endpoints
@@ -241,6 +246,7 @@ curl http://localhost:8000/health
 ```bash
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $SUPERAGENT_TOKEN" \
   -d '{
     "question": "What is Josh Allen EPa per play in 2024?",
     "session_id": "optional-uuid"
@@ -308,6 +314,10 @@ superagent/
 ├── src/superagent/
 │   ├── __init__.py
 │   ├── config.py                  # Configuration & environment
+│   ├── auth.py                    # Password hashing + JWT helpers
+│   ├── db.py                      # Product DB setup for auth/session persistence
+│   ├── models.py                  # SQLAlchemy product-layer models
+│   ├── rate_limit.py              # Per-user hourly rate limiting
 │   ├── database.py                # DuckDB setup & schema
 │   ├── db_query.py                # Safe query helpers + JSON serialization
 │   ├── name_resolution.py         # Player/team fuzzy matching
@@ -335,11 +345,13 @@ superagent/
 │   ├── test_tools.py              # 25 tests: name resolution + tools
 │   ├── test_advanced.py           # 14 tests: player EPA + advanced analytics
 │   ├── test_agent.py              # 15 tests: agent with mocked client
+│   ├── test_auth.py               # 6 tests: register/login/rate limits
 │   ├── test_cli.py                # 11 tests: CLI formatting
 │   ├── test_draft_research.py     # 19 tests: draft research filters
 │   ├── test_fantasy.py            # 22 tests: fantasy scoring + usage tools
 │   ├── test_fantasy_schedule_context.py # 17 tests: fantasy schedule context
-│   ├── test_api.py                # 9 tests: FastAPI endpoints + sessions
+│   ├── test_api.py                # 9 tests: FastAPI endpoints + auth-aware chat
+│   ├── test_persistence.py        # 4 tests: persistent sessions + export/delete
 │   └── test_schedule_context.py   # 19 tests: schedule + bye week tools
 ├── requirements.txt               # Python dependencies
 ├── pyproject.toml                 # Package metadata + console script
@@ -356,7 +368,7 @@ superagent/
 
 ## Test Coverage
 
-All 151 tests passing:
+All 161 tests passing:
 - **Phase 2A (Tools):** 25 tests validating name resolution and 4 core tools
 - **Phase 3A/3C (Agent):** 15 tests of Claude tool-calling and conversation history with mocked client (no API key needed)
 - **Phase 3B (CLI):** 11 tests of formatting functions
@@ -366,6 +378,7 @@ All 151 tests passing:
 - **Phase 6 (API):** 9 tests of FastAPI endpoints, session management, and CORS
 - **Phase 7A (Schedule):** 19 tests of team schedules, bye weeks, games from week N onward, JSON safety, and tool schemas
 - **Phase 7C-lite (Fantasy Context):** 17 tests of player fantasy schedule context, comparisons, missing-context notes, and tool schemas
+- **Phase 8 (Product Layer):** 10 tests of auth, rate limits, persistent sessions, export, and delete
 
 Run tests:
 ```bash
@@ -401,7 +414,7 @@ See [docs/API.md](docs/API.md) for request/response formats, error behavior, cur
 - **No depth charts:** Superagent uses historical rosters and stats, not current team depth charts.
 - **No projections or predictions:** It summarizes historical data and research filters, not forecasts.
 - **No betting recommendations:** Odds, lines, and market context are not available.
-- **In-memory sessions only:** Conversations reset when the server restarts.
+- **Simple product auth:** Email/password auth and JWTs are MVP-grade. OAuth, password reset, and admin controls are future work.
 
 **By design:**
 - No scraping or fragile external feeds in the MVP.
@@ -410,11 +423,11 @@ See [docs/API.md](docs/API.md) for request/response formats, error behavior, cur
 
 These are intentional scope decisions, not bugs.
 
-## Future Phases (Post-MVP)
+## Future Phases (Post-Phase 8)
 
-- **Phase 8: Product Layer** — Persistent conversations, saved sessions, user auth, rate limits, and cloud deployment.
 - **Phase 7B: Injuries & Depth** — Legitimate injury/depth source, treated as an enrichment plugin once a source is chosen.
-- **Beyond** — Caching, commercial licensing, stronger deployment controls, and domain-specific model tuning.
+- **Phase 9: Deployment** — Production reverse proxy, hosted database, domain, monitoring, and stricter CORS.
+- **Beyond** — Password reset, OAuth, admin controls, caching, commercial licensing, and domain-specific model tuning.
 
 ## Development
 

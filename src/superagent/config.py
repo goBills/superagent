@@ -26,6 +26,21 @@ class Config:
 
     # Database Configuration
     DB_TIMEOUT = 30  # seconds
+    PRODUCT_DATABASE_URL = os.getenv(
+        "DATABASE_URL",
+        f"sqlite:///{DATA_DIR / 'superagent_product.db'}",
+    )
+
+    # Auth / Product Configuration
+    SECRET_KEY = os.getenv(
+        "SECRET_KEY",
+        "dev-secret-key-change-in-production-min-32-chars",
+    )
+    TOKEN_EXPIRY_DAYS = int(os.getenv("TOKEN_EXPIRY_DAYS", "30"))
+    RATE_LIMIT_PER_HOUR = int(os.getenv("RATE_LIMIT_PER_HOUR", "100"))
+    HOST = os.getenv("HOST", "127.0.0.1")
+    PORT = int(os.getenv("PORT", "8000"))
+    ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 
     # Data Configuration
     NFL_SEASONS = list(range(2020, 2026))  # 2020-2025
@@ -46,3 +61,15 @@ def get_config() -> Config:
     """Get the configuration object."""
     Config.ensure_directories()
     return Config
+
+
+# Module-level aliases for modules that prefer simple config imports.
+ANTHROPIC_API_KEY = Config.ANTHROPIC_API_KEY
+ANTHROPIC_MODEL = Config.ANTHROPIC_MODEL
+DATABASE_URL = Config.PRODUCT_DATABASE_URL
+SECRET_KEY = Config.SECRET_KEY
+TOKEN_EXPIRY_DAYS = Config.TOKEN_EXPIRY_DAYS
+RATE_LIMIT_PER_HOUR = Config.RATE_LIMIT_PER_HOUR
+HOST = Config.HOST
+PORT = Config.PORT
+ENVIRONMENT = Config.ENVIRONMENT

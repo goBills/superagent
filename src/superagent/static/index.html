@@ -45,6 +45,27 @@
             margin-top: 4px;
         }
 
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+        }
+
+        .signout-btn {
+            display: none;
+            padding: 8px 12px;
+            background: #f0f0f0;
+            color: #333;
+            border: 1px solid #d0d0d0;
+            border-radius: 6px;
+            font-size: 12px;
+        }
+
+        .signout-btn:hover {
+            background: #e0e0e0;
+        }
+
         .header-warning {
             background: #fff8e1;
             border-bottom: 1px solid #f0c36d;
@@ -69,6 +90,67 @@
         }
 
         /* Chat area */
+        .auth-area {
+            display: none;
+            flex: 1;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .auth-card {
+            width: 100%;
+            max-width: 420px;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .auth-card h2 {
+            font-size: 22px;
+            margin-bottom: 8px;
+            color: #222;
+        }
+
+        .auth-card p {
+            font-size: 13px;
+            color: #666;
+            line-height: 1.5;
+            margin-bottom: 16px;
+        }
+
+        .auth-form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .auth-toggle {
+            margin-top: 16px;
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+        }
+
+        .auth-toggle a {
+            color: #1557b0;
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        .auth-error {
+            display: none;
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            border-radius: 6px;
+            padding: 10px 12px;
+            font-size: 12px;
+            margin-bottom: 12px;
+        }
+
         .chat-area {
             flex: 1;
             overflow-y: auto;
@@ -176,6 +258,23 @@
             border-radius: 8px;
             font-size: 14px;
             transition: border-color 0.2s;
+        }
+
+        input[type="email"],
+        input[type="password"] {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #d0d0d0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        input[type="email"]:focus,
+        input[type="password"]:focus {
+            outline: none;
+            border-color: #1a73e8;
+            box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.1);
         }
 
         input[type="text"]:focus {
@@ -329,13 +428,50 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>⚡ Superagent</h1>
-            <p>Historical NFL research. Ask about stats, players, teams, and trends.</p>
+            <div class="header-top">
+                <div>
+                    <h1>⚡ Superagent</h1>
+                    <p>Historical NFL research. Ask about stats, players, teams, and trends.</p>
+                </div>
+                <button id="signOutButton" class="signout-btn" onclick="logout()">Sign out</button>
+            </div>
         </div>
 
         <div class="header-warning">
             <span><strong>Research tool only.</strong> No current-week data, injuries, depth charts, projections, or betting advice.</span>
             <a href="#" onclick="return toggleLimitations()">Learn more</a>
+        </div>
+
+        <div class="auth-area" id="authArea">
+            <div class="auth-card">
+                <div id="loginScreen">
+                    <h2>Sign in</h2>
+                    <p>Save conversations, keep recent context, and use the web chat with rate-limited access.</p>
+                    <div id="loginError" class="auth-error"></div>
+                    <div class="auth-form">
+                        <input type="email" id="loginEmail" placeholder="Email">
+                        <input type="password" id="loginPassword" placeholder="Password">
+                        <button onclick="login()">Sign In</button>
+                    </div>
+                    <div class="auth-toggle">
+                        No account? <a href="#" onclick="return showRegister()">Create one</a>
+                    </div>
+                </div>
+
+                <div id="registerScreen" style="display: none;">
+                    <h2>Create account</h2>
+                    <p>Use any email/password for local MVP testing. Passwords are stored as bcrypt hashes.</p>
+                    <div id="registerError" class="auth-error"></div>
+                    <div class="auth-form">
+                        <input type="email" id="registerEmail" placeholder="Email">
+                        <input type="password" id="registerPassword" placeholder="Password, 8+ characters">
+                        <button onclick="register()">Create Account</button>
+                    </div>
+                    <div class="auth-toggle">
+                        Already have an account? <a href="#" onclick="return showLogin()">Sign in</a>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="chat-area" id="chatArea">
@@ -398,18 +534,39 @@
         const REQUEST_TIMEOUT_MS = 30000;
         const chatArea = document.getElementById('chatArea');
         const questionInput = document.getElementById('questionInput');
+        const inputArea = document.querySelector('.input-area');
+        const authArea = document.getElementById('authArea');
+        const signOutButton = document.getElementById('signOutButton');
         let sessionId = null;
+        let authToken = null;
         let isWaiting = false;
         let requestTimeout = null;
 
         // Initialize session ID from localStorage
         function initializeSession() {
+            authToken = localStorage.getItem('superagent_token');
             let stored = localStorage.getItem('superagent_session_id');
             if (!stored) {
                 stored = generateUUID();
                 localStorage.setItem('superagent_session_id', stored);
             }
             sessionId = stored;
+            updateAuthView();
+        }
+
+        function updateAuthView() {
+            if (authToken) {
+                authArea.style.display = 'none';
+                chatArea.style.display = 'flex';
+                inputArea.style.display = 'block';
+                signOutButton.style.display = 'inline-block';
+                questionInput.focus();
+            } else {
+                authArea.style.display = 'flex';
+                chatArea.style.display = 'none';
+                inputArea.style.display = 'none';
+                signOutButton.style.display = 'none';
+            }
         }
 
         function generateUUID() {
@@ -427,8 +584,87 @@
         }
 
         function askQuestion(question) {
+            if (!authToken) {
+                showAuthError('loginError', 'Please sign in before asking questions.');
+                return;
+            }
             questionInput.value = question;
             sendMessage();
+        }
+
+        function showAuthError(elementId, message) {
+            const errorEl = document.getElementById(elementId);
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+        }
+
+        function clearAuthErrors() {
+            for (const id of ['loginError', 'registerError']) {
+                const errorEl = document.getElementById(id);
+                errorEl.textContent = '';
+                errorEl.style.display = 'none';
+            }
+        }
+
+        function showRegister() {
+            clearAuthErrors();
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('registerScreen').style.display = 'block';
+            return false;
+        }
+
+        function showLogin() {
+            clearAuthErrors();
+            document.getElementById('registerScreen').style.display = 'none';
+            document.getElementById('loginScreen').style.display = 'block';
+            return false;
+        }
+
+        async function authenticate(path, email, password) {
+            const response = await fetch(path, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({email, password})
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) {
+                throw new Error(data.detail || data.error || 'Authentication failed');
+            }
+            return data;
+        }
+
+        async function login() {
+            clearAuthErrors();
+            try {
+                const email = document.getElementById('loginEmail').value.trim();
+                const password = document.getElementById('loginPassword').value;
+                const data = await authenticate('/auth/login', email, password);
+                authToken = data.token;
+                localStorage.setItem('superagent_token', authToken);
+                updateAuthView();
+            } catch (error) {
+                showAuthError('loginError', error.message);
+            }
+        }
+
+        async function register() {
+            clearAuthErrors();
+            try {
+                const email = document.getElementById('registerEmail').value.trim();
+                const password = document.getElementById('registerPassword').value;
+                const data = await authenticate('/auth/register', email, password);
+                authToken = data.token;
+                localStorage.setItem('superagent_token', authToken);
+                updateAuthView();
+            } catch (error) {
+                showAuthError('registerError', error.message);
+            }
+        }
+
+        function logout() {
+            authToken = null;
+            localStorage.removeItem('superagent_token');
+            updateAuthView();
         }
 
         function clearChat() {
@@ -461,6 +697,11 @@
         async function sendMessage() {
             const question = questionInput.value.trim();
             if (!question || isWaiting) return;
+            if (!authToken) {
+                showAuthError('loginError', 'Please sign in before asking questions.');
+                updateAuthView();
+                return;
+            }
 
             // Disable input while processing
             isWaiting = true;
@@ -482,6 +723,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`,
                     },
                     body: JSON.stringify({
                         question: question,

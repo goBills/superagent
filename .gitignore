@@ -25,6 +25,9 @@ dist/
 data/raw/
 data/*.duckdb
 data/*.duckdb.wal
+data/*.db
+data/*.db-wal
+data/*.db-shm
 
 # OS/editor
 .DS_Store

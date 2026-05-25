@@ -1,6 +1,6 @@
 # Superagent API Reference
 
-Superagent exposes a small FastAPI service for browser and API demos. It wraps the same Claude tool-calling agent used by the CLI.
+Superagent exposes a FastAPI service for authenticated web/API use. It wraps the same Claude tool-calling agent used by the CLI, while adding persistent sessions, saved conversations, and per-user rate limits.
 
 ## Endpoint: GET /health
 
@@ -20,11 +20,51 @@ Example response:
 }
 ```
 
+## Endpoint: POST /auth/register
+
+Create a user and return a JWT.
+
+```bash
+curl -X POST http://localhost:8000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email": "rob@example.com", "password": "password123"}'
+```
+
+Response:
+
+```json
+{
+  "ok": true,
+  "token": "jwt-token",
+  "user_id": 1,
+  "email": "rob@example.com",
+  "error": null
+}
+```
+
+## Endpoint: POST /auth/login
+
+Log in an existing user and return a JWT.
+
+```bash
+curl -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "rob@example.com", "password": "password123"}'
+```
+
+Use the token as:
+
+```bash
+Authorization: Bearer jwt-token
+```
+
 ## Endpoint: POST /chat
 
 Ask a natural-language question and get a research answer with tool transparency.
 
 ### Request
+
+Requires `Authorization: Bearer <token>`.
 
 ```json
 {
@@ -35,7 +75,7 @@ Ask a natural-language question and get a research answer with tool transparency
 
 Fields:
 - `question` (required, string): Natural-language NFL research question.
-- `session_id` (optional, string): Conversation ID for short-term memory across requests.
+- `session_id` (optional, string): Saved conversation ID for multi-turn context.
 
 ### Response
 
@@ -67,12 +107,12 @@ Fields:
 - `ok` (boolean): Success indicator.
 - `answer` (string or null): Claude's synthesis of deterministic tool results.
 - `tools_used` (array): Tool calls with name, input parameters, and structured result.
-- `session_id` (string): Conversation ID. Reuse this for follow-up questions.
+- `session_id` (string): Saved conversation ID. Reuse it for follow-up questions.
 - `error` (string or null): Error message when `ok` is false.
 
 ### Error Responses
 
-Empty questions return HTTP 400:
+Empty question:
 
 ```json
 {
@@ -80,7 +120,23 @@ Empty questions return HTTP 400:
 }
 ```
 
-Missing API keys return HTTP 200 with an error payload so the web UI can display setup guidance:
+Missing/invalid token:
+
+```json
+{
+  "detail": "Missing authorization token"
+}
+```
+
+Rate limit exceeded:
+
+```json
+{
+  "detail": "Rate limit exceeded. Try again later."
+}
+```
+
+Missing Anthropic key returns an error payload so the web UI can display setup guidance:
 
 ```json
 {
@@ -99,6 +155,7 @@ Simple question:
 ```bash
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $SUPERAGENT_TOKEN" \
   -d '{"question": "What is Josh Allen'\''s EPA per play in 2024?"}'
 ```
 
@@ -107,6 +164,7 @@ Multi-turn conversation:
 ```bash
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $SUPERAGENT_TOKEN" \
   -d '{"question": "Tell me about Josh Allen in 2024"}'
 ```
 
@@ -115,10 +173,51 @@ Use the `session_id` from the first response:
 ```bash
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $SUPERAGENT_TOKEN" \
   -d '{
     "question": "How did he compare to Lamar Jackson?",
     "session_id": "550e8400-e29b-41d4-a716-446655440000"
   }'
+```
+
+## Saved Sessions
+
+All endpoints require `Authorization: Bearer <token>`.
+
+### GET /sessions
+
+List saved sessions for the current user.
+
+```bash
+curl http://localhost:8000/sessions \
+  -H "Authorization: Bearer $SUPERAGENT_TOKEN"
+```
+
+### GET /sessions/{session_id}
+
+Return messages for one saved conversation.
+
+```bash
+curl http://localhost:8000/sessions/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Authorization: Bearer $SUPERAGENT_TOKEN"
+```
+
+### GET /sessions/{session_id}/export
+
+Export one saved conversation as JSON.
+
+```bash
+curl http://localhost:8000/sessions/550e8400-e29b-41d4-a716-446655440000/export \
+  -H "Authorization: Bearer $SUPERAGENT_TOKEN"
+```
+
+### DELETE /sessions/{session_id}
+
+Delete one saved conversation.
+
+```bash
+curl -X DELETE http://localhost:8000/sessions/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Authorization: Bearer $SUPERAGENT_TOKEN"
 ```
 
 ## Tools Available
@@ -150,6 +249,18 @@ Set environment variables:
 ```bash
 export ANTHROPIC_API_KEY=sk-...
 export ANTHROPIC_MODEL=claude-sonnet-4-20250514
+export DATABASE_URL=sqlite:///./data/superagent_product.db
+export SECRET_KEY=change-me-to-a-long-random-secret
+export TOKEN_EXPIRY_DAYS=30
+export RATE_LIMIT_PER_HOUR=100
+export HOST=127.0.0.1
+export PORT=8000
+```
+
+For PostgreSQL:
+
+```bash
+export DATABASE_URL=postgresql://user:password@host:5432/superagent
 ```
 
 Start the server:
@@ -158,4 +269,4 @@ Start the server:
 python -m superagent.api
 ```
 
-The server listens on `http://localhost:8000`. For production, put it behind a reverse proxy, configure CORS for your domain, and add authentication/rate limits.
+For production, put it behind a reverse proxy, configure CORS for your domain, use a strong `SECRET_KEY`, and set request limits appropriate to your plan tiers.
