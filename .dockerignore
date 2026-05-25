@@ -27,6 +27,8 @@ FIXES_APPLIED.md
 PHASE_1_COMPLETE.md
 QUICKSTART.md
 data/raw/
+data/*.duckdb
+data/*.duckdb.wal
 data/*.db
 data/*.db-wal
 data/*.db-shm

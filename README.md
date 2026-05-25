@@ -416,6 +416,8 @@ docker compose up --build
 bash scripts/healthcheck.sh http://localhost:8000
 ```
 
+On first container startup, `start.sh` builds `data/superagent.duckdb` from nflverse if the file is missing. For hosted deployments, mount persistent storage at `/app/data` so this data survives redeploys.
+
 See [DEPLOYMENT.md](DEPLOYMENT.md) and [PRODUCTION_CHECKLIST.md](PRODUCTION_CHECKLIST.md) before deploying to Render, Railway, Heroku, or another host.
 
 ## Known Limitations

@@ -22,6 +22,7 @@ docker run -p 8000:8000 \
   -e ANTHROPIC_API_KEY=sk-... \
   -e DATABASE_URL=sqlite:////app/data/superagent_product.db \
   -e SECRET_KEY=change-me-to-a-long-random-secret \
+  -e BOOTSTRAP_NFL_DATA=true \
   -e HOST=0.0.0.0 \
   -e PORT=8000 \
   -v "$(pwd)/data:/app/data" \
@@ -35,18 +36,22 @@ docker run -p 8000:8000 \
 1. Push the repo to GitHub.
 2. In Render, create a new Web Service from the repo.
 3. Choose Docker deployment if using the included `Dockerfile`.
-4. Add a PostgreSQL database in Render.
+4. Add a persistent disk mounted at `/app/data` if your plan supports it. This keeps the NFL DuckDB across deploys/restarts.
+5. Add a PostgreSQL database in Render.
 5. Set environment variables:
    - `ANTHROPIC_API_KEY`
    - `ANTHROPIC_MODEL=claude-sonnet-4-20250514`
    - `DATABASE_URL` from Render PostgreSQL
    - `SECRET_KEY` as a strong random string
+   - `BOOTSTRAP_NFL_DATA=true`
    - `ENVIRONMENT=production`
    - `TOKEN_EXPIRY_DAYS=30`
    - `RATE_LIMIT_PER_HOUR=100`
    - `HOST=0.0.0.0`
    - `PORT=8000`
 6. Deploy and verify `/health`.
+
+On first deploy, Superagent downloads nflverse parquet files and builds `data/superagent.duckdb` if it is missing. This can take several minutes. Without a persistent disk, the app may need to rebuild this database after deploys or cold starts.
 
 If using Render's native Python environment instead of Docker:
 
@@ -98,6 +103,8 @@ PYTHONPATH=src python -m superagent.api
 - `ANTHROPIC_API_KEY` is set.
 - `SECRET_KEY` is strong and not the development default.
 - `DATABASE_URL` points to PostgreSQL for shared production hosts.
+- `BOOTSTRAP_NFL_DATA=true` for first deploy, unless you preloaded `data/superagent.duckdb`.
+- Persistent disk mounted at `/app/data` if the host supports it.
 - `ENVIRONMENT=production` is set.
 - `TOKEN_EXPIRY_DAYS` is configured.
 - `RATE_LIMIT_PER_HOUR` is configured.

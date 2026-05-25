@@ -11,6 +11,7 @@ Run through this before going live.
 - [ ] `ENVIRONMENT=production`.
 - [ ] `TOKEN_EXPIRY_DAYS` is configured.
 - [ ] `RATE_LIMIT_PER_HOUR` is configured.
+- [ ] `BOOTSTRAP_NFL_DATA=true` for first deploy, unless `data/superagent.duckdb` is preloaded.
 - [ ] `HOST=0.0.0.0`.
 - [ ] `PORT` matches the hosting provider's expected port.
 
@@ -20,6 +21,8 @@ Run through this before going live.
 - [ ] Automatic backups are enabled.
 - [ ] Connection string is correct.
 - [ ] Tables initialize on startup via `init_db()`.
+- [ ] Persistent disk is mounted at `/app/data` if the host supports it.
+- [ ] NFL DuckDB exists at `/app/data/superagent.duckdb` after first startup.
 
 ## Security
 

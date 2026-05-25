@@ -28,11 +28,10 @@ ENV HOST=0.0.0.0
 ENV PORT=8000
 
 COPY src/ src/
-COPY data/ data/
 COPY .env.example .env.example
 COPY start.sh start.sh
 
-RUN chmod +x /app/start.sh
+RUN mkdir -p /app/data/raw && chmod +x /app/start.sh
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:${PORT}/health || exit 1
