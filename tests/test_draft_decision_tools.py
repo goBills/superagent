@@ -176,6 +176,38 @@ def test_find_draft_targets_supports_after_pick_language_with_min_adp():
     assert result["ok"] is True
     assert [row["player_name"] for row in result["data"]] == ["James Cook"]
     assert result["meta"]["min_adp"] == 50
+    assert result["data"][0]["draft_position"] == 55
+    assert result["data"][0]["draft_position_source"] == "adp"
+
+
+def test_find_draft_targets_uses_avg_rank_when_adp_missing():
+    league_id, season, source = setup_draft_fixture()
+    with SessionLocal() as db:
+        market = (
+            db.query(DraftPlayerMarket)
+            .filter(
+                DraftPlayerMarket.source == source,
+                DraftPlayerMarket.source_player_name == "James Cook",
+            )
+            .first()
+        )
+        market.adp = None
+        market.avg_rank = 75
+        db.commit()
+
+    result = find_draft_targets(
+        league_id=league_id,
+        season=season,
+        source=source,
+        position="RB",
+        min_adp=70,
+    )
+
+    assert result["ok"] is True
+    assert [row["player_name"] for row in result["data"]] == ["James Cook"]
+    assert result["data"][0]["adp"] is None
+    assert result["data"][0]["draft_position"] == 75
+    assert result["data"][0]["draft_position_source"] == "avg_rank"
 
 
 def test_compare_draft_options_uses_league_adjustments():

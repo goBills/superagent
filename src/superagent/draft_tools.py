@@ -65,9 +65,18 @@ def _market_rows(
 
 def _market_payload(market: DraftPlayerMarket, settings: LeagueSettings) -> dict[str, Any]:
     adjusted = adjust_draft_value(market, settings)
+    draft_position = market.adp if market.adp is not None else market.avg_rank
+    draft_position_source = "adp" if market.adp is not None else "avg_rank"
+    if draft_position is None:
+        draft_position = market.overall_rank
+        draft_position_source = "overall_rank"
+    if draft_position is None:
+        draft_position_source = None
     value_delta = None
     if market.adp is not None and market.ecr is not None:
         value_delta = round(float(market.adp) - float(market.ecr), 3)
+    elif draft_position is not None and market.ecr is not None:
+        value_delta = round(float(draft_position) - float(market.ecr), 3)
     if value_delta is None:
         value_delta = adjusted["league_adjustment"]
     else:
@@ -79,6 +88,8 @@ def _market_payload(market: DraftPlayerMarket, settings: LeagueSettings) -> dict
         "team": market.team,
         "bye_week": market.bye_week,
         "adp": market.adp,
+        "draft_position": draft_position,
+        "draft_position_source": draft_position_source,
         "ecr": market.ecr,
         "avg_rank": market.avg_rank,
         "value": market.value,
@@ -114,9 +125,12 @@ def find_draft_targets(
         for market in _market_rows(db, season, source=source, position=position):
             if market.canonical_player_id in drafted:
                 continue
-            if min_adp is not None and market.adp is not None and market.adp < min_adp:
+            draft_position = market.adp if market.adp is not None else market.avg_rank
+            if draft_position is None:
+                draft_position = market.overall_rank
+            if min_adp is not None and (draft_position is None or draft_position < min_adp):
                 continue
-            if max_adp is not None and market.adp is not None and market.adp > max_adp:
+            if max_adp is not None and (draft_position is None or draft_position > max_adp):
                 continue
             if bye_week_filters and market.bye_week in set(bye_week_filters):
                 continue
