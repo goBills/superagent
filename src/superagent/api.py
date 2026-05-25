@@ -21,7 +21,15 @@ from superagent.agent import run_agent
 from superagent.auth import create_token, hash_password, verify_password, verify_token
 from superagent.config import HOST, PORT, get_config
 from superagent.db import get_db, init_db
-from superagent.models import ConversationSession, DraftImportReview, Message, User, utc_now
+from superagent.models import (
+    ConversationSession,
+    DraftImportReview,
+    League,
+    LeagueSettings,
+    Message,
+    User,
+    utc_now,
+)
 from superagent.rate_limit import check_rate_limit
 
 
@@ -116,6 +124,47 @@ class SessionDetail(BaseModel):
     last_active: str
     expires_at: str
     messages: List[Dict[str, Any]]
+
+
+class LeagueSettingsPayload(BaseModel):
+    """Fantasy league scoring and roster settings payload."""
+
+    ppr_type: str = "ppr"
+    num_teams: int = 12
+    roster_spots: int = 16
+    qb_slots: int = 1
+    rb_slots: int = 2
+    wr_slots: int = 2
+    te_slots: int = 1
+    flex_slots: int = 1
+    superflex_slots: int = 0
+    bench_spots: int = 6
+    taxi_spots: int = 0
+    passing_td_points: float = 4.0
+    rushing_td_points: float = 6.0
+    receiving_td_points: float = 6.0
+    pass_yards_per_point: float = 25.0
+    rush_yards_per_point: float = 10.0
+    receiving_yards_per_point: float = 10.0
+
+
+class LeagueRequest(BaseModel):
+    """Create/update league request."""
+
+    league_name: str
+    league_type: str = "snake"
+    settings: LeagueSettingsPayload = Field(default_factory=LeagueSettingsPayload)
+
+
+class LeagueResponse(BaseModel):
+    """League response."""
+
+    id: int
+    league_name: str
+    league_type: str
+    created_at: str
+    updated_at: str
+    settings: Dict[str, Any]
 
 
 def _extract_bearer_token(authorization: Optional[str]) -> Optional[str]:
@@ -222,6 +271,83 @@ def _parse_tool_names(tools_used_json: Optional[str]) -> List[str]:
         if isinstance(tool, dict) and tool.get("name"):
             names.append(str(tool["name"]))
     return names
+
+
+def _validate_league_request(request: LeagueRequest) -> None:
+    if not request.league_name.strip():
+        raise HTTPException(status_code=400, detail="League name is required")
+    if request.league_type not in {"snake", "auction"}:
+        raise HTTPException(status_code=400, detail="league_type must be 'snake' or 'auction'")
+    settings = request.settings
+    if settings.ppr_type not in {"standard", "half_ppr", "ppr"}:
+        raise HTTPException(status_code=400, detail="ppr_type must be standard, half_ppr, or ppr")
+    integer_fields = [
+        "num_teams",
+        "roster_spots",
+        "qb_slots",
+        "rb_slots",
+        "wr_slots",
+        "te_slots",
+        "flex_slots",
+        "superflex_slots",
+        "bench_spots",
+        "taxi_spots",
+    ]
+    for field_name in integer_fields:
+        value = getattr(settings, field_name)
+        if value < 0:
+            raise HTTPException(status_code=400, detail=f"{field_name} cannot be negative")
+    if settings.num_teams < 2:
+        raise HTTPException(status_code=400, detail="num_teams must be at least 2")
+    for field_name in [
+        "passing_td_points",
+        "rushing_td_points",
+        "receiving_td_points",
+        "pass_yards_per_point",
+        "rush_yards_per_point",
+        "receiving_yards_per_point",
+    ]:
+        value = getattr(settings, field_name)
+        if value <= 0:
+            raise HTTPException(status_code=400, detail=f"{field_name} must be positive")
+
+
+def _settings_to_dict(settings: LeagueSettings) -> Dict[str, Any]:
+    return {
+        "ppr_type": settings.ppr_type,
+        "num_teams": settings.num_teams,
+        "roster_spots": settings.roster_spots,
+        "qb_slots": settings.qb_slots,
+        "rb_slots": settings.rb_slots,
+        "wr_slots": settings.wr_slots,
+        "te_slots": settings.te_slots,
+        "flex_slots": settings.flex_slots,
+        "superflex_slots": settings.superflex_slots,
+        "bench_spots": settings.bench_spots,
+        "taxi_spots": settings.taxi_spots,
+        "passing_td_points": settings.passing_td_points,
+        "rushing_td_points": settings.rushing_td_points,
+        "receiving_td_points": settings.receiving_td_points,
+        "pass_yards_per_point": settings.pass_yards_per_point,
+        "rush_yards_per_point": settings.rush_yards_per_point,
+        "receiving_yards_per_point": settings.receiving_yards_per_point,
+    }
+
+
+def _league_to_response(league: League) -> LeagueResponse:
+    return LeagueResponse(
+        id=league.id,
+        league_name=league.league_name,
+        league_type=league.league_type,
+        created_at=league.created_at.isoformat(),
+        updated_at=league.updated_at.isoformat(),
+        settings=_settings_to_dict(league.settings),
+    )
+
+
+def _apply_settings(settings: LeagueSettings, payload: LeagueSettingsPayload) -> None:
+    for field_name, value in payload.model_dump().items():
+        setattr(settings, field_name, value)
 
 
 @app.get("/health")
@@ -600,6 +726,89 @@ def export_session(
 ) -> SessionDetail:
     """Export a saved conversation as structured JSON."""
     return get_session(session_id=session_id, current_user=current_user, db=db)
+
+
+@app.post("/leagues", response_model=LeagueResponse)
+def create_league(
+    request: LeagueRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> LeagueResponse:
+    """Create a user-owned fantasy league with scoring settings."""
+    _validate_league_request(request)
+    league = League(
+        user_id=current_user.id,
+        league_name=request.league_name.strip(),
+        league_type=request.league_type,
+    )
+    db.add(league)
+    db.flush()
+    settings = LeagueSettings(league_id=league.id)
+    _apply_settings(settings, request.settings)
+    db.add(settings)
+    db.commit()
+    db.refresh(league)
+    return _league_to_response(league)
+
+
+@app.get("/leagues", response_model=List[LeagueResponse])
+def list_leagues(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> List[LeagueResponse]:
+    """List leagues owned by the current user."""
+    leagues = (
+        db.query(League)
+        .filter(League.user_id == current_user.id)
+        .order_by(League.updated_at.desc(), League.id.desc())
+        .all()
+    )
+    return [_league_to_response(league) for league in leagues]
+
+
+@app.get("/leagues/{league_id}", response_model=LeagueResponse)
+def get_league(
+    league_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> LeagueResponse:
+    """Return one user-owned league configuration."""
+    league = (
+        db.query(League)
+        .filter(League.id == league_id, League.user_id == current_user.id)
+        .first()
+    )
+    if league is None:
+        raise HTTPException(status_code=404, detail="League not found")
+    return _league_to_response(league)
+
+
+@app.put("/leagues/{league_id}", response_model=LeagueResponse)
+def update_league(
+    league_id: int,
+    request: LeagueRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> LeagueResponse:
+    """Update a user-owned league and its scoring settings."""
+    _validate_league_request(request)
+    league = (
+        db.query(League)
+        .filter(League.id == league_id, League.user_id == current_user.id)
+        .first()
+    )
+    if league is None:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    league.league_name = request.league_name.strip()
+    league.league_type = request.league_type
+    league.updated_at = utc_now()
+    if league.settings is None:
+        league.settings = LeagueSettings(league_id=league.id)
+    _apply_settings(league.settings, request.settings)
+    db.commit()
+    db.refresh(league)
+    return _league_to_response(league)
 
 
 @app.delete("/sessions/{session_id}")

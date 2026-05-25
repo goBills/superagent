@@ -220,6 +220,68 @@ curl -X DELETE http://localhost:8000/sessions/550e8400-e29b-41d4-a716-4466554400
   -H "Authorization: Bearer $SUPERAGENT_TOKEN"
 ```
 
+## League Settings
+
+League endpoints require the same bearer token as `/chat`. Users can own multiple leagues.
+
+### POST /leagues
+
+Create a league:
+
+```bash
+curl -X POST http://localhost:8000/leagues \
+  -H "Authorization: Bearer $SUPERAGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "league_name": "Home League",
+    "league_type": "snake",
+    "settings": {
+      "ppr_type": "ppr",
+      "num_teams": 12,
+      "superflex_slots": 1,
+      "passing_td_points": 6
+    }
+  }'
+```
+
+### GET /leagues
+
+List the current user's leagues:
+
+```bash
+curl http://localhost:8000/leagues \
+  -H "Authorization: Bearer $SUPERAGENT_TOKEN"
+```
+
+### GET /leagues/{league_id}
+
+Retrieve one league:
+
+```bash
+curl http://localhost:8000/leagues/1 \
+  -H "Authorization: Bearer $SUPERAGENT_TOKEN"
+```
+
+### PUT /leagues/{league_id}
+
+Update league settings:
+
+```bash
+curl -X PUT http://localhost:8000/leagues/1 \
+  -H "Authorization: Bearer $SUPERAGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "league_name": "Home League",
+    "league_type": "auction",
+    "settings": {
+      "ppr_type": "half_ppr",
+      "num_teams": 12,
+      "superflex_slots": 0,
+      "passing_td_points": 4
+    }
+  }'
+```
+
 ## Admin Question Review
 
 Admin endpoints are protected by the `ADMIN_TOKEN` environment variable. They are intended for the operator to review product feedback and should not be shared publicly.

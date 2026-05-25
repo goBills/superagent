@@ -37,6 +37,7 @@ Agent: Josh Allen plays for Buffalo, whose bye week is...
 ✅ **Phase 9A.2: Admin Question Review** — Protected admin surface for reviewing recent user questions.
 ✅ **Phase 10A: Canonical Player Identity** — Product DB identity layer for cross-source draft/player mapping.
 ✅ **Phase 10B: Strict Draft Market Ingestion** — DraftSheets CSV/XLSX import mapped through canonical identity.
+✅ **Phase 10C: League Settings** — Persistent per-user league settings for personalized draft value.
 
 ## Quick Start
 
@@ -326,6 +327,7 @@ superagent/
 │   ├── db_query.py                # Safe query helpers + JSON serialization
 │   ├── name_resolution.py         # Player/team fuzzy matching
 │   ├── canonical_resolution.py    # Product DB canonical player identity + source mappings
+│   ├── draft_value.py             # League-specific draft value adjustment
 │   ├── tools.py                   # deterministic NFL + fantasy query tools
 │   ├── tool_schemas.py            # Claude tool definitions
 │   ├── agent.py                   # Claude tool-calling agent
@@ -361,6 +363,7 @@ superagent/
 │   ├── test_auth.py               # 6 tests: auth + rate limit behavior
 │   ├── test_canonical_resolution.py # 8 tests: canonical identity, ambiguity, source mapping
 │   ├── test_draft_ingestion.py    # 9 tests: strict DraftSheets import + review queue
+│   ├── test_league_settings.py    # 9 tests: league CRUD + draft value adjustment
 │   ├── test_persistence.py        # 5 tests: persistent sessions + export/delete
 │   ├── test_schedule_context.py   # 19 tests: schedule + bye week tools
 │   └── test_week_utils.py         # 18 tests: playoff week labels + ranges
@@ -379,7 +382,7 @@ superagent/
 
 ## Test Coverage
 
-All 206 tests passing:
+All 215 tests passing:
 - **Phase 2A (Tools):** 25 tests validating name resolution and 4 core tools
 - **Phase 3A/3C (Agent):** 15 tests of Claude tool-calling and conversation history with mocked client (no API key needed)
 - **Phase 3B (CLI):** 11 tests of formatting functions
@@ -394,6 +397,7 @@ All 206 tests passing:
 - **Phase 9B (Playoff Week Labels):** 18 tests of playoff week naming and ranges
 - **Phase 10A (Canonical Identity):** 8 tests of canonical identity, ambiguous names, source mapping, and roster-first seeding
 - **Phase 10B (Draft Market Ingestion):** 11 tests of strict CSV/XLSX ingestion, source ranks, review queues, and admin mapping review
+- **Phase 10C (League Settings):** 9 tests of league CRUD, permissions, scoring updates, and value adjustment
 
 Run tests:
 ```bash
@@ -465,6 +469,26 @@ The importer stores one market row per canonical player plus per-provider ranks 
 http://localhost:8000/admin/draft-mappings?token=your-random-admin-token
 ```
 
+## League Settings
+
+Phase 10C stores multiple user-owned fantasy league configurations. Settings are editable and include scoring type, roster shape, SuperFlex, flex slots, passing TD points, and yardage scoring. These settings are used by `draft_value.py` to adjust imported market value before Phase 10D draft decision tools.
+
+```bash
+curl -X POST http://localhost:8000/leagues \
+  -H "Authorization: Bearer $SUPERAGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "league_name": "Home League",
+    "league_type": "snake",
+    "settings": {
+      "ppr_type": "ppr",
+      "num_teams": 12,
+      "superflex_slots": 1,
+      "passing_td_points": 6
+    }
+  }'
+```
+
 ## Deployment
 
 Superagent includes a Dockerfile, Docker Compose config, startup script, and deployment guide.
@@ -497,7 +521,6 @@ These are intentional scope decisions, not bugs.
 
 ## Future Phases
 
-- **Phase 10C: League Settings** — PPR/half-PPR/standard, SuperFlex, roster constraints, and personalized scoring.
 - **Phase 10D: Draft Decision Tools** — Value queries and live draft-room assistance powered by market data plus historical context.
 - **Phase 7B: Injuries & Depth** — Legitimate injury/depth source, treated as an enrichment plugin once a source is chosen.
 - **Beyond** — Password reset, OAuth, admin controls, caching, commercial licensing, and domain-specific model tuning.

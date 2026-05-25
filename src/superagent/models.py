@@ -37,6 +37,11 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    leagues = relationship(
+        "League",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
     rate_limits = relationship(
         "RateLimit",
         back_populates="user",
@@ -335,3 +340,60 @@ class DraftSourceRank(Base):
     rank_value = Column(Float, nullable=False)
 
     player_market = relationship("DraftPlayerMarket", back_populates="source_ranks")
+
+
+class League(Base):
+    """User-owned fantasy league configuration container."""
+
+    __tablename__ = "leagues"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    league_name = Column(String, nullable=False)
+    league_type = Column(String, default="snake", nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    user = relationship("User", back_populates="leagues")
+    settings = relationship(
+        "LeagueSettings",
+        back_populates="league",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+
+
+class LeagueSettings(Base):
+    """Fantasy scoring and roster settings for one league."""
+
+    __tablename__ = "league_settings"
+
+    id = Column(Integer, primary_key=True)
+    league_id = Column(
+        Integer,
+        ForeignKey("leagues.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+    ppr_type = Column(String, default="ppr", nullable=False)
+    num_teams = Column(Integer, default=12, nullable=False)
+    roster_spots = Column(Integer, default=16, nullable=False)
+    qb_slots = Column(Integer, default=1, nullable=False)
+    rb_slots = Column(Integer, default=2, nullable=False)
+    wr_slots = Column(Integer, default=2, nullable=False)
+    te_slots = Column(Integer, default=1, nullable=False)
+    flex_slots = Column(Integer, default=1, nullable=False)
+    superflex_slots = Column(Integer, default=0, nullable=False)
+    bench_spots = Column(Integer, default=6, nullable=False)
+    taxi_spots = Column(Integer, default=0, nullable=False)
+    passing_td_points = Column(Float, default=4.0, nullable=False)
+    rushing_td_points = Column(Float, default=6.0, nullable=False)
+    receiving_td_points = Column(Float, default=6.0, nullable=False)
+    pass_yards_per_point = Column(Float, default=25.0, nullable=False)
+    rush_yards_per_point = Column(Float, default=10.0, nullable=False)
+    receiving_yards_per_point = Column(Float, default=10.0, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    league = relationship("League", back_populates="settings")
