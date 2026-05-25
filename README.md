@@ -14,6 +14,7 @@ A sellable NFL research assistant that answers natural-language questions about 
 ✅ **Phase 5: Player EPA & Advanced Analytics** — Player EPA/play, success rate, CPOE, and position splits.
 ✅ **Phase 6: Web API & Demo UI** — FastAPI backend with browser-based chat interface and example prompts.
 ✅ **Phase 7A: Schedule + Bye Week Context** — Team schedules, bye weeks, and games from a specified week onward.
+✅ **Phase 7C-lite: Fantasy Schedule Context** — Fantasy metrics + schedule context, no external data sources.
 
 ## Quick Start
 
@@ -154,6 +155,16 @@ Agent: From Week 10 onward, Buffalo plays...
 📊 Tools Used:
   ✅ get_upcoming_games
 
+You: What should I know about Josh Allen's fantasy schedule in 2025?
+Agent: Josh Allen plays for the Bills, whose bye week is...
+📊 Tools Used:
+  ✅ get_fantasy_schedule_context
+
+You: Compare James Cook and Khalil Shakir fantasy context from Week 10 onward
+Agent: James Cook (RB, BUF) and Khalil Shakir (WR, BUF) share the Bills schedule...
+📊 Tools Used:
+  ✅ compare_fantasy_context
+
 You: help
 Agent: [shows available question types]
 
@@ -191,6 +202,8 @@ Then open **http://localhost:8000** in your browser.
   - "Bills schedule"
   - "From Week 10"
   - "All bye weeks"
+  - "Josh schedule"
+  - "Compare context"
 - **Disclaimer** — Clear footer stating "Historical research. Not betting/start-sit advice."
 
 ### Architecture
@@ -253,6 +266,8 @@ Response:
    - `get_team_schedule_context` — full team schedule with bye week, results, and scores
    - `get_bye_weeks` — team-specific or league-wide bye weeks
    - `get_upcoming_games` — games from an explicit week onward
+   - `get_fantasy_schedule_context` — player fantasy usage plus team bye and schedule context
+   - `compare_fantasy_context` — compare multiple players' bye weeks, schedules, and usage trends
 3. **Superagent executes tools** with deterministic SQL queries
 4. **Claude synthesizes results** and provides a clear answer
 5. **CLI formats and displays** the response with tables and stats
@@ -266,7 +281,7 @@ Response:
 
 **Current scope:**
 - Multi-turn Q&A with recent conversation memory capped at 6 turns
-- Box-score, EPA, success rate, CPOE, fantasy research, historical draft research, schedule, and bye-week context (no projection/prediction)
+- Box-score, EPA, success rate, CPOE, fantasy research, historical draft research, schedule, bye-week, and fantasy schedule context (no projection/prediction)
 - Historical data only (2020-2025)
 
 ## Project Structure
@@ -303,6 +318,7 @@ superagent/
 │   ├── test_cli.py                # 11 tests: CLI formatting
 │   ├── test_draft_research.py     # 19 tests: draft research filters
 │   ├── test_fantasy.py            # 22 tests: fantasy scoring + usage tools
+│   ├── test_fantasy_schedule_context.py # 17 tests: fantasy schedule context
 │   ├── test_api.py                # 9 tests: FastAPI endpoints + sessions
 │   └── test_schedule_context.py   # 19 tests: schedule + bye week tools
 ├── requirements.txt               # Python dependencies
@@ -320,7 +336,7 @@ superagent/
 
 ## Test Coverage
 
-All 134 tests passing:
+All 151 tests passing:
 - **Phase 2A (Tools):** 25 tests validating name resolution and 4 core tools
 - **Phase 3A/3C (Agent):** 15 tests of Claude tool-calling and conversation history with mocked client (no API key needed)
 - **Phase 3B (CLI):** 11 tests of formatting functions
@@ -329,6 +345,7 @@ All 134 tests passing:
 - **Phase 5 (Advanced):** 14 tests of player EPA, success rate, CPOE, small samples, comparisons, and tool schemas
 - **Phase 6 (API):** 9 tests of FastAPI endpoints, session management, and CORS
 - **Phase 7A (Schedule):** 19 tests of team schedules, bye weeks, games from week N onward, JSON safety, and tool schemas
+- **Phase 7C-lite (Fantasy Context):** 17 tests of player fantasy schedule context, comparisons, missing-context notes, and tool schemas
 
 Run tests:
 ```bash
@@ -336,6 +353,7 @@ pytest                    # Run all tests
 pytest tests/test_advanced.py  # Run advanced analytics tests only
 pytest tests/test_cli.py  # Run CLI tests only
 pytest tests/test_fantasy.py  # Run fantasy tests only
+pytest tests/test_fantasy_schedule_context.py  # Run fantasy schedule context tests only
 pytest tests/test_draft_research.py  # Run draft research tests only
 pytest tests/test_schedule_context.py  # Run schedule context tests only
 pytest -v                 # Verbose output
@@ -346,7 +364,7 @@ pytest -v                 # Verbose output
 Potential enhancements beyond MVP:
 - **Phase 4C:** Historical waiver and trend finder
 - **Phase 7B:** Injuries and depth charts from an external source
-- **Phase 7C:** Fantasy context tools combining schedule, injuries, depth, and player metrics
+- **Phase 7C-full:** Fantasy context tools enriched with injuries and depth charts
 - **Phase 8:** Product layer (auth, saved chats, rate limits)
 - **Phase 9:** Deployment to cloud (server, domain, scaling)
 - **Phase 10:** Caching layer for performance
@@ -362,7 +380,7 @@ Potential enhancements beyond MVP:
 - Historical data through 2025 season only (no live/current-week updates)
 - No injury data, depth charts, or Vegas lines
 - No betting picks, fantasy projections, or predictions
-- Fantasy and draft tools are research tools, not start/sit, waiver pickup, or draft-pick advice
+- Fantasy, draft, and schedule-context tools are research tools, not start/sit, waiver pickup, or draft-pick advice
 - No ML models; Claude only orchestrates deterministic tools
 
 **These are not bugs—they're intentional scope decisions. Persistent memory beyond the current session is a future enhancement.**

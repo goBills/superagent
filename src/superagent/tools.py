@@ -2281,3 +2281,230 @@ def get_upcoming_games(
             "error": f"Error fetching upcoming games: {str(e)}",
             "meta": {}
         }
+
+
+# ============================================================================
+# Phase 7C-lite: Fantasy Schedule Context
+# ============================================================================
+
+MISSING_FANTASY_CONTEXT = {
+    "injuries": "Not available in this tool. Check NFL.com, ESPN, or your fantasy platform for current injury status.",
+    "depth_chart": "Not available in this tool. Check the team's official depth chart or your fantasy platform.",
+    "projections": "This is historical data only, not a projection. Use dedicated fantasy projection tools for week-to-week forecasts.",
+}
+
+
+def _period_usage_summary(weeks: List[Dict[str, Any]], label: str) -> Dict[str, Any]:
+    """Summarize touches and PPR points for a period of weekly usage rows."""
+    games = len(weeks)
+    touches = sum(int(week.get("carries", 0)) + int(week.get("targets", 0)) for week in weeks)
+    ppr_points = round(sum(float(week.get("fantasy_points_ppr", 0.0)) for week in weeks), 2)
+    return {
+        "weeks": label,
+        "games": games,
+        "touches": touches,
+        "avg_touches": round(touches / games, 2) if games else 0.0,
+        "ppr_points": ppr_points,
+        "avg_ppr_per_game": round(ppr_points / games, 2) if games else 0.0,
+    }
+
+
+def _usage_trend_from_weekly_usage(weekly_usage: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Compare weeks 1-8 against weeks 9-17 for touches and PPR trend."""
+    early_weeks = [week for week in weekly_usage if 1 <= int(week.get("week", 0)) <= 8]
+    late_weeks = [week for week in weekly_usage if 9 <= int(week.get("week", 0)) <= 17]
+    early = _period_usage_summary(early_weeks, "1-8")
+    late = _period_usage_summary(late_weeks, "9-17")
+
+    touch_delta = round(late["avg_touches"] - early["avg_touches"], 2)
+    ppr_delta = round(late["avg_ppr_per_game"] - early["avg_ppr_per_game"], 2)
+    early_touch_baseline = early["avg_touches"]
+    early_ppr_baseline = early["avg_ppr_per_game"]
+    late_touch_baseline = late["avg_touches"]
+    late_ppr_baseline = late["avg_ppr_per_game"]
+
+    touch_pct = _pct_change(early_touch_baseline, late["avg_touches"])
+    ppr_pct = _pct_change(early_ppr_baseline, late["avg_ppr_per_game"])
+    touch_pct_value = touch_pct if touch_pct is not None else 0.0
+    ppr_pct_value = ppr_pct if ppr_pct is not None else 0.0
+
+    status = "stable"
+    note = None
+    if touch_delta >= 3.0 and ppr_delta >= 3.0 and (touch_pct_value >= 25.0 or ppr_pct_value >= 25.0):
+        status = "trending_up"
+        note = "Increased opportunity in second half"
+    else:
+        down_touch_delta = round(early["avg_touches"] - late["avg_touches"], 2)
+        down_ppr_delta = round(early["avg_ppr_per_game"] - late["avg_ppr_per_game"], 2)
+        down_touch_pct = _pct_change(late_touch_baseline, early["avg_touches"])
+        down_ppr_pct = _pct_change(late_ppr_baseline, early["avg_ppr_per_game"])
+        down_touch_pct_value = down_touch_pct if down_touch_pct is not None else 0.0
+        down_ppr_pct_value = down_ppr_pct if down_ppr_pct is not None else 0.0
+        if (
+            down_touch_delta >= 3.0
+            and down_ppr_delta >= 3.0
+            and (down_touch_pct_value >= 25.0 or down_ppr_pct_value >= 25.0)
+        ):
+            status = "trending_down"
+            note = "Declining usage late"
+
+    early["status"] = status
+    late["status"] = status
+    return {
+        "early_period": early,
+        "late_period": late,
+        "change": {
+            "touch_delta": touch_delta,
+            "touch_delta_pct": touch_pct,
+            "ppr_delta": ppr_delta,
+            "ppr_delta_pct": ppr_pct,
+            "status": status,
+            "note": note,
+        },
+    }
+
+
+def _format_weekly_usage_for_context(weekly_usage: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Normalize weekly usage rows for fantasy schedule context responses."""
+    formatted = []
+    for week in weekly_usage:
+        total_td = int(week.get("tds", 0))
+        formatted.append({
+            "week": int(week.get("week", 0)),
+            "opponent": week.get("opponent"),
+            "carries": int(week.get("carries", 0)),
+            "targets": int(week.get("targets", 0)),
+            "receptions": int(week.get("receptions", 0)),
+            "rushing_yards": int(week.get("rushing_yards", 0)),
+            "receiving_yards": int(week.get("receiving_yards", 0)),
+            "passing_yards": int(week.get("passing_yards", 0)),
+            "total_td": total_td,
+            "fantasy_points_ppr": float(week.get("fantasy_points_ppr", 0.0)),
+        })
+    return formatted
+
+
+def get_fantasy_schedule_context(
+    player_name: str,
+    season: int,
+    from_week: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Get a player's fantasy context: schedule, bye week, weekly usage, and trend.
+
+    This combines historical fantasy usage with schedule context. It does not
+    include injuries, depth charts, or projections.
+    """
+    player_result = resolve_player(player_name, season)
+    if not player_result["ok"]:
+        return {"ok": False, "data": None, "error": player_result["error"], "meta": {}}
+
+    from_week_used = from_week if from_week is not None else 1
+    if from_week_used < 1 or from_week_used > 22:
+        return {"ok": False, "data": None, "error": "from_week must be between 1 and 22", "meta": {}}
+
+    player_id = player_result["player_id"]
+    canonical_name = player_result["name"]
+    position = player_result["position"]
+    team = player_result["team"]
+
+    bye_result = get_bye_weeks(season, team)
+    if not bye_result["ok"]:
+        return {"ok": False, "data": None, "error": bye_result["error"], "meta": {"player_id": player_id}}
+
+    schedule_result = get_team_schedule_context(team, season)
+    if not schedule_result["ok"]:
+        return {"ok": False, "data": None, "error": schedule_result["error"], "meta": {"player_id": player_id}}
+
+    weekly_result = get_player_weekly_usage(canonical_name, season)
+    if not weekly_result["ok"]:
+        return {"ok": False, "data": None, "error": weekly_result["error"], "meta": {"player_id": player_id}}
+
+    schedule_rows = schedule_result["data"]["schedule"]
+    games_from_week = [
+        row for row in schedule_rows
+        if not row.get("bye") and int(row.get("week", 0)) >= from_week_used
+    ]
+    weekly_usage = _format_weekly_usage_for_context(weekly_result["data"])
+    usage_trend = _usage_trend_from_weekly_usage(weekly_usage)
+
+    source = weekly_result.get("meta", {}).get("source", "weekly")
+    meta = {
+        "source": "weekly table (2020-2024) + pbp_derived (2025)",
+        "usage_source": source,
+        "coverage": "Full season schedule for team",
+        "from_week": from_week_used,
+        "from_week_default": "1 when not provided",
+    }
+    if season == 2025:
+        meta["2025_note"] = "Usage derived from play-by-play data"
+
+    return {
+        "ok": True,
+        "data": {
+            "player_id": player_id,
+            "player_name": canonical_name,
+            "position": position,
+            "team": team,
+            "season": season,
+            "team_bye_week": bye_result["data"]["bye_week"],
+            "games_from_week": games_from_week,
+            "weekly_usage": weekly_usage,
+            "usage_trend": usage_trend,
+            "missing_context": dict(MISSING_FANTASY_CONTEXT),
+        },
+        "error": None,
+        "meta": meta,
+    }
+
+
+def compare_fantasy_context(
+    player_names: List[str],
+    season: int,
+    from_week: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Compare multiple players' fantasy schedule context side-by-side.
+    """
+    if not player_names:
+        return {"ok": False, "data": None, "error": "player_names cannot be empty", "meta": {}}
+
+    from_week_used = from_week if from_week is not None else 1
+    contexts = []
+    for player_name in player_names:
+        result = get_fantasy_schedule_context(player_name, season, from_week=from_week_used)
+        if result["ok"]:
+            player_context = result["data"]
+            contexts.append({
+                "player_id": player_context["player_id"],
+                "player_name": player_context["player_name"],
+                "position": player_context["position"],
+                "team": player_context["team"],
+                "team_bye_week": player_context["team_bye_week"],
+                "season": player_context["season"],
+                "games_from_week": player_context["games_from_week"],
+                "usage_trend": player_context["usage_trend"],
+                "missing_context": player_context["missing_context"],
+            })
+        else:
+            contexts.append({"player_name": player_name, "error": result.get("error", "Unknown error")})
+
+    if all("error" in context for context in contexts):
+        return {
+            "ok": False,
+            "data": None,
+            "error": "Could not build fantasy context for any of the provided player names",
+            "meta": {},
+        }
+
+    return {
+        "ok": True,
+        "data": contexts,
+        "error": None,
+        "meta": {
+            "players_compared": len([context for context in contexts if "error" not in context]),
+            "season": season,
+            "from_week": from_week_used,
+            "note": "Compare team bye weeks, schedules from the selected week, and usage trends. Game strength, injuries, depth charts, and projections are not available in this tool.",
+        },
+    }

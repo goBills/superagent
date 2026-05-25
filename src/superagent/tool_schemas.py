@@ -22,6 +22,8 @@ from superagent.tools import (
     get_team_schedule_context,
     get_bye_weeks,
     get_upcoming_games,
+    get_fantasy_schedule_context,
+    compare_fantasy_context,
 )
 
 
@@ -349,6 +351,51 @@ TOOL_SCHEMAS = [
             },
             "required": ["team", "season"]
         }
+    },
+    {
+        "name": "get_fantasy_schedule_context",
+        "description": "Get a player's fantasy schedule context: team bye week, games from a selected week, weekly usage, and usage trend. Does NOT include injuries, depth charts, or projections.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "player_name": {
+                    "type": "string",
+                    "description": "Player's full name (e.g., 'Josh Allen', 'James Cook')"
+                },
+                "season": {
+                    "type": "integer",
+                    "description": "NFL season year (2020-2025)"
+                },
+                "from_week": {
+                    "type": "integer",
+                    "description": "Optional starting week (default: 1). Games from this week onward."
+                }
+            },
+            "required": ["player_name", "season"]
+        }
+    },
+    {
+        "name": "compare_fantasy_context",
+        "description": "Compare multiple players' fantasy schedule context side-by-side: bye weeks, games from a selected week, and usage trends.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "player_names": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of player names (e.g., ['James Cook', 'Khalil Shakir'])"
+                },
+                "season": {
+                    "type": "integer",
+                    "description": "NFL season year (2020-2025)"
+                },
+                "from_week": {
+                    "type": "integer",
+                    "description": "Optional starting week (default: 1)."
+                }
+            },
+            "required": ["player_names", "season"]
+        }
     }
 ]
 
@@ -369,6 +416,8 @@ TOOL_DISPATCH: Dict[str, Callable] = {
     "get_team_schedule_context": get_team_schedule_context,
     "get_bye_weeks": get_bye_weeks,
     "get_upcoming_games": get_upcoming_games,
+    "get_fantasy_schedule_context": get_fantasy_schedule_context,
+    "compare_fantasy_context": compare_fantasy_context,
 }
 
 
