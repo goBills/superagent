@@ -16,6 +16,8 @@ from superagent.db import SessionLocal
 from superagent.draft_value import adjust_draft_value
 from superagent.models import DraftPlayerMarket, League, LeagueDraftPick, LeagueSettings
 
+ELITE_DST_EFFECTIVE_RANK_CUTOFF = 140
+
 
 def _response(ok: bool, data: Any = None, error: str | None = None, meta: dict | None = None) -> dict:
     return {"ok": ok, "data": data, "error": error, "meta": meta or {}}
@@ -63,20 +65,46 @@ def _market_rows(
     return query.all()
 
 
+def _effective_rank(market: DraftPlayerMarket) -> tuple[float | None, str | None]:
+    if market.adp is not None:
+        return market.adp, "ADP"
+    if market.avg_rank is not None:
+        return market.avg_rank, "avg rank"
+    if market.overall_rank is not None:
+        return market.overall_rank, "overall rank"
+    return None, None
+
+
+def _is_explicit_special_teams_request(position: str | None) -> bool:
+    return bool(position and position.upper() in {"K", "DST", "D/ST", "DEF"})
+
+
+def _passes_default_position_filter(market: DraftPlayerMarket, payload: dict[str, Any], position: str | None) -> bool:
+    if _is_explicit_special_teams_request(position):
+        return True
+    market_position = (market.position or "").upper()
+    if market_position == "K":
+        return False
+    if market_position in {"DST", "D/ST", "DEF"}:
+        effective_rank = payload["effective_rank"]
+        value_delta = payload["value_delta"]
+        return (
+            effective_rank is not None
+            and effective_rank <= ELITE_DST_EFFECTIVE_RANK_CUTOFF
+            and value_delta is not None
+            and value_delta > 0
+        )
+    return True
+
+
 def _market_payload(market: DraftPlayerMarket, settings: LeagueSettings) -> dict[str, Any]:
     adjusted = adjust_draft_value(market, settings)
-    draft_position = market.adp if market.adp is not None else market.avg_rank
-    draft_position_source = "adp" if market.adp is not None else "avg_rank"
-    if draft_position is None:
-        draft_position = market.overall_rank
-        draft_position_source = "overall_rank"
-    if draft_position is None:
-        draft_position_source = None
+    effective_rank, rank_source = _effective_rank(market)
     value_delta = None
     if market.adp is not None and market.ecr is not None:
         value_delta = round(float(market.adp) - float(market.ecr), 3)
-    elif draft_position is not None and market.ecr is not None:
-        value_delta = round(float(draft_position) - float(market.ecr), 3)
+    elif effective_rank is not None and market.ecr is not None:
+        value_delta = round(float(effective_rank) - float(market.ecr), 3)
     if value_delta is None:
         value_delta = adjusted["league_adjustment"]
     else:
@@ -88,8 +116,10 @@ def _market_payload(market: DraftPlayerMarket, settings: LeagueSettings) -> dict
         "team": market.team,
         "bye_week": market.bye_week,
         "adp": market.adp,
-        "draft_position": draft_position,
-        "draft_position_source": draft_position_source,
+        "effective_rank": effective_rank,
+        "rank_source": rank_source,
+        "draft_position": effective_rank,
+        "draft_position_source": rank_source,
         "ecr": market.ecr,
         "avg_rank": market.avg_rank,
         "value": market.value,
@@ -103,6 +133,8 @@ def _market_payload(market: DraftPlayerMarket, settings: LeagueSettings) -> dict
 def find_draft_targets(
     league_id: int,
     position: str | None = None,
+    min_effective_rank: float | None = None,
+    max_effective_rank: float | None = None,
     min_adp: float | None = None,
     max_adp: float | None = None,
     min_value_delta: float | None = None,
@@ -112,6 +144,11 @@ def find_draft_targets(
     limit: int = 20,
 ) -> dict:
     """Find draft targets for a stored league using imported market data."""
+    if min_effective_rank is None:
+        min_effective_rank = min_adp
+    if max_effective_rank is None:
+        max_effective_rank = max_adp
+
     with SessionLocal() as db:
         league = _get_league(db, league_id)
         if league is None:
@@ -125,17 +162,17 @@ def find_draft_targets(
         for market in _market_rows(db, season, source=source, position=position):
             if market.canonical_player_id in drafted:
                 continue
-            draft_position = market.adp if market.adp is not None else market.avg_rank
-            if draft_position is None:
-                draft_position = market.overall_rank
-            if min_adp is not None and (draft_position is None or draft_position < min_adp):
+            effective_rank, _ = _effective_rank(market)
+            if min_effective_rank is not None and (effective_rank is None or effective_rank < min_effective_rank):
                 continue
-            if max_adp is not None and (draft_position is None or draft_position > max_adp):
+            if max_effective_rank is not None and (effective_rank is None or effective_rank > max_effective_rank):
                 continue
             if bye_week_filters and market.bye_week in set(bye_week_filters):
                 continue
             payload = _market_payload(market, settings)
             if min_value_delta is not None and payload["value_delta"] < min_value_delta:
+                continue
+            if not _passes_default_position_filter(market, payload, position):
                 continue
             rows.append(payload)
         rows.sort(key=lambda row: (row["value_delta"], row["adjusted_value"]), reverse=True)
@@ -148,8 +185,15 @@ def find_draft_targets(
                 "season": season,
                 "source": source,
                 "position": position,
+                "min_effective_rank": min_effective_rank,
+                "max_effective_rank": max_effective_rank,
                 "min_adp": min_adp,
                 "max_adp": max_adp,
+                "rank_semantics": "Effective Rank uses ADP when available, otherwise avg rank, otherwise overall rank.",
+                "default_special_teams_filter": (
+                    "K excluded unless requested. D/ST excluded unless requested or effective rank <= "
+                    f"{ELITE_DST_EFFECTIVE_RANK_CUTOFF} with positive value delta."
+                ),
                 "excluded_drafted_players": len(drafted),
                 "historical_research_only": True,
             },

@@ -176,8 +176,28 @@ def test_find_draft_targets_supports_after_pick_language_with_min_adp():
     assert result["ok"] is True
     assert [row["player_name"] for row in result["data"]] == ["James Cook"]
     assert result["meta"]["min_adp"] == 50
+    assert result["meta"]["min_effective_rank"] == 50
+    assert result["data"][0]["effective_rank"] == 55
+    assert result["data"][0]["rank_source"] == "ADP"
     assert result["data"][0]["draft_position"] == 55
-    assert result["data"][0]["draft_position_source"] == "adp"
+    assert result["data"][0]["draft_position_source"] == "ADP"
+
+
+def test_find_draft_targets_supports_min_effective_rank_name():
+    league_id, season, source = setup_draft_fixture()
+
+    result = find_draft_targets(
+        league_id=league_id,
+        season=season,
+        source=source,
+        position="RB",
+        min_effective_rank=50,
+    )
+
+    assert result["ok"] is True
+    assert [row["player_name"] for row in result["data"]] == ["James Cook"]
+    assert result["meta"]["min_effective_rank"] == 50
+    assert result["meta"]["min_adp"] is None
 
 
 def test_find_draft_targets_uses_avg_rank_when_adp_missing():
@@ -206,8 +226,106 @@ def test_find_draft_targets_uses_avg_rank_when_adp_missing():
     assert result["ok"] is True
     assert [row["player_name"] for row in result["data"]] == ["James Cook"]
     assert result["data"][0]["adp"] is None
+    assert result["data"][0]["effective_rank"] == 75
+    assert result["data"][0]["rank_source"] == "avg rank"
     assert result["data"][0]["draft_position"] == 75
-    assert result["data"][0]["draft_position_source"] == "avg_rank"
+    assert result["data"][0]["draft_position_source"] == "avg rank"
+
+
+def test_find_draft_targets_excludes_k_and_non_elite_dst_by_default():
+    league_id, season, source = setup_draft_fixture()
+    with SessionLocal() as db:
+        import_batch = db.query(DraftMarketImport).filter(DraftMarketImport.source == source).first()
+        add_player(db, "nfl_justin_tucker_tools", "Justin Tucker", "BAL", "K", season)
+        add_player(db, "nfl_miami_dst_tools", "Miami Dolphins", "MIA", "DST", season)
+        db.add_all(
+            [
+                DraftPlayerMarket(
+                    import_id=import_batch.id,
+                    source=source,
+                    season=season,
+                    canonical_player_id="nfl_justin_tucker_tools",
+                    source_player_name="Justin Tucker",
+                    position="K",
+                    team="BAL",
+                    adp=125,
+                    ecr=100,
+                    value=30,
+                ),
+                DraftPlayerMarket(
+                    import_id=import_batch.id,
+                    source=source,
+                    season=season,
+                    canonical_player_id="nfl_miami_dst_tools",
+                    source_player_name="Miami Dolphins",
+                    position="DST",
+                    team="MIA",
+                    adp=187,
+                    ecr=150,
+                    value=30,
+                ),
+            ]
+        )
+        db.commit()
+
+    result = find_draft_targets(league_id=league_id, season=season, source=source, limit=20)
+
+    names = [row["player_name"] for row in result["data"]]
+    assert "Justin Tucker" not in names
+    assert "Miami Dolphins" not in names
+
+
+def test_find_draft_targets_includes_elite_dst_by_default():
+    league_id, season, source = setup_draft_fixture()
+    with SessionLocal() as db:
+        import_batch = db.query(DraftMarketImport).filter(DraftMarketImport.source == source).first()
+        add_player(db, "nfl_baltimore_dst_tools", "Baltimore Ravens", "BAL", "DST", season)
+        db.add(
+            DraftPlayerMarket(
+                import_id=import_batch.id,
+                source=source,
+                season=season,
+                canonical_player_id="nfl_baltimore_dst_tools",
+                source_player_name="Baltimore Ravens",
+                position="DST",
+                team="BAL",
+                adp=135,
+                ecr=120,
+                value=30,
+            )
+        )
+        db.commit()
+
+    result = find_draft_targets(league_id=league_id, season=season, source=source, limit=20)
+
+    names = [row["player_name"] for row in result["data"]]
+    assert "Baltimore Ravens" in names
+
+
+def test_find_draft_targets_includes_dst_when_explicitly_requested():
+    league_id, season, source = setup_draft_fixture()
+    with SessionLocal() as db:
+        import_batch = db.query(DraftMarketImport).filter(DraftMarketImport.source == source).first()
+        add_player(db, "nfl_miami_dst_explicit_tools", "Miami Dolphins", "MIA", "DST", season)
+        db.add(
+            DraftPlayerMarket(
+                import_id=import_batch.id,
+                source=source,
+                season=season,
+                canonical_player_id="nfl_miami_dst_explicit_tools",
+                source_player_name="Miami Dolphins",
+                position="DST",
+                team="MIA",
+                adp=187,
+                ecr=150,
+                value=30,
+            )
+        )
+        db.commit()
+
+    result = find_draft_targets(league_id=league_id, season=season, source=source, position="DST", limit=20)
+
+    assert [row["player_name"] for row in result["data"]] == ["Miami Dolphins"]
 
 
 def test_compare_draft_options_uses_league_adjustments():

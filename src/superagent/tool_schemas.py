@@ -411,8 +411,22 @@ TOOL_SCHEMAS = [
             "properties": {
                 "league_id": {"type": "integer", "description": "Stored Superagent league id"},
                 "position": {"type": "string", "description": "Optional position filter: QB, RB, WR, TE, K, DST"},
-                "min_adp": {"type": "number", "description": "Optional minimum ADP to include, useful for 'after pick 70'"},
-                "max_adp": {"type": "number", "description": "Optional maximum ADP to include"},
+                "min_effective_rank": {
+                    "type": "number",
+                    "description": "Optional minimum Effective Rank to include, useful for 'after pick 70'. Effective Rank uses ADP when available, otherwise avg rank, otherwise overall rank."
+                },
+                "max_effective_rank": {
+                    "type": "number",
+                    "description": "Optional maximum Effective Rank to include. Effective Rank uses ADP when available, otherwise avg rank, otherwise overall rank."
+                },
+                "min_adp": {
+                    "type": "number",
+                    "description": "Backward-compatible alias for min_effective_rank."
+                },
+                "max_adp": {
+                    "type": "number",
+                    "description": "Backward-compatible alias for max_effective_rank."
+                },
                 "min_value_delta": {"type": "number", "description": "Optional minimum value delta"},
                 "bye_week_filters": {
                     "type": "array",
