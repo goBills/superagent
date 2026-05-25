@@ -32,14 +32,30 @@ docker run -p 8000:8000 \
 
 ## Production Deployment
 
-### Render
+### Render (Recommended: Use render.yaml)
+
+**Option A: Automatic (Best)**
+
+1. Push the repo to GitHub.
+2. In Render, import the repo.
+3. Render will auto-detect `render.yaml` and create:
+   - Web service (superagent)
+   - PostgreSQL database (superagent-postgres)
+   - Persistent disk at `/app/data` (10GB)
+4. Render auto-wires `DATABASE_URL` to the PostgreSQL instance.
+5. Set remaining environment variables (see below).
+
+**Option B: Manual**
 
 1. Push the repo to GitHub.
 2. In Render, create a new Web Service from the repo.
 3. Choose Docker deployment if using the included `Dockerfile`.
-4. Add a persistent disk mounted at `/app/data` if your plan supports it. This keeps the NFL DuckDB across deploys/restarts.
-5. Add a PostgreSQL database in Render.
-5. Set environment variables:
+4. **Important: Add a PostgreSQL database** in Render (not optional for persistence).
+   - This ensures user questions and sessions persist across deploys.
+   - Without it, the admin dashboard resets on each redeploy (ephemeral storage).
+5. Add a persistent disk mounted at `/app/data` (10GB minimum).
+   - Keeps the NFL DuckDB across deploys/restarts.
+6. Set environment variables:
    - `ANTHROPIC_API_KEY`
    - `ANTHROPIC_MODEL=claude-sonnet-4-20250514`
    - `DATABASE_URL` from Render PostgreSQL
@@ -52,6 +68,14 @@ docker run -p 8000:8000 \
    - `HOST=0.0.0.0`
    - `PORT=8000`
 6. Deploy and verify `/health`.
+
+**Important: Persistent Database for Production**
+
+Without PostgreSQL or a persistent disk, the following are lost on each redeploy:
+- User authentication sessions
+- Chat message history
+- Admin dashboard question log
+- Rate limit tracking
 
 On first deploy, Superagent downloads nflverse parquet files and builds `data/superagent.duckdb` if it is missing. This can take several minutes. `player_stats_2025.parquet` is optional because Superagent derives 2025 player stats from play-by-play when weekly player stats are unavailable. Without a persistent disk, the app may need to rebuild this database after deploys or cold starts.
 
