@@ -14,7 +14,7 @@ from typing import Any
 
 import duckdb
 from rapidfuzz import fuzz
-from sqlalchemy import func, or_
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from superagent.config import get_config
@@ -432,16 +432,56 @@ def seed_canonical_players_from_nflverse(
             seasons,
         ).fetchall()
 
-        before_aliases = db.query(CanonicalPlayerAlias).count()
+        players_by_nflverse = {
+            player.nflverse_player_id: player
+            for player in db.query(CanonicalPlayer).all()
+            if player.nflverse_player_id
+        }
+        players_by_canonical = {
+            player.canonical_player_id: player
+            for player in db.query(CanonicalPlayer).all()
+        }
+        seasons_by_key = {
+            (
+                season.canonical_player_id,
+                season.season,
+                season.team,
+                season.position,
+            ): season
+            for season in db.query(PlayerSeason).all()
+        }
+        aliases_seen = {
+            (
+                alias.canonical_player_id,
+                alias.normalized_alias,
+                alias.source,
+            )
+            for alias in db.query(CanonicalPlayerAlias).all()
+        }
+
+        def add_alias(canonical_player_id: str, alias: str | None, source: str) -> None:
+            alias = _safe_str(alias)
+            normalized_alias = normalize_player_name(alias)
+            if not alias or not normalized_alias:
+                return
+            key = (canonical_player_id, normalized_alias, source)
+            if key in aliases_seen:
+                return
+            aliases_seen.add(key)
+            db.add(
+                CanonicalPlayerAlias(
+                    canonical_player_id=canonical_player_id,
+                    alias=alias,
+                    normalized_alias=normalized_alias,
+                    source=source,
+                )
+            )
+            summary["aliases_created"] += 1
+
         for season, player_id, full_name, football_name, team, position, age, birth_date in roster_rows:
             player_id = str(player_id)
             canonical_player_id = canonical_id_from_nflverse(player_id, str(full_name))
-            player = db.query(CanonicalPlayer).filter(
-                or_(
-                    CanonicalPlayer.canonical_player_id == canonical_player_id,
-                    CanonicalPlayer.nflverse_player_id == player_id,
-                )
-            ).first()
+            player = players_by_canonical.get(canonical_player_id) or players_by_nflverse.get(player_id)
             if player is None:
                 player = CanonicalPlayer(
                     canonical_player_id=canonical_player_id,
@@ -451,30 +491,40 @@ def seed_canonical_players_from_nflverse(
                     birth_date=_safe_str(birth_date),
                 )
                 db.add(player)
-                db.flush()
+                players_by_nflverse[player_id] = player
+                players_by_canonical[canonical_player_id] = player
                 summary["players_created"] += 1
             elif birth_date and not player.birth_date:
                 player.birth_date = _safe_str(birth_date)
             summary["players_seen"] += 1
             canonical_player_id = player.canonical_player_id
 
-            if _upsert_player_season(
-                db,
+            season_key = (
                 canonical_player_id,
                 int(season),
                 _safe_str(team),
                 _safe_str(position),
-                _as_int(age),
-            ):
+            )
+            player_season = seasons_by_key.get(season_key)
+            if player_season is None:
+                player_season = PlayerSeason(
+                    canonical_player_id=canonical_player_id,
+                    season=int(season),
+                    team=_safe_str(team),
+                    position=_safe_str(position),
+                    age=_as_int(age),
+                )
+                db.add(player_season)
+                seasons_by_key[season_key] = player_season
                 summary["player_seasons_created"] += 1
-            _upsert_alias(db, canonical_player_id, str(full_name), "nflverse_rosters")
-            _upsert_alias(db, canonical_player_id, football_name, "nflverse_rosters")
+            elif age and not player_season.age:
+                player_season.age = _as_int(age)
+            add_alias(canonical_player_id, str(full_name), "nflverse_rosters")
+            add_alias(canonical_player_id, football_name, "nflverse_rosters")
 
         db.commit()
 
         if not include_alias_enrichment:
-            after_aliases = db.query(CanonicalPlayerAlias).count()
-            summary["aliases_created"] = max(after_aliases - before_aliases, 0)
             return summary
 
         weekly_rows = conn.execute(
@@ -487,12 +537,10 @@ def seed_canonical_players_from_nflverse(
             seasons,
         ).fetchall()
         for player_id, display_name, player_name in weekly_rows:
-            player = db.query(CanonicalPlayer).filter(
-                CanonicalPlayer.nflverse_player_id == str(player_id)
-            ).first()
+            player = players_by_nflverse.get(str(player_id))
             if player:
-                _upsert_alias(db, player.canonical_player_id, display_name, "nflverse_weekly")
-                _upsert_alias(db, player.canonical_player_id, player_name, "nflverse_weekly")
+                add_alias(player.canonical_player_id, display_name, "nflverse_weekly")
+                add_alias(player.canonical_player_id, player_name, "nflverse_weekly")
 
         play_name_columns = [
             ("passer_player_id", "passer_player_name"),
@@ -511,15 +559,11 @@ def seed_canonical_players_from_nflverse(
                 seasons,
             ).fetchall()
             for player_id, alias in rows:
-                player = db.query(CanonicalPlayer).filter(
-                    CanonicalPlayer.nflverse_player_id == str(player_id)
-                ).first()
+                player = players_by_nflverse.get(str(player_id))
                 if player:
-                    _upsert_alias(db, player.canonical_player_id, alias, "nflverse_pbp")
+                    add_alias(player.canonical_player_id, alias, "nflverse_pbp")
 
         db.commit()
-        after_aliases = db.query(CanonicalPlayerAlias).count()
-        summary["aliases_created"] = max(after_aliases - before_aliases, 0)
         return summary
     finally:
         conn.close()
