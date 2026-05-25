@@ -42,6 +42,7 @@ class Config:
     HOST = os.getenv("HOST", "127.0.0.1")
     PORT = int(os.getenv("PORT", "8000"))
     ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+    RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "")  # Set by Render on deploy
 
     # Data Configuration
     NFL_SEASONS = list(range(2020, 2026))  # 2020-2025

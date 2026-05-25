@@ -35,13 +35,23 @@ async def lifespan(app: FastAPI):
 # Initialize app
 app = FastAPI(title="Superagent API", version="1.0.0", lifespan=lifespan)
 
-# Add CORS middleware for localhost only
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+def get_allowed_origins():
+    """Build list of allowed CORS origins based on environment."""
+    origins = [
         "http://localhost:8000",
         "http://127.0.0.1:8000",
-    ],
+    ]
+    config = get_config()
+    # In production (Render), allow the deployment URL
+    if config.RENDER_EXTERNAL_URL:
+        origins.append(config.RENDER_EXTERNAL_URL)
+    return origins
+
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
