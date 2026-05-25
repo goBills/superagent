@@ -11,10 +11,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from superagent.canonical_resolution import normalize_player_name  # noqa: E402
 from superagent.db import SessionLocal  # noqa: E402
 from superagent.draft_tools import (  # noqa: E402
+    check_bye_week_conflicts,
     compare_draft_options,
     find_draft_targets,
     get_bye_week_analysis,
     get_draft_context,
+    get_position_needs,
+    get_roster_construction_context,
+    recommend_next_pick_targets,
 )
 from superagent.models import (  # noqa: E402
     CanonicalPlayer,
@@ -404,6 +408,79 @@ def test_get_bye_week_analysis_warns_on_concentration():
     assert result["data"]["warnings"][0]["count"] == 3
 
 
+def test_check_bye_week_conflicts_uses_current_roster_names():
+    league_id, season, source = setup_draft_fixture()
+
+    result = check_bye_week_conflicts(
+        league_id=league_id,
+        season=season,
+        source=source,
+        current_roster=["Josh Allen", "James Cook", "Khalil Shakir"],
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["warnings"][0]["bye_week"] == "7"
+    assert result["data"]["warnings"][0]["count"] == 3
+
+
+def test_get_position_needs_identifies_missing_starters():
+    league_id, season, source = setup_draft_fixture()
+
+    result = get_position_needs(
+        league_id=league_id,
+        season=season,
+        source=source,
+        current_roster=["Josh Allen", "James Cook"],
+        picks_remaining=14,
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["counts"]["QB"] == 1
+    assert result["data"]["counts"]["RB"] == 1
+    assert result["data"]["base_needs"]["WR"] == 2
+    assert result["data"]["base_needs"]["TE"] == 1
+    assert "WR" in result["data"]["priority_positions"]
+
+
+def test_get_roster_construction_context_returns_targets_by_needed_position():
+    league_id, season, source = setup_draft_fixture()
+
+    result = get_roster_construction_context(
+        league_id=league_id,
+        season=season,
+        source=source,
+        current_roster=["Josh Allen", "James Cook"],
+    )
+
+    assert result["ok"] is True
+    assert "position_needs" in result["data"]
+    assert "bye_week_analysis" in result["data"]
+    assert "targets_by_position" in result["data"]
+    assert "WR" in result["data"]["targets_by_position"]
+
+
+def test_recommend_next_pick_targets_scores_roster_fit():
+    league_id, season, source = setup_draft_fixture()
+
+    result = recommend_next_pick_targets(
+        league_id=league_id,
+        season=season,
+        source=source,
+        current_roster=["Josh Allen", "James Cook"],
+        current_pick=20,
+        limit=5,
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["recommendations"]
+    assert result["data"]["recommendations"][0]["roster_fit"] in {
+        "starter need",
+        "flex/depth need",
+        "value depth",
+    }
+    assert "position_needs" in result["data"]
+
+
 def test_draft_decision_tools_registered_for_agent():
     names = {schema["name"] for schema in TOOL_SCHEMAS}
 
@@ -412,6 +489,10 @@ def test_draft_decision_tools_registered_for_agent():
         "compare_draft_options",
         "get_draft_context",
         "get_bye_week_analysis",
+        "check_bye_week_conflicts",
+        "get_position_needs",
+        "get_roster_construction_context",
+        "recommend_next_pick_targets",
     ]:
         assert name in TOOL_DISPATCH
         assert name in names

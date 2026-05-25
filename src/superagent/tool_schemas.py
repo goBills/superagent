@@ -30,6 +30,10 @@ from superagent.draft_tools import (
     compare_draft_options,
     get_draft_context,
     get_bye_week_analysis,
+    check_bye_week_conflicts,
+    get_position_needs,
+    get_roster_construction_context,
+    recommend_next_pick_targets,
 )
 
 
@@ -493,6 +497,88 @@ TOOL_SCHEMAS = [
             },
             "required": ["league_id"]
         }
+    },
+    {
+        "name": "check_bye_week_conflicts",
+        "description": "Check bye-week concentration for a user's current draft roster. Warns when several drafted players share a bye.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "league_id": {"type": "integer", "description": "Stored Superagent league id"},
+                "current_roster": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Current roster player names drafted by the user"
+                },
+                "fantasy_team_name": {"type": "string", "description": "Optional stored fantasy team name to load roster players"},
+                "threshold": {"type": "integer", "description": "Warn when this many players share a bye week; default 3"},
+                "season": {"type": "integer", "description": "Draft season"},
+                "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"}
+            },
+            "required": ["league_id"]
+        }
+    },
+    {
+        "name": "get_position_needs",
+        "description": "Summarize roster position needs from league settings and current drafted players.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "league_id": {"type": "integer", "description": "Stored Superagent league id"},
+                "current_roster": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Current roster player names drafted by the user"
+                },
+                "fantasy_team_name": {"type": "string", "description": "Optional stored fantasy team name to load roster players"},
+                "picks_remaining": {"type": "integer", "description": "Optional number of picks remaining for this user's draft"},
+                "season": {"type": "integer", "description": "Draft season"},
+                "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"}
+            },
+            "required": ["league_id"]
+        }
+    },
+    {
+        "name": "get_roster_construction_context",
+        "description": "Get roster construction context: current position counts, needs, bye conflicts, and top target pools by needed position.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "league_id": {"type": "integer", "description": "Stored Superagent league id"},
+                "current_roster": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Current roster player names drafted by the user"
+                },
+                "fantasy_team_name": {"type": "string", "description": "Optional stored fantasy team name to load roster players"},
+                "picks_remaining": {"type": "integer", "description": "Optional number of picks remaining for this user's draft"},
+                "season": {"type": "integer", "description": "Draft season"},
+                "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"}
+            },
+            "required": ["league_id"]
+        }
+    },
+    {
+        "name": "recommend_next_pick_targets",
+        "description": "Recommend next-pick target pools based on current roster, league settings, bye conflicts, and imported draft market value.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "league_id": {"type": "integer", "description": "Stored Superagent league id"},
+                "current_roster": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Current roster player names drafted by the user"
+                },
+                "fantasy_team_name": {"type": "string", "description": "Optional stored fantasy team name to load roster players"},
+                "current_pick": {"type": "number", "description": "Current or next pick number; filters targets to Effective Rank at or after this pick"},
+                "picks_remaining": {"type": "integer", "description": "Optional number of picks remaining for this user's draft"},
+                "season": {"type": "integer", "description": "Draft season"},
+                "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"},
+                "limit": {"type": "integer", "description": "Maximum recommendations to return"}
+            },
+            "required": ["league_id"]
+        }
     }
 ]
 
@@ -519,6 +605,10 @@ TOOL_DISPATCH: Dict[str, Callable] = {
     "compare_draft_options": compare_draft_options,
     "get_draft_context": get_draft_context,
     "get_bye_week_analysis": get_bye_week_analysis,
+    "check_bye_week_conflicts": check_bye_week_conflicts,
+    "get_position_needs": get_position_needs,
+    "get_roster_construction_context": get_roster_construction_context,
+    "recommend_next_pick_targets": recommend_next_pick_targets,
 }
 
 
