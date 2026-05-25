@@ -2,6 +2,23 @@
 
 A sellable NFL research assistant that answers natural-language questions about stats, players, teams, trends, and game analysis. Powered by historical NFL data and Claude API.
 
+## What Superagent Does
+
+Superagent is a natural-language research assistant for NFL historical data from 2020-2025. Ask about stats, players, teams, EPA, fantasy metrics, draft research, schedules, bye weeks, and fantasy schedule context. It is historical research only: not betting advice, projections, live injury analysis, or start/sit picks.
+
+### Quick Example
+
+```
+You: What's Josh Allen's EPA per play in 2024?
+Agent: Josh Allen's EPA/play was 0.259 in 2024...
+
+You: Compare him to Lamar Jackson
+Agent: Josh Allen (0.259 EPA/play) vs Lamar Jackson (0.344 EPA/play)...
+
+You: What should I know about Josh Allen's fantasy schedule for 2025?
+Agent: Josh Allen plays for Buffalo, whose bye week is...
+```
+
 ## Status
 
 ✅ **Phase 1: Data Layer** — nflverse data ingestion and DuckDB infrastructure complete.
@@ -310,7 +327,10 @@ superagent/
 │   └── superagent.duckdb         # DuckDB database
 ├── scripts/
 │   ├── validate_data.py           # Data validation
-│   └── smoke_agent.py             # Manual agent test (requires API key)
+│   ├── smoke_agent.py             # Manual agent test (requires API key)
+│   └── demo_superagent.py         # Canned MVP demo flow (requires API key)
+├── docs/
+│   └── API.md                     # HTTP API reference
 ├── tests/
 │   ├── test_tools.py              # 25 tests: name resolution + tools
 │   ├── test_advanced.py           # 14 tests: player EPA + advanced analytics
@@ -359,31 +379,42 @@ pytest tests/test_schedule_context.py  # Run schedule context tests only
 pytest -v                 # Verbose output
 ```
 
-## Future Phases (Out of Scope)
+## MVP Demo Script
 
-Potential enhancements beyond MVP:
-- **Phase 4C:** Historical waiver and trend finder
-- **Phase 7B:** Injuries and depth charts from an external source
-- **Phase 7C-full:** Fantasy context tools enriched with injuries and depth charts
-- **Phase 8:** Product layer (auth, saved chats, rate limits)
-- **Phase 9:** Deployment to cloud (server, domain, scaling)
-- **Phase 10:** Caching layer for performance
-- **Phase 11:** Fine-tuned model for domain-specific reasoning
+Run a canned walkthrough of the major MVP capabilities:
+
+```bash
+python scripts/demo_superagent.py
+```
+
+The script requires `ANTHROPIC_API_KEY` because it exercises the real Claude tool-calling path. It demonstrates EPA, player comparison, fantasy usage, draft research, bye weeks, schedule context, and fantasy schedule context.
+
+## API Documentation
+
+See [docs/API.md](docs/API.md) for request/response formats, error behavior, curl examples, and the full deterministic tool list.
 
 ## Known Limitations
 
-**Current:**
-- ⚠️ **Short-term memory only:** CLI preserves recent turns in memory during the current session only. No persistence across sessions.
-- ⚠️ **Schedule context is not live-current aware:** `get_upcoming_games` uses an explicit `from_week` and defaults to Week 1. It does not infer today's NFL week.
+**Current scope:**
+- **No current-week awareness:** Schedule tools default to Week 1 unless you specify a week.
+- **No live injury data:** Check NFL.com, ESPN, or fantasy platforms for current player status.
+- **No depth charts:** Superagent uses historical rosters and stats, not current team depth charts.
+- **No projections or predictions:** It summarizes historical data and research filters, not forecasts.
+- **No betting recommendations:** Odds, lines, and market context are not available.
+- **In-memory sessions only:** Conversations reset when the server restarts.
 
-**MVP Scope:**
-- Historical data through 2025 season only (no live/current-week updates)
-- No injury data, depth charts, or Vegas lines
-- No betting picks, fantasy projections, or predictions
-- Fantasy, draft, and schedule-context tools are research tools, not start/sit, waiver pickup, or draft-pick advice
-- No ML models; Claude only orchestrates deterministic tools
+**By design:**
+- No scraping or fragile external feeds in the MVP.
+- No ML model for stat generation; Claude orchestrates deterministic tools.
+- No gambling integration; informational research only.
 
-**These are not bugs—they're intentional scope decisions. Persistent memory beyond the current session is a future enhancement.**
+These are intentional scope decisions, not bugs.
+
+## Future Phases (Post-MVP)
+
+- **Phase 8: Product Layer** — Persistent conversations, saved sessions, user auth, rate limits, and cloud deployment.
+- **Phase 7B: Injuries & Depth** — Legitimate injury/depth source, treated as an enrichment plugin once a source is chosen.
+- **Beyond** — Caching, commercial licensing, stronger deployment controls, and domain-specific model tuning.
 
 ## Development
 

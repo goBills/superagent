@@ -7,7 +7,7 @@ Wraps the CLI agent in a web service with session management.
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 import uuid
 import os
@@ -46,7 +46,7 @@ class ChatResponse(BaseModel):
     """Response body for /chat endpoint."""
     ok: bool
     answer: Optional[str] = None
-    tools_used: List[Dict[str, Any]] = []
+    tools_used: List[Dict[str, Any]] = Field(default_factory=list)
     error: Optional[str] = None
     session_id: str
 
@@ -77,6 +77,16 @@ def chat(request: ChatRequest) -> ChatResponse:
     # Create or retrieve session
     session_id = request.session_id or str(uuid.uuid4())
     history = SESSIONS.get(session_id, [])
+
+    config = get_config()
+    if not config.ANTHROPIC_API_KEY:
+        return ChatResponse(
+            ok=False,
+            answer=None,
+            tools_used=[],
+            error="ANTHROPIC_API_KEY not configured. Set it in .env or environment.",
+            session_id=session_id
+        )
 
     try:
         # Run agent with session history
