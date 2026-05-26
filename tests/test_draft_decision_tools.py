@@ -68,8 +68,7 @@ def add_player(db, player_id, name, team, position, season):
         )
 
 
-def setup_draft_fixture():
-    season = 2029
+def setup_draft_fixture(season=2029):
     source = f"draft-test-{uuid.uuid4().hex}"
     with SessionLocal() as db:
         user = User(email=f"draft-{uuid.uuid4().hex}@example.com", password_hash="hash")
@@ -164,6 +163,44 @@ def test_find_draft_targets_filters_position_adp_and_bye():
 
     assert result["ok"] is True
     assert [row["player_name"] for row in result["data"]] == ["Khalil Shakir"]
+
+
+def test_find_draft_targets_uses_2026_official_byes_with_older_market_data():
+    league_id, season, source = setup_draft_fixture(season=2025)
+
+    result = find_draft_targets(
+        league_id=league_id,
+        season=season,
+        source=source,
+        position="QB",
+        min_effective_rank=20,
+        max_effective_rank=40,
+    )
+
+    assert result["ok"] is True
+    by_name = {row["player_name"]: row for row in result["data"]}
+    assert by_name["Lamar Jackson"]["bye_week"] == 13
+    assert by_name["Lamar Jackson"]["bye_week_source"] == "nfl.com"
+    assert by_name["Lamar Jackson"]["bye_week_season"] == 2026
+    assert result["meta"]["market_season"] == 2025
+    assert result["meta"]["bye_week_season"] == 2026
+
+
+def test_check_bye_week_conflicts_uses_2026_official_byes_with_older_market_data():
+    league_id, season, source = setup_draft_fixture(season=2025)
+
+    result = check_bye_week_conflicts(
+        league_id=league_id,
+        season=season,
+        source=source,
+        current_roster=["Josh Allen", "James Cook", "Khalil Shakir"],
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["warnings"][0]["bye_week"] == "7"
+    assert result["data"]["warnings"][0]["players"][0]["bye_week_source"] == "nfl.com"
+    assert result["meta"]["market_season"] == 2025
+    assert result["meta"]["bye_week_season"] == 2026
 
 
 def test_find_draft_targets_supports_after_pick_language_with_min_adp():

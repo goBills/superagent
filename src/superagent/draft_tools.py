@@ -15,6 +15,11 @@ from superagent.canonical_resolution import resolve_to_canonical
 from superagent.db import SessionLocal
 from superagent.draft_value import adjust_draft_value
 from superagent.models import DraftPlayerMarket, League, LeagueDraftPick, LeagueRosterPlayer, LeagueSettings
+from superagent.official_bye_weeks import (
+    OFFICIAL_BYE_WEEK_SOURCE,
+    latest_official_bye_week_season,
+    official_bye_week_for_team,
+)
 
 ELITE_DST_EFFECTIVE_RANK_CUTOFF = 140
 DEFAULT_DRAFTABLE_RANK_LIMIT = 240
@@ -37,6 +42,15 @@ def _league_settings(league: League) -> LeagueSettings:
 def _latest_market_season(db: Session) -> int | None:
     row = db.query(DraftPlayerMarket.season).order_by(DraftPlayerMarket.season.desc()).first()
     return int(row[0]) if row else None
+
+
+def _bye_week_season(market_season: int, requested_bye_week_season: int | None = None) -> int:
+    if requested_bye_week_season is not None:
+        return requested_bye_week_season
+    official_season = latest_official_bye_week_season()
+    if official_season is not None and market_season <= official_season:
+        return official_season
+    return market_season
 
 
 def _drafted_ids(db: Session, league_id: int, season: int, extra_ids: list[str] | None = None) -> set[str]:
@@ -167,16 +181,30 @@ def _roster_counts(markets: list[DraftPlayerMarket]) -> dict[str, int]:
     return counts
 
 
-def _bye_week_groups(markets: list[DraftPlayerMarket]) -> dict[str, list[dict[str, Any]]]:
+def _market_bye_week(market: DraftPlayerMarket, bye_week_season: int | None = None) -> tuple[int | None, str, int | None]:
+    if bye_week_season is not None and market.team:
+        official_bye = official_bye_week_for_team(bye_week_season, market.team)
+        if official_bye is not None:
+            return official_bye, OFFICIAL_BYE_WEEK_SOURCE, bye_week_season
+    return market.bye_week, "draft_market", market.season
+
+
+def _bye_week_groups(
+    markets: list[DraftPlayerMarket],
+    bye_week_season: int | None = None,
+) -> dict[str, list[dict[str, Any]]]:
     groups: dict[str, list[dict[str, Any]]] = {}
     for market in markets:
-        week = str(market.bye_week or "unknown")
+        bye_week, bye_source, resolved_bye_week_season = _market_bye_week(market, bye_week_season)
+        week = str(bye_week or "unknown")
         groups.setdefault(week, []).append(
             {
                 "canonical_player_id": market.canonical_player_id,
                 "player_name": market.source_player_name,
                 "position": market.position,
                 "team": market.team,
+                "bye_week_source": bye_source,
+                "bye_week_season": resolved_bye_week_season,
             }
         )
     return groups
@@ -235,9 +263,14 @@ def _passes_default_position_filter(market: DraftPlayerMarket, payload: dict[str
     return True
 
 
-def _market_payload(market: DraftPlayerMarket, settings: LeagueSettings) -> dict[str, Any]:
+def _market_payload(
+    market: DraftPlayerMarket,
+    settings: LeagueSettings,
+    bye_week_season: int | None = None,
+) -> dict[str, Any]:
     adjusted = adjust_draft_value(market, settings)
     effective_rank, rank_source = _effective_rank(market)
+    bye_week, bye_source, resolved_bye_week_season = _market_bye_week(market, bye_week_season)
     value_delta = None
     if market.adp is not None and market.ecr is not None:
         value_delta = round(float(market.adp) - float(market.ecr), 3)
@@ -252,7 +285,9 @@ def _market_payload(market: DraftPlayerMarket, settings: LeagueSettings) -> dict
         "player_name": market.source_player_name,
         "position": market.position,
         "team": market.team,
-        "bye_week": market.bye_week,
+        "bye_week": bye_week,
+        "bye_week_source": bye_source,
+        "bye_week_season": resolved_bye_week_season,
         "adp": market.adp,
         "effective_rank": effective_rank,
         "rank_source": rank_source,
@@ -279,6 +314,7 @@ def find_draft_targets(
     bye_week_filters: list[int] | None = None,
     drafted_player_ids: list[str] | None = None,
     season: int | None = None,
+    bye_week_season: int | None = None,
     source: str | None = None,
     limit: int = 20,
 ) -> dict:
@@ -295,6 +331,7 @@ def find_draft_targets(
         season = season or _latest_market_season(db)
         if season is None:
             return _response(False, error="No draft market data imported")
+        bye_week_season = _bye_week_season(season, bye_week_season)
         settings = _league_settings(league)
         draftable_rank_limit = _draftable_rank_limit(settings)
         applied_max_effective_rank = max_effective_rank
@@ -312,9 +349,10 @@ def find_draft_targets(
                 effective_rank is None or effective_rank > applied_max_effective_rank
             ):
                 continue
-            if bye_week_filters and market.bye_week in set(bye_week_filters):
+            market_bye_week, _, _ = _market_bye_week(market, bye_week_season)
+            if bye_week_filters and market_bye_week in set(bye_week_filters):
                 continue
-            payload = _market_payload(market, settings)
+            payload = _market_payload(market, settings, bye_week_season=bye_week_season)
             if min_value_delta is not None and payload["value_delta"] < min_value_delta:
                 continue
             if not _passes_default_position_filter(market, payload, position):
@@ -328,6 +366,11 @@ def find_draft_targets(
             meta={
                 "league_id": league_id,
                 "season": season,
+                "market_season": season,
+                "bye_week_season": bye_week_season,
+                "bye_week_source": (
+                    OFFICIAL_BYE_WEEK_SOURCE if bye_week_season == latest_official_bye_week_season() else "draft_market"
+                ),
                 "source": source,
                 "position": position,
                 "min_effective_rank": min_effective_rank,
@@ -354,6 +397,7 @@ def compare_draft_options(
     league_id: int,
     player_names: list[str],
     season: int | None = None,
+    bye_week_season: int | None = None,
     source: str | None = None,
 ) -> dict:
     """Compare specific draft options in a league context."""
@@ -366,6 +410,7 @@ def compare_draft_options(
         season = season or _latest_market_season(db)
         if season is None:
             return _response(False, error="No draft market data imported")
+        bye_week_season = _bye_week_season(season, bye_week_season)
         settings = _league_settings(league)
         rows = []
         for name in player_names:
@@ -384,14 +429,20 @@ def compare_draft_options(
                 error = resolution.get("error") if not resolution["ok"] else "No draft market row found"
                 rows.append({"player_name": name, "ok": False, "error": error})
                 continue
-            payload = _market_payload(market, settings)
+            payload = _market_payload(market, settings, bye_week_season=bye_week_season)
             payload["ok"] = True
             rows.append(payload)
         rows.sort(key=lambda row: row.get("adjusted_value", -999), reverse=True)
         return _response(
             True,
             data=rows,
-            meta={"league_id": league_id, "season": season, "historical_research_only": True},
+            meta={
+                "league_id": league_id,
+                "season": season,
+                "market_season": season,
+                "bye_week_season": bye_week_season,
+                "historical_research_only": True,
+            },
         )
 
 
@@ -399,12 +450,14 @@ def get_draft_context(
     league_id: int,
     drafted_player_ids: list[str] | None = None,
     season: int | None = None,
+    bye_week_season: int | None = None,
     source: str | None = None,
 ) -> dict:
     """Summarize league settings, draft progress, and top available values."""
     targets = find_draft_targets(
         league_id=league_id,
         season=season,
+        bye_week_season=bye_week_season,
         source=source,
         limit=10,
     )
@@ -414,6 +467,7 @@ def get_draft_context(
         league = _get_league(db, league_id)
         settings = _league_settings(league)
         season = season or _latest_market_season(db)
+        bye_week_season = _bye_week_season(season, bye_week_season)
         drafted = _drafted_ids(db, league_id, season, drafted_player_ids)
         picks = (
             db.query(LeagueDraftPick)
@@ -427,6 +481,8 @@ def get_draft_context(
                 "league_id": league_id,
                 "league_name": league.league_name,
                 "season": season,
+                "market_season": season,
+                "bye_week_season": bye_week_season,
                 "settings": {
                     "ppr_type": settings.ppr_type,
                     "num_teams": settings.num_teams,
@@ -454,6 +510,7 @@ def get_bye_week_analysis(
     league_id: int,
     picked_so_far: list[str] | None = None,
     season: int | None = None,
+    bye_week_season: int | None = None,
     source: str | None = None,
 ) -> dict:
     """Analyze bye-week concentration for drafted or selected players."""
@@ -464,6 +521,7 @@ def get_bye_week_analysis(
         season = season or _latest_market_season(db)
         if season is None:
             return _response(False, error="No draft market data imported")
+        bye_week_season = _bye_week_season(season, bye_week_season)
 
         ids = _drafted_ids(db, league_id, season, picked_so_far)
         rows = []
@@ -480,13 +538,16 @@ def get_bye_week_analysis(
 
         by_week: dict[str, list[dict[str, Any]]] = {}
         for market in rows:
-            key = str(market.bye_week or "unknown")
+            bye_week, bye_source, resolved_bye_week_season = _market_bye_week(market, bye_week_season)
+            key = str(bye_week or "unknown")
             by_week.setdefault(key, []).append(
                 {
                     "canonical_player_id": market.canonical_player_id,
                     "player_name": market.source_player_name,
                     "position": market.position,
                     "team": market.team,
+                    "bye_week_source": bye_source,
+                    "bye_week_season": resolved_bye_week_season,
                 }
             )
         warnings = [
@@ -497,7 +558,13 @@ def get_bye_week_analysis(
         return _response(
             True,
             data={"by_week": by_week, "warnings": warnings},
-            meta={"league_id": league_id, "season": season, "historical_research_only": True},
+            meta={
+                "league_id": league_id,
+                "season": season,
+                "market_season": season,
+                "bye_week_season": bye_week_season,
+                "historical_research_only": True,
+            },
         )
 
 
@@ -507,6 +574,7 @@ def check_bye_week_conflicts(
     fantasy_team_name: str | None = None,
     threshold: int = 3,
     season: int | None = None,
+    bye_week_season: int | None = None,
     source: str | None = None,
 ) -> dict:
     """Check bye-week concentration for a user's current draft roster."""
@@ -517,9 +585,10 @@ def check_bye_week_conflicts(
         season = season or _latest_market_season(db)
         if season is None:
             return _response(False, error="No draft market data imported")
+        bye_week_season = _bye_week_season(season, bye_week_season)
         roster_names = current_roster or _stored_roster_names(db, league_id, season, fantasy_team_name)
         markets, unresolved = _roster_markets(db, roster_names, season, source=source)
-        by_week = _bye_week_groups(markets)
+        by_week = _bye_week_groups(markets, bye_week_season=bye_week_season)
         threshold = max(2, threshold)
         warnings = [
             {"bye_week": week, "count": len(players), "players": players}
@@ -529,7 +598,14 @@ def check_bye_week_conflicts(
         return _response(
             True,
             data={"by_week": by_week, "warnings": warnings, "unresolved": unresolved},
-            meta={"league_id": league_id, "season": season, "threshold": threshold, "historical_research_only": True},
+            meta={
+                "league_id": league_id,
+                "season": season,
+                "market_season": season,
+                "bye_week_season": bye_week_season,
+                "threshold": threshold,
+                "historical_research_only": True,
+            },
         )
 
 
@@ -539,6 +615,7 @@ def get_position_needs(
     fantasy_team_name: str | None = None,
     picks_remaining: int | None = None,
     season: int | None = None,
+    bye_week_season: int | None = None,
     source: str | None = None,
 ) -> dict:
     """Summarize roster position needs using league settings and current drafted players."""
@@ -549,17 +626,27 @@ def get_position_needs(
         season = season or _latest_market_season(db)
         if season is None:
             return _response(False, error="No draft market data imported")
+        bye_week_season = _bye_week_season(season, bye_week_season)
         settings = _league_settings(league)
         roster_names = current_roster or _stored_roster_names(db, league_id, season, fantasy_team_name)
         markets, unresolved = _roster_markets(db, roster_names, season, source=source)
         counts = _roster_counts(markets)
         summary = _position_need_summary(settings, counts, picks_remaining=picks_remaining)
-        summary["roster"] = [_market_payload(market, settings) for market in markets]
+        summary["roster"] = [
+            _market_payload(market, settings, bye_week_season=bye_week_season)
+            for market in markets
+        ]
         summary["unresolved"] = unresolved
         return _response(
             True,
             data=summary,
-            meta={"league_id": league_id, "season": season, "historical_research_only": True},
+            meta={
+                "league_id": league_id,
+                "season": season,
+                "market_season": season,
+                "bye_week_season": bye_week_season,
+                "historical_research_only": True,
+            },
         )
 
 
@@ -569,6 +656,7 @@ def get_roster_construction_context(
     fantasy_team_name: str | None = None,
     picks_remaining: int | None = None,
     season: int | None = None,
+    bye_week_season: int | None = None,
     source: str | None = None,
 ) -> dict:
     """Return roster construction context: counts, needs, byes, and top values."""
@@ -578,6 +666,7 @@ def get_roster_construction_context(
         fantasy_team_name=fantasy_team_name,
         picks_remaining=picks_remaining,
         season=season,
+        bye_week_season=bye_week_season,
         source=source,
     )
     if not needs["ok"]:
@@ -587,6 +676,7 @@ def get_roster_construction_context(
         current_roster=current_roster,
         fantasy_team_name=fantasy_team_name,
         season=needs["meta"]["season"],
+        bye_week_season=needs["meta"].get("bye_week_season"),
         source=source,
     )
     drafted_ids = [row["canonical_player_id"] for row in needs["data"]["roster"] if row.get("canonical_player_id")]
@@ -598,6 +688,7 @@ def get_roster_construction_context(
             drafted_player_ids=drafted_ids,
             season=needs["meta"]["season"],
             source=source,
+            bye_week_season=needs["meta"].get("bye_week_season"),
             limit=5,
         )
         targets_by_position[position] = targets["data"] if targets["ok"] else []
@@ -608,7 +699,13 @@ def get_roster_construction_context(
             "bye_week_analysis": bye["data"] if bye["ok"] else {"by_week": {}, "warnings": []},
             "targets_by_position": targets_by_position,
         },
-        meta={"league_id": league_id, "season": needs["meta"]["season"], "historical_research_only": True},
+        meta={
+            "league_id": league_id,
+            "season": needs["meta"]["season"],
+            "market_season": needs["meta"]["season"],
+            "bye_week_season": needs["meta"].get("bye_week_season"),
+            "historical_research_only": True,
+        },
     )
 
 
@@ -619,6 +716,7 @@ def recommend_next_pick_targets(
     current_pick: float | None = None,
     picks_remaining: int | None = None,
     season: int | None = None,
+    bye_week_season: int | None = None,
     source: str | None = None,
     limit: int = 12,
 ) -> dict:
@@ -629,6 +727,7 @@ def recommend_next_pick_targets(
         fantasy_team_name=fantasy_team_name,
         picks_remaining=picks_remaining,
         season=season,
+        bye_week_season=bye_week_season,
         source=source,
     )
     if not context["ok"]:
@@ -645,6 +744,7 @@ def recommend_next_pick_targets(
             min_effective_rank=min_rank,
             drafted_player_ids=drafted_ids,
             season=season,
+            bye_week_season=context["meta"].get("bye_week_season"),
             source=source,
             limit=max(3, min(limit, 20)),
         )
@@ -673,6 +773,8 @@ def recommend_next_pick_targets(
         meta={
             "league_id": league_id,
             "season": season,
+            "market_season": season,
+            "bye_week_season": context["meta"].get("bye_week_season"),
             "current_pick": current_pick,
             "rank_window_note": "When current_pick is supplied, targets use Effective Rank at or after that pick and within the league draftable range.",
             "historical_research_only": True,

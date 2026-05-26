@@ -16,6 +16,12 @@ import duckdb
 from superagent.config import get_config
 from superagent.name_resolution import resolve_team, resolve_player
 from superagent.db_query import get_db_connection, get_player_stats
+from superagent.official_bye_weeks import (
+    OFFICIAL_BYE_WEEK_SOURCE,
+    has_official_bye_weeks,
+    official_bye_week_for_team,
+    official_bye_weeks_by_week,
+)
 from superagent.week_utils import get_week_label, week_range_label
 
 config = get_config()
@@ -2042,6 +2048,48 @@ def get_bye_weeks(season: int, team: Optional[str] = None) -> Dict[str, Any]:
         }
     """
     try:
+        if has_official_bye_weeks(season):
+            if team:
+                team_result = resolve_team(team)
+                if not team_result["ok"]:
+                    return {
+                        "ok": False,
+                        "data": None,
+                        "error": f"Could not resolve team: {team}",
+                        "meta": {}
+                    }
+                team_abbr = team_result["team"]
+                return {
+                    "ok": True,
+                    "data": {
+                        "season": season,
+                        "team": team_abbr,
+                        "bye_week": official_bye_week_for_team(season, team_abbr),
+                    },
+                    "error": None,
+                    "meta": {
+                        "source": OFFICIAL_BYE_WEEK_SOURCE,
+                        "regular_season_only": True,
+                        "official_static_schedule": True,
+                    }
+                }
+
+            bye_weeks = official_bye_weeks_by_week(season)
+            return {
+                "ok": True,
+                "data": {
+                    "season": season,
+                    "bye_weeks": bye_weeks,
+                },
+                "error": None,
+                "meta": {
+                    "source": OFFICIAL_BYE_WEEK_SOURCE,
+                    "teams_count": len(set(t for teams in bye_weeks.values() for t in teams)),
+                    "regular_season_only": True,
+                    "official_static_schedule": True,
+                }
+            }
+
         conn = get_db_connection()
 
         # Get all weeks in season

@@ -437,7 +437,11 @@ TOOL_SCHEMAS = [
                     "items": {"type": "integer"},
                     "description": "Optional bye weeks to exclude"
                 },
-                "season": {"type": "integer", "description": "Draft season"},
+                "season": {"type": "integer", "description": "Draft market season"},
+                "bye_week_season": {
+                    "type": "integer",
+                    "description": "Season to use for bye weeks. Defaults to newest official bye-week data when available."
+                },
                 "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"},
                 "limit": {"type": "integer", "description": "Maximum rows to return"}
             },
@@ -456,7 +460,11 @@ TOOL_SCHEMAS = [
                     "items": {"type": "string"},
                     "description": "Player names to compare"
                 },
-                "season": {"type": "integer", "description": "Draft season"},
+                "season": {"type": "integer", "description": "Draft market season"},
+                "bye_week_season": {
+                    "type": "integer",
+                    "description": "Season to use for bye weeks. Defaults to newest official bye-week data when available."
+                },
                 "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"}
             },
             "required": ["league_id", "player_names"]
@@ -474,7 +482,11 @@ TOOL_SCHEMAS = [
                     "items": {"type": "string"},
                     "description": "Optional extra canonical player ids already drafted"
                 },
-                "season": {"type": "integer", "description": "Draft season"},
+                "season": {"type": "integer", "description": "Draft market season"},
+                "bye_week_season": {
+                    "type": "integer",
+                    "description": "Season to use for bye weeks. Defaults to newest official bye-week data when available."
+                },
                 "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"}
             },
             "required": ["league_id"]
@@ -492,7 +504,11 @@ TOOL_SCHEMAS = [
                     "items": {"type": "string"},
                     "description": "Optional canonical player ids already picked"
                 },
-                "season": {"type": "integer", "description": "Draft season"},
+                "season": {"type": "integer", "description": "Draft market season"},
+                "bye_week_season": {
+                    "type": "integer",
+                    "description": "Season to use for bye weeks. Defaults to newest official bye-week data when available."
+                },
                 "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"}
             },
             "required": ["league_id"]
@@ -512,7 +528,11 @@ TOOL_SCHEMAS = [
                 },
                 "fantasy_team_name": {"type": "string", "description": "Optional stored fantasy team name to load roster players"},
                 "threshold": {"type": "integer", "description": "Warn when this many players share a bye week; default 3"},
-                "season": {"type": "integer", "description": "Draft season"},
+                "season": {"type": "integer", "description": "Draft market season"},
+                "bye_week_season": {
+                    "type": "integer",
+                    "description": "Season to use for bye weeks. Defaults to newest official bye-week data when available."
+                },
                 "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"}
             },
             "required": ["league_id"]
@@ -532,7 +552,11 @@ TOOL_SCHEMAS = [
                 },
                 "fantasy_team_name": {"type": "string", "description": "Optional stored fantasy team name to load roster players"},
                 "picks_remaining": {"type": "integer", "description": "Optional number of picks remaining for this user's draft"},
-                "season": {"type": "integer", "description": "Draft season"},
+                "season": {"type": "integer", "description": "Draft market season"},
+                "bye_week_season": {
+                    "type": "integer",
+                    "description": "Season to use for bye weeks. Defaults to newest official bye-week data when available."
+                },
                 "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"}
             },
             "required": ["league_id"]
@@ -552,7 +576,11 @@ TOOL_SCHEMAS = [
                 },
                 "fantasy_team_name": {"type": "string", "description": "Optional stored fantasy team name to load roster players"},
                 "picks_remaining": {"type": "integer", "description": "Optional number of picks remaining for this user's draft"},
-                "season": {"type": "integer", "description": "Draft season"},
+                "season": {"type": "integer", "description": "Draft market season"},
+                "bye_week_season": {
+                    "type": "integer",
+                    "description": "Season to use for bye weeks. Defaults to newest official bye-week data when available."
+                },
                 "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"}
             },
             "required": ["league_id"]
@@ -573,7 +601,11 @@ TOOL_SCHEMAS = [
                 "fantasy_team_name": {"type": "string", "description": "Optional stored fantasy team name to load roster players"},
                 "current_pick": {"type": "number", "description": "Current or next pick number; filters targets to Effective Rank at or after this pick"},
                 "picks_remaining": {"type": "integer", "description": "Optional number of picks remaining for this user's draft"},
-                "season": {"type": "integer", "description": "Draft season"},
+                "season": {"type": "integer", "description": "Draft market season"},
+                "bye_week_season": {
+                    "type": "integer",
+                    "description": "Season to use for bye weeks. Defaults to newest official bye-week data when available."
+                },
                 "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"},
                 "limit": {"type": "integer", "description": "Maximum recommendations to return"}
             },

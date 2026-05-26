@@ -93,6 +93,24 @@ class TestByeWeeks:
         for teams in bye_weeks.values():
             assert teams == sorted(teams)
 
+    def test_bills_bye_week_2026_uses_official_static_schedule(self):
+        result = get_bye_weeks(2026, "Bills")
+
+        assert result["ok"] == True
+        assert result["data"] == {"season": 2026, "team": "BUF", "bye_week": 7}
+        assert result["meta"]["source"] == "nfl.com"
+        assert result["meta"]["official_static_schedule"] is True
+
+    def test_all_bye_weeks_2026_from_official_static_schedule(self):
+        result = get_bye_weeks(2026)
+
+        assert result["ok"] == True
+        bye_weeks = result["data"]["bye_weeks"]
+        assert bye_weeks["7"] == ["BUF", "JAX", "LAC", "WAS"]
+        assert bye_weeks["11"] == ["ATL", "CLE", "GB", "LAR", "NE", "SEA"]
+        assert result["meta"]["source"] == "nfl.com"
+        assert result["meta"]["teams_count"] == 32
+
     def test_bye_weeks_invalid_team(self):
         result = get_bye_weeks(2024, "NotATeam")
 
