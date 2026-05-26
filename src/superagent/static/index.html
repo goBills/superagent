@@ -636,6 +636,11 @@
             border-color: transparent;
             box-shadow: 0 2px 8px rgba(37, 99, 235, 0.28);
         }
+        /* Active position tabs take their position color (matches the sheet pills) */
+        .sheet-tab.active[data-pos="QB"] { background: linear-gradient(180deg, #fb7185, #e11d48); box-shadow: 0 2px 8px rgba(225, 29, 72, 0.28); }
+        .sheet-tab.active[data-pos="RB"] { background: linear-gradient(180deg, #34d399, #16a34a); box-shadow: 0 2px 8px rgba(22, 163, 74, 0.28); }
+        .sheet-tab.active[data-pos="WR"] { background: linear-gradient(180deg, #60a5fa, #2563eb); box-shadow: 0 2px 8px rgba(37, 99, 235, 0.28); }
+        .sheet-tab.active[data-pos="TE"] { background: linear-gradient(180deg, #fb923c, #ea580c); box-shadow: 0 2px 8px rgba(234, 88, 12, 0.28); }
 
         .draft-sheet-body {
             flex: 1;
