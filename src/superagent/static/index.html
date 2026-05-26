@@ -372,10 +372,11 @@
         }
 
         /* Input area */
+        /* NOTE: no backdrop-filter/transform/filter here — the fixed-position draft
+           drawers are descendants, and those properties would make this element their
+           containing block (breaking right:0 / 100vh and cramming the sheet off-screen). */
         .input-area {
-            background: rgba(255, 255, 255, 0.86);
-            backdrop-filter: saturate(160%) blur(10px);
-            -webkit-backdrop-filter: saturate(160%) blur(10px);
+            background: #ffffff;
             border-top: 1px solid var(--border);
             padding: 16px 24px;
             box-shadow: 0 -2px 14px rgba(15, 23, 42, 0.05);
@@ -1610,6 +1611,7 @@
         }
 
         function openDraftDrawer() {
+            closeDraftSheet();  // only one right-side drawer open at a time
             const drawer = document.getElementById('draftDrawer');
             drawer.classList.add('open');
             document.getElementById('draftBackdrop').classList.add('open');
@@ -1636,6 +1638,7 @@
 
         function openDraftSheet() {
             if (!authToken) { showAuthError('loginError', 'Please sign in to use the draft sheet.'); return; }
+            closeDraftDrawer();  // only one right-side drawer open at a time
             const drawer = document.getElementById('draftSheetDrawer');
             drawer.classList.add('open');
             document.getElementById('draftSheetBackdrop').classList.add('open');
