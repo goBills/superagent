@@ -629,7 +629,7 @@ TOOL_SCHEMAS = [
                     "description": "Current roster player names drafted by the user"
                 },
                 "fantasy_team_name": {"type": "string", "description": "Optional stored fantasy team name to load roster players"},
-                "current_pick": {"type": "number", "description": "Current or next pick number; filters targets to Effective Rank at or after this pick"},
+                "current_pick": {"type": "number", "description": "Current or next overall pick number. Bounds the candidate pool from above (about two rounds past this pick, capped at the league draftable range) so recommendations stay realistic. It is NOT a lower bound: an elite player who falls and is still available will still surface even if ranked better than this pick."},
                 "picks_remaining": {"type": "integer", "description": "Optional number of picks remaining for this user's draft"},
                 "season": {"type": "integer", "description": "Draft market season"},
                 "bye_week_season": {

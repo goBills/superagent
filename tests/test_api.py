@@ -125,6 +125,42 @@ def test_bulk_draft_picks_records_board_and_roster():
     assert players["other"] not in roster_names
 
 
+def test_bulk_draft_picks_handles_non_contiguous_board_and_summary():
+    headers, league_id, season, players = setup_draft_league_api()
+    payload = {
+        "season": season,
+        "picks": [
+            {"pick_number": 1, "player_name": players["other"], "team_name": "A", "is_mine": False},
+            {"pick_number": 40, "player_name": players["mine"], "team_name": "Your Team", "is_mine": True},
+        ],
+    }
+    response = client.post(f"/leagues/{league_id}/draft/picks/bulk", json=payload, headers=headers)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    pick_nums = sorted(p["pick_num"] for p in data["picks"])
+    assert pick_nums == [1, 40], "gaps must be preserved, picks not renumbered"
+    summary = data["summary"]
+    assert summary["recorded"] == 2
+    assert summary["updated"] == 0
+    assert summary["skipped"] == 0
+    assert summary["total_on_board"] == 2
+
+
+def test_bulk_draft_picks_reports_needs_review():
+    headers, league_id, season, players = setup_draft_league_api()
+    payload = {
+        "season": season,
+        "picks": [
+            {"pick_number": 1, "player_name": "Zzqq Unknownplayer Xyz", "team_name": "A", "is_mine": False},
+        ],
+    }
+    response = client.post(f"/leagues/{league_id}/draft/picks/bulk", json=payload, headers=headers)
+    assert response.status_code == 200, response.text
+    summary = response.json()["summary"]
+    assert summary["needs_review"] == 1
+    assert "Zzqq Unknownplayer Xyz" in summary["needs_review_players"]
+
+
 def test_bulk_draft_picks_is_idempotent_on_repaste():
     headers, league_id, season, players = setup_draft_league_api()
     pick = {"pick_number": 1, "player_name": players["other"], "team_name": "Other", "is_mine": False}

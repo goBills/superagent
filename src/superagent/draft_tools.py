@@ -11,7 +11,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from superagent.canonical_resolution import resolve_to_canonical
+from superagent.canonical_resolution import normalize_player_name, resolve_to_canonical
 from superagent.db import SessionLocal
 from superagent.draft_value import adjust_draft_value
 from superagent.models import DraftPlayerMarket, League, LeagueDraftPick, LeagueRosterPlayer, LeagueSettings
@@ -66,6 +66,34 @@ def _drafted_ids(db: Session, league_id: int, season: int, extra_ids: list[str] 
     }
     ids.update(extra_ids or [])
     return ids
+
+
+def _drafted_names(db: Session, league_id: int, season: int, extra_names: list[str] | None = None) -> set[str]:
+    """Normalized source player names of every recorded pick.
+
+    Used as a safety net so picks that failed canonical resolution (mapping_status
+    'needs_review', canonical_player_id NULL) are still excluded from recommendations
+    by name. Without this, an unresolved pasted/recorded pick would leak back into the
+    available pool because exclusion otherwise relies only on canonical_player_id.
+    """
+    names: set[str] = set()
+    for (source_name,) in (
+        db.query(LeagueDraftPick.source_player_name)
+        .filter(
+            LeagueDraftPick.league_id == league_id,
+            LeagueDraftPick.season == season,
+            LeagueDraftPick.source_player_name.isnot(None),
+        )
+        .all()
+    ):
+        normalized = normalize_player_name(source_name)
+        if normalized:
+            names.add(normalized)
+    for name in extra_names or []:
+        normalized = normalize_player_name(name)
+        if normalized:
+            names.add(normalized)
+    return names
 
 
 def _stored_roster_names(
@@ -344,9 +372,13 @@ def find_draft_targets(
         if applied_max_effective_rank is None and not _is_explicit_special_teams_request(position):
             applied_max_effective_rank = draftable_rank_limit
         drafted = _drafted_ids(db, league_id, season, drafted_player_ids)
+        drafted_names = _drafted_names(db, league_id, season)
         rows = []
         for market in _market_rows(db, season, source=source, position=position):
             if market.canonical_player_id in drafted:
+                continue
+            # Safety net for picks that failed canonical resolution: exclude by name too.
+            if normalize_player_name(market.source_player_name) in drafted_names:
                 continue
             effective_rank, _ = _effective_rank(market)
             if min_effective_rank is not None and (effective_rank is None or effective_rank < min_effective_rank):

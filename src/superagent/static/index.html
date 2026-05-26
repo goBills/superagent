@@ -1641,15 +1641,26 @@
                     throw new Error(error.detail || 'Could not load draft board');
                 }
                 const data = await response.json();
-                const total = (data.picks || []).length;
+                const boardPicks = data.picks || [];
+                const total = boardPicks.length;
+                const maxPick = boardPicks.reduce((m, p) => Math.max(m, p.pick_num || 0), 0);
                 for (const name of picks.filter(p => p.is_mine).map(p => p.player_name)) {
                     appendToRoster(name);
                 }
-                draftPick.value = String(total + 1);
+                // Next pick follows the highest recorded pick number (handles non-contiguous boards).
+                draftPick.value = String(maxPick + 1);
                 saveDraftRoomState();
                 box.value = '';
                 await loadDraftBoard();
-                draftPasteStatus(`✅ Loaded — board now has ${total} pick${total === 1 ? '' : 's'}.`, '#15803d');
+                const summary = data.summary || {};
+                let msg = `✅ Loaded — board now has ${total} pick${total === 1 ? '' : 's'}.`;
+                let color = '#15803d';
+                if (summary.needs_review) {
+                    const unmatched = (summary.needs_review_players || []).slice(0, 6).join(', ');
+                    msg += ` ⚠️ ${summary.needs_review} couldn't be matched${unmatched ? ': ' + unmatched : ''} — check spelling so they're excluded from recommendations.`;
+                    color = '#b45309';
+                }
+                draftPasteStatus(msg, color);
             } catch (error) {
                 draftPasteStatus(`❌ ${error.message}`, '#dc2626');
             } finally {

@@ -86,6 +86,15 @@ This is a **peer model**, not a strict handoff. Whoever is best positioned does 
 
 ✅ Code written/fixed · ✅ Full suite passes (not just new tests) · ✅ Clean commit (explains *why*) · ✅ No security holes (auth, validation, rate limits) · ✅ Verified by running the app/tests (not self-attested) · ✅ Docs updated when behavior changes · ✅ Version tagged · ✅ Deploy confirmed live
 
+## Release Checklist (per version)
+
+1. Full suite green locally (`pytest -q`).
+2. For UI changes: render the actual states in a browser and confirm behavior.
+3. Commit with a "why" message; push to `main`.
+4. Tag the version (Codex) → `git tag vX.Y.Z <sha> && git push --tags`.
+5. Confirm the deploy: `curl -s <url>/health` → check `commit` matches the pushed SHA.
+6. For draft/data features: run **one real mock draft** against the live build before building the next thing.
+
 ---
 
 ## Principles

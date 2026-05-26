@@ -234,6 +234,7 @@ class DraftBoardResponse(BaseModel):
     league_id: int
     season: int
     picks: List[Dict[str, Any]]
+    summary: Optional[Dict[str, Any]] = None
 
 
 class DraftBulkPickItem(BaseModel):
@@ -674,11 +675,17 @@ def _upsert_my_roster_player(
 
 @app.get("/health")
 def health_check():
-    """Health check endpoint."""
+    """Health check endpoint.
+
+    Exposes the deployed commit so we can confirm exactly what Render is serving
+    (Render sets RENDER_GIT_COMMIT at build/runtime; falls back to GIT_COMMIT).
+    """
+    commit = os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("GIT_COMMIT") or "unknown"
     return {
         "ok": True,
         "status": "healthy",
-        "service": "Superagent API"
+        "service": "Superagent API",
+        "commit": commit[:12] if commit != "unknown" else commit,
     }
 
 
@@ -1392,11 +1399,23 @@ def record_draft_picks_bulk(
         raise HTTPException(status_code=400, detail="No draft market data imported")
 
     recorded = 0
+    updated = 0
+    skipped = 0
+    needs_review = 0
+    needs_review_players: List[str] = []
     for item in request.picks:
-        if not item.player_name or not item.player_name.strip():
+        if not item.player_name or not item.player_name.strip() or item.pick_number < 1:
+            skipped += 1
             continue
-        if item.pick_number < 1:
-            continue
+        existing = (
+            db.query(LeagueDraftPick)
+            .filter(
+                LeagueDraftPick.league_id == league.id,
+                LeagueDraftPick.season == season,
+                LeagueDraftPick.pick_num == item.pick_number,
+            )
+            .first()
+        )
         default_team = "My Team" if item.is_mine else "Other"
         pick_request = DraftPickRequest(
             pick_number=item.pick_number,
@@ -1411,7 +1430,13 @@ def record_draft_picks_bulk(
             pick.fantasy_team_name = team_name
             _upsert_my_roster_player(db, league, pick, team_name)
         db.flush()
-        recorded += 1
+        if existing is not None:
+            updated += 1
+        else:
+            recorded += 1
+        if pick.mapping_status == "needs_review":
+            needs_review += 1
+            needs_review_players.append(pick.source_player_name)
     db.commit()
 
     picks = (
@@ -1424,6 +1449,14 @@ def record_draft_picks_bulk(
         league_id=league_id,
         season=season,
         picks=[_draft_pick_to_response(pick).model_dump() for pick in picks],
+        summary={
+            "recorded": recorded,
+            "updated": updated,
+            "skipped": skipped,
+            "needs_review": needs_review,
+            "needs_review_players": needs_review_players,
+            "total_on_board": len(picks),
+        },
     )
 
 

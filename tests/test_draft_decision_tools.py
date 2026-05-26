@@ -641,6 +641,33 @@ def test_find_draft_targets_sort_by_rank_orders_by_effective_rank():
     assert ranks == sorted(ranks), "results should be ordered by ascending effective rank"
 
 
+def test_find_draft_targets_excludes_unresolved_pick_by_name():
+    """A recorded pick that failed canonical resolution (needs_review, no canonical
+    id) must still be excluded from targets by name. Regression for bulk paste
+    leaking unresolved players back into the available pool."""
+    league_id, season, source = setup_draft_fixture()
+    with SessionLocal() as db:
+        db.add(
+            LeagueDraftPick(
+                league_id=league_id,
+                season=season,
+                round_num=1,
+                pick_num=2,
+                fantasy_team_name="Other",
+                source_player_name="Khalil Shakir",  # matches a market player by name
+                position="WR",
+                canonical_player_id=None,  # resolution failed -> not caught by id exclusion
+                mapping_status="needs_review",
+            )
+        )
+        db.commit()
+
+    result = find_draft_targets(league_id=league_id, season=season, source=source, limit=20)
+    assert result["ok"] is True
+    names = [row["player_name"] for row in result["data"]]
+    assert "Khalil Shakir" not in names
+
+
 def test_draft_decision_tools_registered_for_agent():
     names = {schema["name"] for schema in TOOL_SCHEMAS}
 
