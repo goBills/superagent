@@ -393,6 +393,32 @@ def _current_context_map(db: Session, canonical_ids: list[str | None]) -> dict[s
     return out
 
 
+# Alternate abbreviations that refer to the same franchise across data sources
+# (nflverse rosters vs Sleeper vs PFR). Collapsed to one code so a player whose
+# team is merely spelled differently across sources is NOT flagged as having
+# changed teams. Real franchise moves still differ after normalization.
+_TEAM_CODE_ALIASES = {
+    "JAC": "JAX",  # Jacksonville: nflverse "JAC" vs Sleeper "JAX"
+    "LA": "LAR", "STL": "LAR",  # Rams
+    "OAK": "LV", "LVR": "LV",  # Raiders
+    "SD": "LAC",  # Chargers
+    "WSH": "WAS", "WFT": "WAS",  # Washington
+    "ARZ": "ARI",
+    "BLT": "BAL",
+    "CLV": "CLE",
+    "HST": "HOU",
+    "GNB": "GB", "KAN": "KC", "NOR": "NO", "SFO": "SF", "TAM": "TB", "NWE": "NE",
+}
+
+
+def _normalize_team_code(code: str | None) -> str | None:
+    """Collapse alternate franchise abbreviations to a single canonical code."""
+    if not code:
+        return code
+    c = code.strip().upper()
+    return _TEAM_CODE_ALIASES.get(c, c)
+
+
 def _apply_current_context(payload: dict[str, Any], ctx: PlayerCurrentContext | None) -> dict[str, Any]:
     """Merge provider current-context fields onto a market payload.
 
@@ -407,7 +433,11 @@ def _apply_current_context(payload: dict[str, Any], ctx: PlayerCurrentContext | 
     payload["current_context_available"] = True
     payload["current_team"] = ctx.team
     payload["current_team_is_free_agent"] = ctx.team is None
-    payload["current_team_differs"] = bool(ctx.team and market_team and ctx.team != market_team)
+    payload["current_team_differs"] = bool(
+        ctx.team
+        and market_team
+        and _normalize_team_code(ctx.team) != _normalize_team_code(market_team)
+    )
     if ctx.age is not None:
         payload["age"] = ctx.age
     payload["years_exp"] = ctx.years_exp

@@ -21,6 +21,8 @@ from superagent.draft_tools import (  # noqa: E402
     get_roster_construction_context,
     recommend_next_pick_targets,
     get_available_targets,
+    _apply_current_context,
+    _normalize_team_code,
 )
 from superagent.models import (  # noqa: E402
     CanonicalPlayer,
@@ -223,6 +225,36 @@ def test_get_draft_sheet_uses_current_context_and_flags_team_change():
             PlayerCurrentContext.source == "sleeper-test",
         ).delete()
         db.commit()
+
+
+def test_normalize_team_code_collapses_franchise_aliases():
+    # Cross-source abbreviation variants for the same franchise normalize together.
+    assert _normalize_team_code("JAC") == _normalize_team_code("JAX")  # Jacksonville
+    assert _normalize_team_code("LA") == _normalize_team_code("LAR")    # Rams
+    assert _normalize_team_code("OAK") == _normalize_team_code("LV")    # Raiders
+    assert _normalize_team_code("WSH") == _normalize_team_code("WAS")   # Washington
+    # Distinct franchises stay distinct; falsy input is passed through.
+    assert _normalize_team_code("NYJ") != _normalize_team_code("NYG")
+    assert _normalize_team_code(None) is None
+
+
+def test_current_team_differs_ignores_abbreviation_only_mismatch():
+    from types import SimpleNamespace
+
+    def ctx(team):
+        return SimpleNamespace(
+            team=team, age=None, years_exp=2, entry_year=2024, rookie_year=2024,
+            injury_status=None, status="Active", source="sleeper", updated_at=None,
+        )
+
+    # Brian Thomas Jr. case: nflverse roster "JAC" vs Sleeper "JAX" = same team.
+    same = _apply_current_context({"team": "JAC"}, ctx("JAX"))
+    assert same["current_team_differs"] is False
+    assert same["current_team"] == "JAX"  # still surface the current/provider code
+
+    # A genuine move (market TB, provider SF) must still flag.
+    moved = _apply_current_context({"team": "TB"}, ctx("SF"))
+    assert moved["current_team_differs"] is True
 
 
 def test_get_draft_sheet_marks_bye_risk_from_user_roster():
