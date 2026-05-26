@@ -528,6 +528,78 @@ def test_recommend_next_pick_targets_scores_roster_fit():
     assert "position_needs" in result["data"]
 
 
+def test_recommend_next_pick_prioritizes_best_available_over_sleepers():
+    """At an early pick, the best player available (lowest effective rank) must
+    rank above undervalued late-round sleepers, even when sleepers have a much
+    larger value delta. Regression for the pick-3 'Cedric Tillman' bug."""
+    league_id, season, source = setup_draft_fixture()
+    with SessionLocal() as db:
+        import_batch = db.query(DraftMarketImport).filter(DraftMarketImport.source == source).first()
+        # Elite WR at rank 4 with a near-zero value delta.
+        add_player(db, "nfl_elite_wr_tools", "Elite WR", "DET", "WR", season)
+        # Late-round sleeper at rank 203 with a huge positive value delta.
+        add_player(db, "nfl_sleeper_wr_tools", "Sleeper WR", "CLE", "WR", season)
+        db.add_all(
+            [
+                DraftPlayerMarket(
+                    import_id=import_batch.id,
+                    source=source,
+                    season=season,
+                    canonical_player_id="nfl_elite_wr_tools",
+                    source_player_name="Elite WR",
+                    position="WR",
+                    team="DET",
+                    adp=4,
+                    ecr=4,
+                    value=95,
+                ),
+                DraftPlayerMarket(
+                    import_id=import_batch.id,
+                    source=source,
+                    season=season,
+                    canonical_player_id="nfl_sleeper_wr_tools",
+                    source_player_name="Sleeper WR",
+                    position="WR",
+                    team="CLE",
+                    adp=150,  # within the 12x16=192 draftable window
+                    ecr=95,  # large +55 value delta, the bug's trap
+                    value=20,
+                ),
+            ]
+        )
+        db.commit()
+
+    result = recommend_next_pick_targets(
+        league_id=league_id,
+        season=season,
+        source=source,
+        current_roster=[],
+        current_pick=3,
+        limit=10,
+    )
+
+    assert result["ok"] is True
+    wr_recs = [r for r in result["data"]["recommendations"] if r["position"] == "WR"]
+    assert wr_recs, "expected WR recommendations"
+    elite_idx = next(i for i, r in enumerate(wr_recs) if r["player_name"] == "Elite WR")
+    sleeper_idx = next(i for i, r in enumerate(wr_recs) if r["player_name"] == "Sleeper WR")
+    assert elite_idx < sleeper_idx, "best player available must outrank the sleeper"
+
+
+def test_find_draft_targets_sort_by_rank_orders_by_effective_rank():
+    """sort_by='rank' returns best player available first (lowest effective rank)."""
+    league_id, season, source = setup_draft_fixture()
+
+    result = find_draft_targets(
+        league_id=league_id, season=season, source=source, sort_by="rank", limit=10
+    )
+
+    assert result["ok"] is True
+    assert result["meta"]["sort_by"] == "rank"
+    ranks = [row["effective_rank"] for row in result["data"] if row["effective_rank"] is not None]
+    assert ranks == sorted(ranks), "results should be ordered by ascending effective rank"
+
+
 def test_draft_decision_tools_registered_for_agent():
     names = {schema["name"] for schema in TOOL_SCHEMAS}
 

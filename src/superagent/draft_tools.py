@@ -317,8 +317,14 @@ def find_draft_targets(
     bye_week_season: int | None = None,
     source: str | None = None,
     limit: int = 20,
+    sort_by: str = "value",
 ) -> dict:
-    """Find draft targets for a stored league using imported market data."""
+    """Find draft targets for a stored league using imported market data.
+
+    sort_by="value" (default) ranks by value delta then adjusted value—best for
+    "find me sleepers/values" requests. sort_by="rank" ranks by effective rank
+    (best player available first)—best for "who should I draft next" requests.
+    """
     if min_effective_rank is None:
         min_effective_rank = min_adp
     if max_effective_rank is None:
@@ -358,7 +364,16 @@ def find_draft_targets(
             if not _passes_default_position_filter(market, payload, position):
                 continue
             rows.append(payload)
-        rows.sort(key=lambda row: (row["value_delta"], row["adjusted_value"]), reverse=True)
+        if sort_by == "rank":
+            # Best player available: lowest effective rank wins; value delta breaks ties.
+            rows.sort(
+                key=lambda row: (
+                    row["effective_rank"] if row["effective_rank"] is not None else float("inf"),
+                    -(row["value_delta"] or 0),
+                )
+            )
+        else:
+            rows.sort(key=lambda row: (row["value_delta"], row["adjusted_value"]), reverse=True)
         limit = max(1, min(limit, 100))
         return _response(
             True,
@@ -377,6 +392,7 @@ def find_draft_targets(
                 "max_effective_rank": max_effective_rank,
                 "applied_max_effective_rank": applied_max_effective_rank,
                 "draftable_rank_limit": draftable_rank_limit,
+                "sort_by": sort_by,
                 "min_adp": min_adp,
                 "max_adp": max_adp,
                 "rank_semantics": (
@@ -778,6 +794,7 @@ def recommend_next_pick_targets(
             bye_week_season=context["meta"].get("bye_week_season"),
             source=source,
             limit=max(3, min(limit, 20)),
+            sort_by="rank",
         )
         if not targets["ok"]:
             continue
@@ -789,7 +806,14 @@ def recommend_next_pick_targets(
         for row in targets["data"][:5]:
             rec = dict(row)
             rec["need_bonus"] = need_bonus
-            rec["recommendation_score"] = round((row.get("value_delta") or 0) + (row.get("adjusted_value") or 0) + need_bonus, 3)
+            # Best player available drives the score: lower effective rank = higher
+            # score. Positional need is a modest nudge (~ worth jumping need_bonus
+            # rank spots), and value delta is only a small tiebreaker so undervalued
+            # late-round sleepers can never leapfrog clearly higher-ranked players.
+            eff_rank = row.get("effective_rank")
+            base = -float(eff_rank) if eff_rank is not None else -999.0
+            value_tiebreak = max(-20.0, min(20.0, float(row.get("value_delta") or 0))) * 0.1
+            rec["recommendation_score"] = round(base + need_bonus + value_tiebreak, 3)
             rec["roster_fit"] = "starter need" if need_bonus >= 8 else "flex/depth need" if need_bonus else "value depth"
             recommendations.append(rec)
     recommendations.sort(key=lambda row: row["recommendation_score"], reverse=True)
