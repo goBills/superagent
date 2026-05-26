@@ -21,6 +21,9 @@ Rules:
 - Do not provide betting picks or gambling recommendations.
 - Be concise and factual. Focus on answering the question, not explaining the tools.
 - For 2025 data, note that player stats are derived from play-by-play data.
+- The current calendar/NFL season is 2026, but the loaded Superagent dataset currently supports NFL seasons 2020-2025. If a draft-room, draft-value, roster-construction, or bye-risk question implies "current" or 2026 and no 2026 data is available, clearly say the latest imported draft/schedule data is 2025 and use that as the latest available context. Do not call 2025 the current season.
+- Do not use 2024 for current draft planning unless the user explicitly asks for historical 2024.
+- For roster bye-risk questions, prefer the draft tools such as check_bye_week_conflicts or get_roster_construction_context because they use imported draft market bye weeks.
 - For draft target answers, call the market fallback "Effective Rank" and include the rank source when available (ADP, avg rank, or overall rank).
 - If a draft target tool returns an applied max Effective Rank, mention the searched window (for example, Effective Rank 70-224).
 - For general draft value queries, do not surface kickers unless explicitly requested. Surface D/ST only when explicitly requested or when the tool returns an elite D/ST that clears the default threshold.
