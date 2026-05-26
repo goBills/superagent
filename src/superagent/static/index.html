@@ -459,14 +459,46 @@
             line-height: 1.35;
         }
 
+        .draft-board-toggle {
+            align-items: center;
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin: 8px 0 0;
+        }
+
+        .draft-board-summary {
+            color: #475569;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .draft-board-toggle button {
+            background: transparent;
+            border: none;
+            color: #1a73e8;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 0;
+        }
+
+        .draft-board-toggle button:hover {
+            background: transparent;
+            text-decoration: underline;
+        }
+
         .draft-board {
             background: white;
             border: 1px solid #e2e8f0;
             border-radius: 8px;
             margin: 8px 0;
-            max-height: 92px;
+            max-height: 80px;
             overflow-y: auto;
             padding: 8px;
+        }
+
+        .draft-board.expanded {
+            max-height: 240px;
         }
 
         .draft-board-empty {
@@ -482,7 +514,7 @@
             font-size: 12px;
             gap: 8px;
             grid-template-columns: 48px 1fr 1fr;
-            padding: 5px 0;
+            padding: 4px 0;
         }
 
         .draft-board-row:last-child {
@@ -800,6 +832,10 @@
                     <button class="example-btn" onclick="recordIPicked()" type="button">I picked</button>
                     <button class="example-btn" onclick="undoDraftPick()" type="button">Undo</button>
                 </div>
+                <div class="draft-board-toggle">
+                    <span class="draft-board-summary" id="draftBoardSummary">Draft board: 0 picks</span>
+                    <button onclick="toggleDraftBoard()" type="button" id="draftBoardToggle">Show full board</button>
+                </div>
                 <div class="draft-board" id="draftBoard">
                     <div class="draft-board-empty">No draft picks recorded yet.</div>
                 </div>
@@ -871,6 +907,8 @@
         const draftPickTeam = document.getElementById('draftPickTeam');
         const draftPickPlayer = document.getElementById('draftPickPlayer');
         const draftBoard = document.getElementById('draftBoard');
+        const draftBoardSummary = document.getElementById('draftBoardSummary');
+        const draftBoardToggle = document.getElementById('draftBoardToggle');
         const draftRoomStatus = document.getElementById('draftRoomStatus');
         const sessionSelect = document.getElementById('sessionSelect');
         let sessionId = null;
@@ -879,6 +917,7 @@
         let requestTimeout = null;
         let draftRoomStatusTimer = null;
         let sessionsLoaded = false;
+        let draftBoardExpanded = false;
 
         // Initialize session ID from localStorage
         function initializeSession() {
@@ -1106,12 +1145,16 @@
                     return;
                 }
                 const data = await response.json();
-                const picks = (data.picks || []).slice(-8).reverse();
-                if (!picks.length) {
+                const allPicks = data.picks || [];
+                const visiblePicks = draftBoardExpanded ? allPicks : allPicks.slice(-5);
+                draftBoardSummary.textContent = `Draft board: ${allPicks.length} pick${allPicks.length === 1 ? '' : 's'}`;
+                draftBoardToggle.textContent = draftBoardExpanded ? 'Hide full board' : 'Show full board';
+                draftBoard.classList.toggle('expanded', draftBoardExpanded);
+                if (!allPicks.length) {
                     draftBoard.innerHTML = '<div class="draft-board-empty">No draft picks recorded yet.</div>';
                     return;
                 }
-                draftBoard.innerHTML = picks.map(pick => `
+                draftBoard.innerHTML = visiblePicks.map(pick => `
                     <div class="draft-board-row">
                         <span class="draft-board-pick">#${pick.pick_num}</span>
                         <span>${escapeHtml(pick.fantasy_team_name || 'Team')}</span>
@@ -1121,6 +1164,11 @@
             } catch (error) {
                 draftBoard.innerHTML = '<div class="draft-board-empty">Draft board unavailable.</div>';
             }
+        }
+
+        function toggleDraftBoard() {
+            draftBoardExpanded = !draftBoardExpanded;
+            loadDraftBoard();
         }
 
         function appendToRoster(playerName) {
