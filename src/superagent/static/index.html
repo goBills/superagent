@@ -66,6 +66,36 @@
             -webkit-text-fill-color: transparent;
         }
 
+        /* Fantasy-sports brand accents */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #2563eb 0%, #6366f1 45%, #16a34a 100%);
+            z-index: 2000;
+        }
+
+        .season-badge {
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 10px;
+            padding: 3px 11px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+            background: linear-gradient(180deg, #ffe08a 0%, #f7b733 100%);
+            color: #7c4a03;
+            -webkit-text-fill-color: #7c4a03;   /* override the h1 gradient-text fill */
+            background-clip: border-box;
+            -webkit-background-clip: border-box;
+            box-shadow: 0 1px 2px rgba(180, 120, 10, 0.3);
+            text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
+        }
+
         .header p {
             font-size: 13px;
             color: var(--muted);
@@ -601,9 +631,10 @@
         }
 
         .sheet-tab.active {
-            background: #1a73e8;
+            background: linear-gradient(180deg, var(--brand) 0%, var(--brand-2) 100%);
             color: #fff;
-            border-color: #1a73e8;
+            border-color: transparent;
+            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.28);
         }
 
         .draft-sheet-body {
@@ -651,16 +682,36 @@
             flex-wrap: wrap;
         }
 
-        .cockpit-league, .cockpit-pick {
-            width: 78px;
-            padding: 8px 10px;
+        .cockpit-field {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 8px 4px 10px;
             border: 1px solid var(--border);
             border-radius: var(--radius-sm);
-            font-size: 13px;
-            font-weight: 700;
             background: var(--surface);
         }
-        .cockpit-pick { width: 64px; }
+        .cockpit-field:focus-within {
+            border-color: #c7d6f5;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+        }
+        .cockpit-field-label {
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+        .cockpit-league, .cockpit-pick {
+            width: 42px;
+            padding: 4px 2px !important;
+            border: none !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            font-size: 14px;
+            font-weight: 800;
+            color: var(--text);
+        }
 
         .cockpit-select {
             max-width: 200px;
@@ -1388,8 +1439,8 @@
         <div class="header">
             <div class="header-top">
                 <div>
-                    <h1>⚡ Superagent</h1>
-                    <p>Fantasy draft assistant — live rankings, current player context, and grounded analysis for your 2026 draft.</p>
+                    <h1>⚡ Superagent <span class="season-badge">🏈 2026 Draft</span></h1>
+                    <p>Your AI draft war room — live board, current player data, grounded calls, zero hype.</p>
                 </div>
                 <button id="signOutButton" class="signout-btn" onclick="logout()">Sign out</button>
             </div>
@@ -1431,8 +1482,14 @@
         <div class="cockpit" id="cockpit">
             <div class="cockpit-toolbar">
                 <div class="cockpit-controls">
-                    <input type="text" id="draftLeagueId" class="cockpit-league" placeholder="League" value="1" oninput="saveDraftRoomState()" onchange="loadDraftBoard(); loadDraftSheet();">
-                    <input type="text" id="draftPick" class="cockpit-pick" placeholder="Pick #" oninput="saveDraftRoomState()">
+                    <label class="cockpit-field">
+                        <span class="cockpit-field-label">League</span>
+                        <input type="text" id="draftLeagueId" class="cockpit-league" placeholder="1" value="1" oninput="saveDraftRoomState()" onchange="loadDraftBoard(); loadDraftSheet();">
+                    </label>
+                    <label class="cockpit-field">
+                        <span class="cockpit-field-label">Pick</span>
+                        <input type="text" id="draftPick" class="cockpit-pick" placeholder="—" oninput="saveDraftRoomState()">
+                    </label>
                     <button class="example-btn" onclick="openDraftDrawer()" type="button">📋 Paste / record</button>
                     <button class="example-btn" onclick="loadDraftSheet()" type="button">↻ Refresh</button>
                     <span class="draft-sheet-meta" id="draftSheetMeta"></span>
