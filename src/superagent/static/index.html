@@ -418,6 +418,13 @@
             margin-bottom: 8px;
         }
 
+        .draft-pick-grid {
+            display: grid;
+            grid-template-columns: 120px 1fr 1fr auto auto;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
         .draft-room textarea {
             min-height: 58px;
             resize: vertical;
@@ -450,6 +457,41 @@
             color: #64748b;
             font-size: 11px;
             line-height: 1.35;
+        }
+
+        .draft-board {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            margin: 8px 0;
+            max-height: 92px;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .draft-board-empty {
+            color: #94a3b8;
+            font-size: 12px;
+        }
+
+        .draft-board-row {
+            align-items: center;
+            border-bottom: 1px solid #f1f5f9;
+            color: #334155;
+            display: grid;
+            font-size: 12px;
+            gap: 8px;
+            grid-template-columns: 48px 1fr 1fr;
+            padding: 5px 0;
+        }
+
+        .draft-board-row:last-child {
+            border-bottom: none;
+        }
+
+        .draft-board-pick {
+            color: #64748b;
+            font-weight: 700;
         }
 
         .draft-room-footer {
@@ -645,8 +687,14 @@
             .draft-room-grid {
                 grid-template-columns: 1fr 1fr;
             }
+            .draft-pick-grid {
+                grid-template-columns: 1fr 1fr;
+            }
             .draft-room-grid textarea {
                 grid-column: 1 / -1;
+            }
+            .draft-pick-grid button {
+                width: 100%;
             }
             .session-bar {
                 align-items: stretch;
@@ -741,13 +789,23 @@
                     </div>
                 </div>
                 <div class="draft-room-grid">
-                    <input type="text" id="draftLeagueId" placeholder="League ID" value="1" oninput="saveDraftRoomState()">
+                    <input type="text" id="draftLeagueId" placeholder="League ID" value="1" oninput="saveDraftRoomState()" onchange="loadDraftBoard()">
                     <input type="text" id="draftPick" placeholder="Pick #" oninput="saveDraftRoomState()">
                     <textarea id="draftRoster" placeholder="Paste roster: Josh Allen, James Cook, ..." oninput="saveDraftRoomState()"></textarea>
                 </div>
+                <div class="draft-pick-grid">
+                    <input type="text" id="draftPickTeam" placeholder="Team">
+                    <input type="text" id="draftPickPlayer" placeholder="Player picked">
+                    <button class="example-btn" onclick="recordTheyPicked()" type="button">They picked</button>
+                    <button class="example-btn" onclick="recordIPicked()" type="button">I picked</button>
+                    <button class="example-btn" onclick="undoDraftPick()" type="button">Undo</button>
+                </div>
+                <div class="draft-board" id="draftBoard">
+                    <div class="draft-board-empty">No draft picks recorded yet.</div>
+                </div>
                 <div class="draft-room-footer">
                     <div class="draft-room-note">
-                        Saved in this browser. Paste comma-separated or line-separated players, then use a shortcut during your draft.
+                        Saved in this browser. Record every pick so recommendations exclude drafted players.
                     </div>
                     <button class="draft-room-clear" onclick="clearDraftRoom()" type="button">Clear draft room</button>
                 </div>
@@ -810,6 +868,9 @@
         const draftLeagueId = document.getElementById('draftLeagueId');
         const draftPick = document.getElementById('draftPick');
         const draftRoster = document.getElementById('draftRoster');
+        const draftPickTeam = document.getElementById('draftPickTeam');
+        const draftPickPlayer = document.getElementById('draftPickPlayer');
+        const draftBoard = document.getElementById('draftBoard');
         const draftRoomStatus = document.getElementById('draftRoomStatus');
         const sessionSelect = document.getElementById('sessionSelect');
         let sessionId = null;
@@ -830,6 +891,7 @@
             sessionId = stored;
             loadDraftRoomState();
             updateAuthView();
+            loadDraftBoard();
         }
 
         function updateAuthView() {
@@ -1015,19 +1077,145 @@
             draftLeagueId.value = '1';
             draftPick.value = '';
             draftRoster.value = '';
+            draftPickTeam.value = '';
+            draftPickPlayer.value = '';
             saveDraftRoomState();
             draftPick.focus();
+            loadDraftBoard();
+        }
+
+        function draftLeagueIdValue() {
+            return draftLeagueId.value.trim() || '1';
+        }
+
+        function draftPickNumber() {
+            const raw = draftPick.value.trim();
+            const value = Number.parseInt(raw, 10);
+            return Number.isFinite(value) && value > 0 ? value : null;
+        }
+
+        async function loadDraftBoard() {
+            if (!authToken || !draftBoard) return;
+            const leagueId = draftLeagueIdValue();
+            try {
+                const response = await fetch(`/leagues/${leagueId}/draft/picks`, {
+                    headers: authHeaders()
+                });
+                if (!response.ok) {
+                    draftBoard.innerHTML = '<div class="draft-board-empty">Draft board unavailable.</div>';
+                    return;
+                }
+                const data = await response.json();
+                const picks = (data.picks || []).slice(-8).reverse();
+                if (!picks.length) {
+                    draftBoard.innerHTML = '<div class="draft-board-empty">No draft picks recorded yet.</div>';
+                    return;
+                }
+                draftBoard.innerHTML = picks.map(pick => `
+                    <div class="draft-board-row">
+                        <span class="draft-board-pick">#${pick.pick_num}</span>
+                        <span>${escapeHtml(pick.fantasy_team_name || 'Team')}</span>
+                        <span>${escapeHtml(pick.source_player_name)}</span>
+                    </div>
+                `).join('');
+            } catch (error) {
+                draftBoard.innerHTML = '<div class="draft-board-empty">Draft board unavailable.</div>';
+            }
+        }
+
+        function appendToRoster(playerName) {
+            const names = rosterNames();
+            if (!names.some(name => name.toLowerCase() === playerName.toLowerCase())) {
+                names.push(playerName);
+                draftRoster.value = names.join(', ');
+                saveDraftRoomState();
+            }
+        }
+
+        async function recordDraftPick(isMine) {
+            if (!authToken) {
+                showAuthError('loginError', 'Please sign in before recording draft picks.');
+                return;
+            }
+            const pickNumber = draftPickNumber();
+            const playerName = draftPickPlayer.value.trim();
+            if (!pickNumber || !playerName) {
+                addMessage('error', 'Enter a pick number and player name first.');
+                return;
+            }
+            const leagueId = draftLeagueIdValue();
+            const payload = {
+                pick_number: pickNumber,
+                team_name: isMine ? (draftPickTeam.value.trim() || 'My Team') : (draftPickTeam.value.trim() || 'Other'),
+                player_name: playerName
+            };
+            try {
+                const path = isMine
+                    ? `/leagues/${leagueId}/draft/my-pick`
+                    : `/leagues/${leagueId}/draft/picks`;
+                const response = await fetch(path, {
+                    method: 'POST',
+                    headers: authHeaders({'Content-Type': 'application/json'}),
+                    body: JSON.stringify(payload)
+                });
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error(error.detail || 'Could not record draft pick');
+                }
+                const pick = await response.json();
+                if (isMine) appendToRoster(pick.source_player_name);
+                draftPick.value = String(pick.pick_num + 1);
+                draftPickPlayer.value = '';
+                saveDraftRoomState();
+                await loadDraftBoard();
+                if (isMine) {
+                    askQuestion(draftRoomPrompt('next'));
+                }
+            } catch (error) {
+                addMessage('error', error.message);
+            }
+        }
+
+        function recordTheyPicked() {
+            recordDraftPick(false);
+        }
+
+        function recordIPicked() {
+            recordDraftPick(true);
+        }
+
+        async function undoDraftPick() {
+            if (!authToken) return;
+            const leagueId = draftLeagueIdValue();
+            try {
+                const response = await fetch(`/leagues/${leagueId}/draft/picks/last`, {
+                    method: 'DELETE',
+                    headers: authHeaders()
+                });
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error(error.detail || 'Could not undo draft pick');
+                }
+                const data = await response.json();
+                if (data.deleted && data.deleted.pick_num) {
+                    draftPick.value = String(data.deleted.pick_num);
+                    saveDraftRoomState();
+                }
+                await loadDraftBoard();
+            } catch (error) {
+                addMessage('error', error.message);
+            }
         }
 
         function draftRoomPrompt(kind) {
-            const leagueId = draftLeagueId.value.trim() || '1';
+            const leagueId = draftLeagueIdValue();
             const pick = draftPick.value.trim();
             const roster = rosterPhrase();
             const rosterText = roster ? `My current roster is ${roster}. ` : '';
             const pickText = pick ? `I am at pick ${pick}. ` : '';
 
             if (kind === 'next') {
-                return `League ID ${leagueId}. ${rosterText}${pickText}Recommend next pick targets.`;
+                return `League ID ${leagueId}. ${rosterText}${pickText}Recommend next available pick targets, excluding the recorded draft board.`;
             }
             if (kind === 'needs') {
                 return `League ID ${leagueId}. ${rosterText}Show my position needs and what to prioritize next.`;
@@ -1036,7 +1224,7 @@
                 return `League ID ${leagueId}. ${rosterText}Check my bye week conflicts and what to avoid next.`;
             }
             if (kind === 'rb') {
-                return `League ID ${leagueId}. ${rosterText}${pickText}Show RB values with Effective Rank, Rank Source, ECR, adjusted value, and value delta.`;
+                return `League ID ${leagueId}. ${rosterText}${pickText}Show available RB values with Effective Rank, Rank Source, ECR, adjusted value, and value delta, excluding the recorded draft board.`;
             }
             return `League ID ${leagueId}. ${rosterText}${pickText}Help me with my next draft pick.`;
         }

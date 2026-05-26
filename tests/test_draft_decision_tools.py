@@ -19,6 +19,7 @@ from superagent.draft_tools import (  # noqa: E402
     get_position_needs,
     get_roster_construction_context,
     recommend_next_pick_targets,
+    get_available_targets,
 )
 from superagent.models import (  # noqa: E402
     CanonicalPlayer,
@@ -147,6 +148,15 @@ def test_find_draft_targets_excludes_drafted_and_sorts_value():
     names = [row["player_name"] for row in result["data"]]
     assert "Josh Allen" not in names
     assert names[0] == "Lamar Jackson"
+
+
+def test_get_available_targets_excludes_recorded_draft_board():
+    league_id, season, source = setup_draft_fixture()
+
+    result = get_available_targets(league_id=league_id, season=season, source=source, limit=10)
+
+    assert result["ok"] is True
+    assert "Josh Allen" not in [row["player_name"] for row in result["data"]]
 
 
 def test_find_draft_targets_filters_position_adp_and_bye():
@@ -523,6 +533,7 @@ def test_draft_decision_tools_registered_for_agent():
 
     for name in [
         "find_draft_targets",
+        "get_available_targets",
         "compare_draft_options",
         "get_draft_context",
         "get_bye_week_analysis",

@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from superagent.agent import run_agent
 from superagent.auth import create_token, hash_password, verify_password, verify_token
-from superagent.canonical_resolution import seed_canonical_players_from_nflverse
+from superagent.canonical_resolution import resolve_to_canonical, seed_canonical_players_from_nflverse
 from superagent.config import HOST, PORT, get_config
 from superagent.data.ingest_draft_sheets import DraftIngestionError, ingest_draft_market_file
 from superagent.db import get_db, init_db
@@ -29,7 +29,10 @@ from superagent.espn_integration import ingest_espn_league
 from superagent.models import (
     ConversationSession,
     DraftImportReview,
+    DraftPlayerMarket,
     League,
+    LeagueDraftPick,
+    LeagueRosterPlayer,
     LeagueSettings,
     Message,
     User,
@@ -197,6 +200,40 @@ class ESPNLeagueSyncRequest(BaseModel):
     season: int
     espn_s2: Optional[str] = None
     swid: Optional[str] = None
+
+
+class DraftPickRequest(BaseModel):
+    """Record one live draft pick."""
+
+    pick_number: int
+    player_name: str
+    team_name: Optional[str] = None
+    season: Optional[int] = None
+    source: Optional[str] = None
+
+
+class DraftPickResponse(BaseModel):
+    """Persisted live draft pick response."""
+
+    id: int
+    league_id: int
+    season: int
+    round_num: int
+    pick_num: int
+    fantasy_team_name: Optional[str] = None
+    source_player_name: str
+    position: Optional[str] = None
+    canonical_player_id: Optional[str] = None
+    mapping_status: str
+    created_at: str
+
+
+class DraftBoardResponse(BaseModel):
+    """Live draft board response."""
+
+    league_id: int
+    season: int
+    picks: List[Dict[str, Any]]
 
 
 def _extract_bearer_token(authorization: Optional[str]) -> Optional[str]:
@@ -473,6 +510,149 @@ def _admin_default_league_settings(payload: AdminDefaultLeagueRequest) -> League
         rush_yards_per_point=payload.rushing_yards_per_point,
         receiving_yards_per_point=payload.receiving_yards_per_point,
     )
+
+
+def _get_owned_league(db: Session, league_id: int, user_id: int) -> League:
+    league = db.query(League).filter(League.id == league_id, League.user_id == user_id).first()
+    if league is None:
+        raise HTTPException(status_code=404, detail="League not found")
+    return league
+
+
+def _latest_draft_market_season(db: Session) -> Optional[int]:
+    row = db.query(DraftPlayerMarket.season).order_by(DraftPlayerMarket.season.desc()).first()
+    return int(row[0]) if row else None
+
+
+def _resolve_draft_pick_player(
+    db: Session,
+    player_name: str,
+    season: int,
+    source: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Resolve a live draft pick to canonical identity and market context when possible."""
+    cleaned = player_name.strip()
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="player_name is required")
+
+    resolution = resolve_to_canonical(cleaned, season, db=db)
+    query = db.query(DraftPlayerMarket).filter(DraftPlayerMarket.season == season)
+    if source:
+        query = query.filter(DraftPlayerMarket.source == source)
+
+    market = None
+    canonical_player_id = None
+    mapping_status = "needs_review"
+    if resolution.get("ok"):
+        canonical_player_id = resolution["canonical_player_id"]
+        mapping_status = "mapped"
+        market = query.filter(DraftPlayerMarket.canonical_player_id == canonical_player_id).first()
+    else:
+        market = query.filter(DraftPlayerMarket.source_player_name == cleaned).first()
+        if market is not None:
+            canonical_player_id = market.canonical_player_id
+            mapping_status = "mapped"
+
+    return {
+        "source_player_name": market.source_player_name if market else cleaned,
+        "position": market.position if market else None,
+        "canonical_player_id": canonical_player_id,
+        "mapping_status": mapping_status,
+    }
+
+
+def _round_for_pick(pick_number: int, settings: Optional[LeagueSettings]) -> int:
+    num_teams = settings.num_teams if settings else 12
+    return ((pick_number - 1) // max(1, int(num_teams or 12))) + 1
+
+
+def _draft_pick_to_response(pick: LeagueDraftPick) -> DraftPickResponse:
+    return DraftPickResponse(
+        id=pick.id,
+        league_id=pick.league_id,
+        season=pick.season,
+        round_num=pick.round_num or 0,
+        pick_num=pick.pick_num or 0,
+        fantasy_team_name=pick.fantasy_team_name,
+        source_player_name=pick.source_player_name,
+        position=pick.position,
+        canonical_player_id=pick.canonical_player_id,
+        mapping_status=pick.mapping_status,
+        created_at=pick.created_at.isoformat(),
+    )
+
+
+def _upsert_draft_pick(
+    db: Session,
+    league: League,
+    request: DraftPickRequest,
+    default_team_name: str,
+) -> LeagueDraftPick:
+    if request.pick_number < 1:
+        raise HTTPException(status_code=400, detail="pick_number must be positive")
+    season = request.season or _latest_draft_market_season(db)
+    if season is None:
+        raise HTTPException(status_code=400, detail="No draft market data imported")
+
+    resolved = _resolve_draft_pick_player(db, request.player_name, season, source=request.source)
+    round_num = _round_for_pick(request.pick_number, league.settings)
+    team_name = (request.team_name or default_team_name).strip() or default_team_name
+
+    pick = (
+        db.query(LeagueDraftPick)
+        .filter(
+            LeagueDraftPick.league_id == league.id,
+            LeagueDraftPick.season == season,
+            LeagueDraftPick.pick_num == request.pick_number,
+        )
+        .first()
+    )
+    if pick is None:
+        pick = LeagueDraftPick(
+            league_id=league.id,
+            season=season,
+            pick_num=request.pick_number,
+            round_num=round_num,
+        )
+        db.add(pick)
+
+    pick.round_num = round_num
+    pick.fantasy_team_name = team_name
+    pick.source_player_name = resolved["source_player_name"]
+    pick.position = resolved["position"]
+    pick.canonical_player_id = resolved["canonical_player_id"]
+    pick.mapping_status = resolved["mapping_status"]
+    return pick
+
+
+def _upsert_my_roster_player(
+    db: Session,
+    league: League,
+    pick: LeagueDraftPick,
+    fantasy_team_name: str,
+) -> None:
+    roster_player = (
+        db.query(LeagueRosterPlayer)
+        .filter(
+            LeagueRosterPlayer.league_id == league.id,
+            LeagueRosterPlayer.season == pick.season,
+            LeagueRosterPlayer.fantasy_team_name == fantasy_team_name,
+            LeagueRosterPlayer.source_player_name == pick.source_player_name,
+        )
+        .first()
+    )
+    if roster_player is None:
+        roster_player = LeagueRosterPlayer(
+            league_id=league.id,
+            season=pick.season,
+            fantasy_team_name=fantasy_team_name,
+            source_player_name=pick.source_player_name,
+        )
+        db.add(roster_player)
+    roster_player.roster_slot = pick.position
+    roster_player.position = pick.position
+    roster_player.canonical_player_id = pick.canonical_player_id
+    roster_player.mapping_status = pick.mapping_status
 
 
 @app.get("/health")
@@ -1116,6 +1296,103 @@ def update_league(
     db.commit()
     db.refresh(league)
     return _league_to_response(league)
+
+
+@app.get("/leagues/{league_id}/draft/picks", response_model=DraftBoardResponse)
+def list_draft_picks(
+    league_id: int,
+    season: Optional[int] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DraftBoardResponse:
+    """List the recorded live draft board for a league."""
+    _get_owned_league(db, league_id, current_user.id)
+    season = season or _latest_draft_market_season(db)
+    if season is None:
+        raise HTTPException(status_code=400, detail="No draft market data imported")
+    picks = (
+        db.query(LeagueDraftPick)
+        .filter(LeagueDraftPick.league_id == league_id, LeagueDraftPick.season == season)
+        .order_by(LeagueDraftPick.pick_num.asc(), LeagueDraftPick.id.asc())
+        .all()
+    )
+    return DraftBoardResponse(
+        league_id=league_id,
+        season=season,
+        picks=[_draft_pick_to_response(pick).model_dump() for pick in picks],
+    )
+
+
+@app.post("/leagues/{league_id}/draft/picks", response_model=DraftPickResponse)
+def record_draft_pick(
+    league_id: int,
+    request: DraftPickRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DraftPickResponse:
+    """Record or update one pick made by any team in the live draft board."""
+    league = _get_owned_league(db, league_id, current_user.id)
+    pick = _upsert_draft_pick(db, league, request, default_team_name="Other")
+    db.commit()
+    db.refresh(pick)
+    return _draft_pick_to_response(pick)
+
+
+@app.post("/leagues/{league_id}/draft/my-pick", response_model=DraftPickResponse)
+def record_my_pick(
+    league_id: int,
+    request: DraftPickRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DraftPickResponse:
+    """Record one of the user's picks and add it to their stored roster."""
+    league = _get_owned_league(db, league_id, current_user.id)
+    team_name = (request.team_name or "My Team").strip() or "My Team"
+    pick = _upsert_draft_pick(db, league, request, default_team_name=team_name)
+    pick.fantasy_team_name = team_name
+    _upsert_my_roster_player(db, league, pick, team_name)
+    db.commit()
+    db.refresh(pick)
+    return _draft_pick_to_response(pick)
+
+
+@app.delete("/leagues/{league_id}/draft/picks/last")
+def undo_last_draft_pick(
+    league_id: int,
+    season: Optional[int] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Remove the most recently recorded pick for a league draft board."""
+    _get_owned_league(db, league_id, current_user.id)
+    season = season or _latest_draft_market_season(db)
+    if season is None:
+        raise HTTPException(status_code=400, detail="No draft market data imported")
+    pick = (
+        db.query(LeagueDraftPick)
+        .filter(LeagueDraftPick.league_id == league_id, LeagueDraftPick.season == season)
+        .order_by(LeagueDraftPick.pick_num.desc(), LeagueDraftPick.id.desc())
+        .first()
+    )
+    if pick is None:
+        return {"ok": True, "deleted": None}
+    deleted = _draft_pick_to_response(pick).model_dump()
+    if pick.fantasy_team_name:
+        roster_player = (
+            db.query(LeagueRosterPlayer)
+            .filter(
+                LeagueRosterPlayer.league_id == league_id,
+                LeagueRosterPlayer.season == season,
+                LeagueRosterPlayer.fantasy_team_name == pick.fantasy_team_name,
+                LeagueRosterPlayer.source_player_name == pick.source_player_name,
+            )
+            .first()
+        )
+        if roster_player is not None:
+            db.delete(roster_player)
+    db.delete(pick)
+    db.commit()
+    return {"ok": True, "deleted": deleted}
 
 
 @app.post("/integrations/espn/leagues")

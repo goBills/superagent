@@ -393,6 +393,37 @@ def find_draft_targets(
         )
 
 
+def get_available_targets(
+    league_id: int,
+    position: str | None = None,
+    min_effective_rank: float | None = None,
+    max_effective_rank: float | None = None,
+    min_adp: float | None = None,
+    max_adp: float | None = None,
+    min_value_delta: float | None = None,
+    bye_week_filters: list[int] | None = None,
+    season: int | None = None,
+    bye_week_season: int | None = None,
+    source: str | None = None,
+    limit: int = 20,
+) -> dict:
+    """Return available draft targets after excluding the recorded league draft board."""
+    return find_draft_targets(
+        league_id=league_id,
+        position=position,
+        min_effective_rank=min_effective_rank,
+        max_effective_rank=max_effective_rank,
+        min_adp=min_adp,
+        max_adp=max_adp,
+        min_value_delta=min_value_delta,
+        bye_week_filters=bye_week_filters,
+        season=season,
+        bye_week_season=bye_week_season,
+        source=source,
+        limit=limit,
+    )
+
+
 def compare_draft_options(
     league_id: int,
     player_names: list[str],

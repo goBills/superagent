@@ -27,6 +27,7 @@ from superagent.tools import (
 )
 from superagent.draft_tools import (
     find_draft_targets,
+    get_available_targets,
     compare_draft_options,
     get_draft_context,
     get_bye_week_analysis,
@@ -471,6 +472,35 @@ TOOL_SCHEMAS = [
         }
     },
     {
+        "name": "get_available_targets",
+        "description": "Find available draft targets after excluding all players already recorded on the league draft board.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "league_id": {"type": "integer", "description": "Stored Superagent league id"},
+                "position": {"type": "string", "description": "Optional position filter: QB, RB, WR, TE, K, DST"},
+                "min_effective_rank": {"type": "number", "description": "Optional minimum Effective Rank to include."},
+                "max_effective_rank": {"type": "number", "description": "Optional maximum Effective Rank to include."},
+                "min_adp": {"type": "number", "description": "Backward-compatible alias for min_effective_rank."},
+                "max_adp": {"type": "number", "description": "Backward-compatible alias for max_effective_rank."},
+                "min_value_delta": {"type": "number", "description": "Optional minimum value delta"},
+                "bye_week_filters": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "description": "Optional bye weeks to exclude"
+                },
+                "season": {"type": "integer", "description": "Draft market season"},
+                "bye_week_season": {
+                    "type": "integer",
+                    "description": "Season to use for bye weeks. Defaults to newest official bye-week data when available."
+                },
+                "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"},
+                "limit": {"type": "integer", "description": "Maximum rows to return"}
+            },
+            "required": ["league_id"]
+        }
+    },
+    {
         "name": "get_draft_context",
         "description": "Summarize a stored league's draft settings, recent picks, drafted count, and top available values.",
         "input_schema": {
@@ -634,6 +664,7 @@ TOOL_DISPATCH: Dict[str, Callable] = {
     "get_fantasy_schedule_context": get_fantasy_schedule_context,
     "compare_fantasy_context": compare_fantasy_context,
     "find_draft_targets": find_draft_targets,
+    "get_available_targets": get_available_targets,
     "compare_draft_options": compare_draft_options,
     "get_draft_context": get_draft_context,
     "get_bye_week_analysis": get_bye_week_analysis,

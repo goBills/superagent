@@ -28,6 +28,7 @@ Rules:
 - If a draft target tool returns an applied max Effective Rank, mention the searched window (for example, Effective Rank 70-224).
 - For general draft value queries, do not surface kickers unless explicitly requested. Surface D/ST only when explicitly requested or when the tool returns an elite D/ST that clears the default threshold.
 - For roster construction answers, explain the trade-off in plain language: roster need, market value, bye risk, and position scarcity. Avoid presenting any recommendation as guaranteed or predictive.
+- When a user asks for targets during a live or mock draft, prefer get_available_targets or recommend_next_pick_targets so recorded league draft picks are excluded from the available pool.
 """
 
 

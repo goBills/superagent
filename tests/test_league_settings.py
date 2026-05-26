@@ -13,8 +13,9 @@ from sqlalchemy.orm import sessionmaker
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from superagent.api import app  # noqa: E402
+from superagent.db import SessionLocal  # noqa: E402
 from superagent.draft_value import adjust_draft_value  # noqa: E402
-from superagent.models import Base, DraftPlayerMarket, LeagueSettings  # noqa: E402
+from superagent.models import Base, DraftPlayerMarket, LeagueDraftPick, LeagueRosterPlayer, LeagueSettings  # noqa: E402
 
 
 client = TestClient(app)
@@ -157,6 +158,64 @@ def test_multiple_leagues_per_user():
     assert second.status_code == 200
     names = {league["league_name"] for league in response.json()}
     assert {"Home", "Work"}.issubset(names)
+
+
+def test_record_and_list_live_draft_pick():
+    headers = auth_headers("draft-board")
+    created = client.post("/leagues", json=league_payload(), headers=headers)
+    league_id = created.json()["id"]
+
+    recorded = client.post(
+        f"/leagues/{league_id}/draft/picks",
+        json={"pick_number": 12, "team_name": "Team 4", "player_name": "Cedric Tillman", "season": 2025},
+        headers=headers,
+    )
+    listed = client.get(f"/leagues/{league_id}/draft/picks?season=2025", headers=headers)
+
+    assert recorded.status_code == 200
+    assert recorded.json()["pick_num"] == 12
+    assert recorded.json()["round_num"] == 1
+    assert recorded.json()["fantasy_team_name"] == "Team 4"
+    assert listed.status_code == 200
+    assert listed.json()["picks"][0]["source_player_name"] == "Cedric Tillman"
+
+
+def test_record_my_pick_adds_roster_player_and_undo_removes_pick():
+    headers = auth_headers("my-pick")
+    created = client.post("/leagues", json=league_payload(), headers=headers)
+    league_id = created.json()["id"]
+
+    response = client.post(
+        f"/leagues/{league_id}/draft/my-pick",
+        json={"pick_number": 13, "team_name": "Rob", "player_name": "James Cook", "season": 2025},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    with SessionLocal() as db:
+        roster = (
+            db.query(LeagueRosterPlayer)
+            .filter(
+                LeagueRosterPlayer.league_id == league_id,
+                LeagueRosterPlayer.season == 2025,
+                LeagueRosterPlayer.fantasy_team_name == "Rob",
+                LeagueRosterPlayer.source_player_name == "James Cook",
+            )
+            .first()
+        )
+        assert roster is not None
+
+    undo = client.delete(f"/leagues/{league_id}/draft/picks/last?season=2025", headers=headers)
+
+    assert undo.status_code == 200
+    assert undo.json()["deleted"]["pick_num"] == 13
+    with SessionLocal() as db:
+        pick = (
+            db.query(LeagueDraftPick)
+            .filter(LeagueDraftPick.league_id == league_id, LeagueDraftPick.season == 2025)
+            .first()
+        )
+        assert pick is None
 
 
 def test_qb_value_shifts_in_superflex_and_six_point_pass_td():
