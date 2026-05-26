@@ -113,6 +113,8 @@ class AuthResponse(BaseModel):
     token: Optional[str] = None
     user_id: Optional[int] = None
     email: Optional[str] = None
+    league_id: Optional[int] = None
+    is_guest: bool = False
     error: Optional[str] = None
 
 
@@ -706,6 +708,31 @@ def health_check():
     }
 
 
+def _ensure_user_default_league(db: Session, user: User) -> int:
+    """Return the user's first league id, creating a default PPR league if they have none.
+
+    So every signed-in user (incl. fresh signups and guests) lands in a working
+    cockpit with their OWN league — no collisions on another user's draft board.
+    """
+    league = (
+        db.query(League)
+        .filter(League.user_id == user.id)
+        .order_by(League.id.asc())
+        .first()
+    )
+    if league is not None:
+        return league.id
+    league = League(user_id=user.id, league_name="My League", league_type="snake")
+    db.add(league)
+    db.flush()
+    settings = LeagueSettings(league_id=league.id)
+    _apply_settings(settings, LeagueSettingsPayload())
+    db.add(settings)
+    db.commit()
+    db.refresh(league)
+    return league.id
+
+
 @app.post("/auth/register", response_model=AuthResponse)
 def register(request: AuthRequest, db: Session = Depends(get_db)) -> AuthResponse:
     """Register a new user and return a JWT."""
@@ -718,12 +745,14 @@ def register(request: AuthRequest, db: Session = Depends(get_db)) -> AuthRespons
     db.add(user)
     db.commit()
     db.refresh(user)
+    league_id = _ensure_user_default_league(db, user)
 
     return AuthResponse(
         ok=True,
         token=create_token(user.id),
         user_id=user.id,
         email=user.email,
+        league_id=league_id,
     )
 
 
@@ -737,12 +766,38 @@ def login(request: AuthRequest, db: Session = Depends(get_db)) -> AuthResponse:
 
     user.last_active = utc_now()
     db.commit()
+    league_id = _ensure_user_default_league(db, user)
 
     return AuthResponse(
         ok=True,
         token=create_token(user.id),
         user_id=user.id,
         email=user.email,
+        league_id=league_id,
+    )
+
+
+@app.post("/auth/guest", response_model=AuthResponse)
+def guest(db: Session = Depends(get_db)) -> AuthResponse:
+    """Create an anonymous guest account (no signup) with its own default league.
+
+    Lets shared-link testers jump straight into a working cockpit with zero
+    friction; their picks/roster are isolated to their own throwaway league.
+    """
+    email = f"guest-{uuid.uuid4().hex}@guest.superagent"
+    user = User(email=email, password_hash=hash_password(uuid.uuid4().hex))
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    league_id = _ensure_user_default_league(db, user)
+
+    return AuthResponse(
+        ok=True,
+        token=create_token(user.id),
+        user_id=user.id,
+        email=user.email,
+        league_id=league_id,
+        is_guest=True,
     )
 
 

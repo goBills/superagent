@@ -191,6 +191,33 @@
             gap: 10px;
         }
 
+        .guest-cta {
+            width: 100%;
+            padding: 14px 18px;
+            font-size: 15px;
+            font-weight: 800;
+            border-radius: var(--radius-sm);
+            background: linear-gradient(180deg, #16a34a, #15803d);
+            box-shadow: 0 2px 10px rgba(22, 163, 74, 0.28);
+        }
+
+        .auth-divider {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 16px 0 12px;
+            color: #94a3b8;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .auth-divider::before,
+        .auth-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
         .auth-toggle {
             margin-top: 16px;
             font-size: 12px;
@@ -1532,8 +1559,10 @@
         <div class="auth-area" id="authArea">
             <div class="auth-card">
                 <div id="loginScreen">
-                    <h2>Sign in</h2>
-                    <p>Save conversations, keep recent context, and use the web chat with rate-limited access.</p>
+                    <h2>⚡ Jump into your draft war room</h2>
+                    <p>Testing it out? One tap — no signup, your own scratch board.</p>
+                    <button class="guest-cta" onclick="guestLogin()" type="button">🏈 Start as guest</button>
+                    <div class="auth-divider"><span>or sign in to save your work</span></div>
                     <div id="loginError" class="auth-error"></div>
                     <div class="auth-form">
                         <input type="email" id="loginEmail" placeholder="Email">
@@ -2560,17 +2589,25 @@
             return data;
         }
 
+        function applyAuthSuccess(data) {
+            authToken = data.token;
+            localStorage.setItem('superagent_token', authToken);
+            // Land the user in their OWN league so the cockpit works (no collisions).
+            if (data.league_id) {
+                draftLeagueId.value = String(data.league_id);
+                saveDraftRoomState();
+            }
+            resetSessionId();
+            clearChat();
+            updateAuthView();
+        }
+
         async function login() {
             clearAuthErrors();
             try {
                 const email = document.getElementById('loginEmail').value.trim();
                 const password = document.getElementById('loginPassword').value;
-                const data = await authenticate('/auth/login', email, password);
-                authToken = data.token;
-                localStorage.setItem('superagent_token', authToken);
-                resetSessionId();
-                clearChat();
-                updateAuthView();
+                applyAuthSuccess(await authenticate('/auth/login', email, password));
             } catch (error) {
                 showAuthError('loginError', error.message);
             }
@@ -2581,14 +2618,26 @@
             try {
                 const email = document.getElementById('registerEmail').value.trim();
                 const password = document.getElementById('registerPassword').value;
-                const data = await authenticate('/auth/register', email, password);
-                authToken = data.token;
-                localStorage.setItem('superagent_token', authToken);
-                resetSessionId();
-                clearChat();
-                updateAuthView();
+                applyAuthSuccess(await authenticate('/auth/register', email, password));
             } catch (error) {
                 showAuthError('registerError', error.message);
+            }
+        }
+
+        async function guestLogin() {
+            clearAuthErrors();
+            try {
+                const response = await fetch('/auth/guest', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                });
+                const data = await response.json();
+                if (!response.ok || !data.ok) {
+                    throw new Error(data.detail || data.error || 'Could not start a guest session');
+                }
+                applyAuthSuccess(data);
+            } catch (error) {
+                showAuthError('loginError', error.message);
             }
         }
 

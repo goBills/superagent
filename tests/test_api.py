@@ -100,6 +100,28 @@ def setup_draft_league_api():
         return headers, league.id, season, players
 
 
+def test_register_creates_default_league():
+    email = f"newuser-{uuid.uuid4().hex}@example.com"
+    resp = client.post("/auth/register", json={"email": email, "password": "password123"})
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["league_id"] is not None
+    with SessionLocal() as db:
+        user = db.query(User).filter(User.email == email).first()
+        leagues = db.query(League).filter(League.user_id == user.id).all()
+        assert len(leagues) >= 1
+
+
+def test_guest_creates_user_and_league():
+    resp = client.post("/auth/guest")
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["ok"] is True and data["token"]
+    assert data["league_id"] is not None
+    assert data["is_guest"] is True
+    assert data["email"].startswith("guest-")
+
+
 def test_bulk_draft_picks_records_board_and_roster():
     headers, league_id, season, players = setup_draft_league_api()
     payload = {
