@@ -1431,18 +1431,6 @@
         }
         .settings-toggle input { width: auto; }
 
-        .pool-warning {
-            display: none;
-            font-size: 11px;
-            font-weight: 700;
-            color: #9a3412;
-            background: #ffedd5;
-            border: 1px solid #fdba74;
-            border-radius: 999px;
-            padding: 3px 10px;
-        }
-        .pool-warning.show { display: inline-block; }
-
         .secondary-btn {
             background: #f0f0f0;
             color: #333;
@@ -1552,7 +1540,7 @@
             <div class="cockpit-head" id="cockpitHead">
                 <div class="cockpit-head-titles">
                     <div class="cockpit-title">🏈 Draft Cockpit</div>
-                    <div class="cockpit-subtitle">Track picks, scan tiers, and manage your roster in one place.<span class="draft-sheet-meta" id="draftSheetMeta"></span><span class="pool-warning" id="poolWarning"></span></div>
+                    <div class="cockpit-subtitle">Track picks, scan tiers, and manage your roster in one place.<span class="draft-sheet-meta" id="draftSheetMeta"></span></div>
                 </div>
                 <div class="cockpit-actions">
                     <label class="cockpit-field">
@@ -2093,27 +2081,6 @@
             const summary = (data && data.summary) || {};
             const meta = document.getElementById('draftSheetMeta');
             if (meta) meta.textContent = `${summary.available_count ?? rows.length} available · ${summary.drafted_count ?? 0} drafted`;
-            // Pool-low warning. Prefer the backend's explicit league-size math when present
-            // (total_draft_picks / remaining_picks / pool_shortfall — Codex's richer summary);
-            // fall back to deriving it from draftable_rank_limit so it works today either way.
-            const warn = document.getElementById('poolWarning');
-            if (warn) {
-                const available = summary.available_count ?? 0;
-                const remaining = (summary.remaining_picks != null)
-                    ? summary.remaining_picks
-                    : (typeof summary.draftable_rank_limit === 'number'
-                        ? summary.draftable_rank_limit - (summary.drafted_count ?? 0)
-                        : null);
-                const shortfall = (summary.pool_shortfall != null)
-                    ? summary.pool_shortfall
-                    : (remaining != null ? Math.max(0, remaining - available) : 0);
-                if (currentSheetTab !== 'MINE' && shortfall > 0) {
-                    warn.textContent = `⚠️ Ranked pool short by ${shortfall} — ${available} players left for ${remaining} remaining picks`;
-                    warn.classList.add('show');
-                } else {
-                    warn.classList.remove('show');
-                }
-            }
             if (!rows.length) {
                 body.innerHTML = '<div class="draft-sheet-empty">No players to show for this tab.</div>';
                 return;
