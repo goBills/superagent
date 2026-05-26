@@ -1142,7 +1142,7 @@
     </div>
 
     <script>
-        const REQUEST_TIMEOUT_MS = 30000;
+        const REQUEST_TIMEOUT_MS = 60000;
         const chatArea = document.getElementById('chatArea');
         const questionInput = document.getElementById('questionInput');
         const inputArea = document.querySelector('.input-area');
@@ -1958,7 +1958,7 @@
 
                 let errorMsg = error.message;
                 if (error.name === 'AbortError') {
-                    errorMsg = 'Request timed out after 30 seconds. The server may be slow or offline.';
+                    errorMsg = 'Request timed out after 60 seconds. Complex draft questions (full board scans) can be slow on the free tier — try again, or ask about fewer players.';
                 }
                 addMessage('error', `${errorMsg}`);
             } finally {

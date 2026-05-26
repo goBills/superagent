@@ -29,6 +29,9 @@ class TestDetectsRealLeakedPhrases:
     def test_injury_shortened(self):
         assert detect_unsupported_narrative("Coming off an injury-shortened season.")
 
+    def test_elite_talent(self):
+        assert detect_unsupported_narrative("Getting elite WR talent at pick 31.")
+
     def test_returns_the_snippets(self):
         hits = detect_unsupported_narrative("Hall of Fame talent with breakout upside.")
         assert any("hall of fame" in h.lower() for h in hits)

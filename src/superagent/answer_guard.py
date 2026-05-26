@@ -20,6 +20,7 @@ import re
 _NARRATIVE_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     # Hype superlatives
     ("hall of fame", re.compile(r"hall of fame", re.IGNORECASE)),
+    ("elite", re.compile(r"\belite\b", re.IGNORECASE)),
     ("must-grab", re.compile(r"must[-\s]grab", re.IGNORECASE)),
     ("cant pass up", re.compile(r"can(?:'|’)?t (?:pass up|miss)", re.IGNORECASE)),
     # Career-arc language
