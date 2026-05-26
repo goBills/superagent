@@ -810,8 +810,12 @@
             vertical-align: middle;
         }
 
+        table.sheet-table tbody tr {
+            transition: background-color 0.12s ease;
+        }
+
         table.sheet-table tbody tr:hover {
-            background: #f8fbff;
+            background-color: #eaf1ff;
         }
 
         .sheet-player {
@@ -831,17 +835,30 @@
             background: #e2e8f0;
             color: #334155;
         }
+        /* Position-colored pills (fantasy-sports convention) */
+        .pos-QB { background: #fde2e4; color: #be123c; }
+        .pos-RB { background: #d7f5e3; color: #15803d; }
+        .pos-WR { background: #dbe7ff; color: #1e40af; }
+        .pos-TE { background: #ffe6cc; color: #c2410c; }
+        .pos-K  { background: #ede9fe; color: #6d28d9; }
+        .pos-DST, .pos-DEF { background: #e2e8f0; color: #334155; }
 
         .sheet-delta-pos { color: #15803d; font-weight: 700; }
         .sheet-delta-neg { color: #b91c1c; }
 
-        /* Tier row tints */
+        /* Tier row gradients — left-weighted so the data columns stay readable.
+           Gradient is a background-image so the hover background-color shows through. */
+        tr.tier-1 { background-image: linear-gradient(90deg, rgba(37,99,235,0.18), rgba(37,99,235,0.05) 45%, rgba(37,99,235,0) 75%); }
+        tr.tier-2 { background-image: linear-gradient(90deg, rgba(22,163,74,0.17), rgba(22,163,74,0.05) 45%, rgba(22,163,74,0) 75%); }
+        tr.tier-3 { background-image: linear-gradient(90deg, rgba(217,160,23,0.20), rgba(217,160,23,0.06) 45%, rgba(217,160,23,0) 75%); }
+        tr.tier-4 { background-image: linear-gradient(90deg, rgba(100,116,139,0.15), rgba(100,116,139,0.04) 45%, rgba(100,116,139,0) 75%); }
+        tr.tier-5 { background-image: linear-gradient(90deg, rgba(139,92,246,0.14), rgba(139,92,246,0.03) 45%, rgba(139,92,246,0) 75%); }
         tr.tier-1 td:first-child { box-shadow: inset 3px 0 0 #1d4ed8; }
         tr.tier-2 td:first-child { box-shadow: inset 3px 0 0 #16a34a; }
         tr.tier-3 td:first-child { box-shadow: inset 3px 0 0 #d4a017; }
         tr.tier-4 td:first-child { box-shadow: inset 3px 0 0 #94a3b8; }
-        tr.tier-5 td:first-child { box-shadow: inset 3px 0 0 #cbd5e1; }
-        tr.sheet-drafted { opacity: 0.45; }
+        tr.tier-5 td:first-child { box-shadow: inset 3px 0 0 #a78bfa; }
+        tr.sheet-drafted { opacity: 0.4; }
         tr.sheet-drafted .sheet-player { text-decoration: line-through; }
 
         .sheet-badge {
@@ -871,10 +888,10 @@
             color: #334155;
             cursor: pointer;
         }
-        .sheet-act:hover { background: #eef2f7; }
-        .sheet-act.mine { border-color: #bfe6cf; color: #15803d; }
-        .sheet-act.they { border-color: #d0d7e2; }
-        .sheet-act.why { border-color: #cfe0f7; color: #1557b0; }
+        .sheet-act:hover { filter: brightness(0.96); }
+        .sheet-act.mine { background: #dcfce7; border-color: #a7e3bf; color: #15803d; }
+        .sheet-act.they { background: #eef2f7; border-color: #d0d7e2; color: #475569; }
+        .sheet-act.why { background: #dbeafe; border-color: #b8d2f8; color: #1557b0; }
 
         /* Collapsible section headers (Draft Room, Examples) */
         .collapse-header {
@@ -1861,7 +1878,7 @@
                 return `<tr class="${tierClass(r.tier)}${drafted}">
                     <td class="sheet-num">${i + 1}</td>
                     <td class="sheet-player">${escapeHtml(r.player_name)}</td>
-                    <td><span class="sheet-pos-pill">${escapeHtml(r.position || '')}</span></td>
+                    <td><span class="sheet-pos-pill pos-${escapeHtml(r.position || '')}">${escapeHtml(r.position || '')}</span></td>
                     <td>${escapeHtml(team)}</td>
                     <td class="sheet-num">${r.bye_week ?? '—'}</td>
                     <td>${escapeHtml(r.tier || '')}</td>
