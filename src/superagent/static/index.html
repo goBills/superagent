@@ -492,6 +492,185 @@
             padding: 14px 18px 24px;
         }
 
+        .draft-sheet-launcher {
+            background: #f3fff7;
+            border-color: #bfe6cf;
+            color: #15803d;
+        }
+
+        .draft-sheet-launcher:hover {
+            background: #e6fbee;
+        }
+
+        /* Wide draft-sheet cockpit drawer */
+        .draft-sheet-drawer {
+            position: fixed;
+            top: 0;
+            right: 0;
+            height: 100vh;
+            height: 100dvh;
+            width: min(1100px, 98vw);
+            background: #ffffff;
+            box-shadow: -12px 0 34px rgba(15, 23, 42, 0.20);
+            transform: translateX(102%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 950;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .draft-sheet-drawer.open {
+            transform: translateX(0);
+        }
+
+        .draft-sheet-meta {
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+
+        .draft-sheet-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .draft-sheet-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 10px 14px;
+            border-bottom: 1px solid #e8eef7;
+            background: #fafcff;
+            flex-shrink: 0;
+        }
+
+        .sheet-tab {
+            padding: 6px 12px;
+            background: #eef2f7;
+            color: #475569;
+            border: 1px solid #dbe3ef;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .sheet-tab:hover {
+            background: #e2e8f0;
+        }
+
+        .sheet-tab.active {
+            background: #1a73e8;
+            color: #fff;
+            border-color: #1a73e8;
+        }
+
+        .draft-sheet-body {
+            flex: 1;
+            overflow: auto;
+            padding: 0;
+        }
+
+        .draft-sheet-empty {
+            color: #94a3b8;
+            font-size: 13px;
+            padding: 24px;
+            text-align: center;
+        }
+
+        table.sheet-table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 12px;
+        }
+
+        table.sheet-table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #f1f5f9;
+            color: #334155;
+            font-weight: 700;
+            text-align: left;
+            padding: 8px 8px;
+            white-space: nowrap;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        table.sheet-table td {
+            padding: 5px 8px;
+            border-bottom: 1px solid #f1f5f9;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+
+        table.sheet-table tbody tr:hover {
+            background: #f8fbff;
+        }
+
+        .sheet-player {
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .sheet-num { text-align: right; font-variant-numeric: tabular-nums; }
+        .sheet-pos-pill {
+            display: inline-block;
+            min-width: 26px;
+            text-align: center;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 800;
+            background: #e2e8f0;
+            color: #334155;
+        }
+
+        .sheet-delta-pos { color: #15803d; font-weight: 700; }
+        .sheet-delta-neg { color: #b91c1c; }
+
+        /* Tier row tints */
+        tr.tier-1 td:first-child { box-shadow: inset 3px 0 0 #1d4ed8; }
+        tr.tier-2 td:first-child { box-shadow: inset 3px 0 0 #16a34a; }
+        tr.tier-3 td:first-child { box-shadow: inset 3px 0 0 #d4a017; }
+        tr.tier-4 td:first-child { box-shadow: inset 3px 0 0 #94a3b8; }
+        tr.tier-5 td:first-child { box-shadow: inset 3px 0 0 #cbd5e1; }
+        tr.sheet-drafted { opacity: 0.45; }
+        tr.sheet-drafted .sheet-player { text-decoration: line-through; }
+
+        .sheet-badge {
+            display: inline-block;
+            padding: 1px 6px;
+            margin: 1px 2px 1px 0;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .badge-best { background: #fef3c7; color: #92400e; }
+        .badge-value { background: #dcfce7; color: #166534; }
+        .badge-byerisk { background: #ffedd5; color: #9a3412; }
+        .badge-teamchg { background: #dbeafe; color: #1e40af; }
+        .badge-injury { background: #fee2e2; color: #991b1b; }
+        .badge-missing, .badge-review { background: #e5e7eb; color: #4b5563; }
+
+        .sheet-actions { display: flex; gap: 4px; }
+        .sheet-act {
+            padding: 3px 7px;
+            font-size: 10px;
+            font-weight: 700;
+            border-radius: 5px;
+            border: 1px solid #d0d7e2;
+            background: #f8fafc;
+            color: #334155;
+            cursor: pointer;
+        }
+        .sheet-act:hover { background: #eef2f7; }
+        .sheet-act.mine { border-color: #bfe6cf; color: #15803d; }
+        .sheet-act.they { border-color: #d0d7e2; }
+        .sheet-act.why { border-color: #cfe0f7; color: #1557b0; }
+
         /* Collapsible section headers (Draft Room, Examples) */
         .collapse-header {
             display: flex;
@@ -1036,6 +1215,11 @@
                 <span class="draft-launcher-hint" id="draftLauncherHint">paste your board &amp; track picks ▸</span>
             </button>
 
+            <button class="draft-launcher draft-sheet-launcher" id="draftSheetLauncher" onclick="openDraftSheet()" type="button">
+                <span class="draft-launcher-left">📋 <span>Draft Sheet</span></span>
+                <span class="draft-launcher-hint">best available, live ▸</span>
+            </button>
+
             <div class="draft-backdrop" id="draftBackdrop" onclick="closeDraftDrawer()"></div>
             <aside class="draft-drawer" id="draftDrawer" aria-hidden="true">
                 <div class="draft-drawer-header">
@@ -1082,6 +1266,31 @@
                         </div>
                         <button class="draft-room-clear" onclick="clearDraftRoom()" type="button">Clear draft room</button>
                     </div>
+                </div>
+            </aside>
+
+            <div class="draft-backdrop" id="draftSheetBackdrop" onclick="closeDraftSheet()"></div>
+            <aside class="draft-sheet-drawer" id="draftSheetDrawer" aria-hidden="true">
+                <div class="draft-drawer-header">
+                    <span class="draft-drawer-title">📋 Draft Sheet
+                        <span class="draft-sheet-meta" id="draftSheetMeta"></span>
+                    </span>
+                    <div class="draft-sheet-header-actions">
+                        <button class="example-btn" onclick="loadDraftSheet()" type="button">Refresh</button>
+                        <button class="draft-drawer-close" onclick="closeDraftSheet()" type="button" aria-label="Close draft sheet">&times;</button>
+                    </div>
+                </div>
+                <div class="draft-sheet-tabs" id="draftSheetTabs">
+                    <button class="sheet-tab active" data-pos="ALL" onclick="setSheetTab('ALL', this)" type="button">All</button>
+                    <button class="sheet-tab" data-pos="QB" onclick="setSheetTab('QB', this)" type="button">QB</button>
+                    <button class="sheet-tab" data-pos="RB" onclick="setSheetTab('RB', this)" type="button">RB</button>
+                    <button class="sheet-tab" data-pos="WR" onclick="setSheetTab('WR', this)" type="button">WR</button>
+                    <button class="sheet-tab" data-pos="TE" onclick="setSheetTab('TE', this)" type="button">TE</button>
+                    <button class="sheet-tab" data-pos="TARGETS" onclick="setSheetTab('TARGETS', this)" type="button">Targets</button>
+                    <button class="sheet-tab" data-pos="MINE" onclick="setSheetTab('MINE', this)" type="button">My Roster</button>
+                </div>
+                <div class="draft-sheet-body" id="draftSheetBody">
+                    <div class="draft-sheet-empty">Open to load the board.</div>
                 </div>
             </aside>
 
@@ -1383,6 +1592,172 @@
             document.body.style.overflow = '';
         }
 
+        // ---- Draft Sheet (live cockpit table) ----
+        let currentSheetTab = 'ALL';
+
+        function draftSheetIsOpen() {
+            const d = document.getElementById('draftSheetDrawer');
+            return d && d.classList.contains('open');
+        }
+
+        function openDraftSheet() {
+            if (!authToken) { showAuthError('loginError', 'Please sign in to use the draft sheet.'); return; }
+            const drawer = document.getElementById('draftSheetDrawer');
+            drawer.classList.add('open');
+            document.getElementById('draftSheetBackdrop').classList.add('open');
+            drawer.setAttribute('aria-hidden', 'false');
+            document.body.style.overflow = 'hidden';
+            loadDraftSheet();
+        }
+
+        function closeDraftSheet() {
+            const drawer = document.getElementById('draftSheetDrawer');
+            drawer.classList.remove('open');
+            document.getElementById('draftSheetBackdrop').classList.remove('open');
+            drawer.setAttribute('aria-hidden', 'true');
+            document.body.style.overflow = '';
+        }
+
+        function setSheetTab(pos, btn) {
+            currentSheetTab = pos;
+            document.querySelectorAll('#draftSheetTabs .sheet-tab').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            loadDraftSheet();
+        }
+
+        async function loadDraftSheet() {
+            const body = document.getElementById('draftSheetBody');
+            if (!authToken || !body) return;
+            const leagueId = draftLeagueIdValue();
+            const params = new URLSearchParams({ limit: '200' });
+            if (['QB', 'RB', 'WR', 'TE'].includes(currentSheetTab)) params.set('position', currentSheetTab);
+            if (currentSheetTab === 'TARGETS') params.set('targets', 'true');
+            if (currentSheetTab === 'MINE') params.set('roster', 'mine');
+            body.innerHTML = '<div class="draft-sheet-empty">Loading…</div>';
+            try {
+                const response = await fetch(`/leagues/${leagueId}/draft/sheet?${params.toString()}`, { headers: authHeaders() });
+                if (!response.ok) {
+                    body.innerHTML = '<div class="draft-sheet-empty">Draft sheet unavailable. (Is the league set up and a board loaded?)</div>';
+                    return;
+                }
+                renderSheetTable(await response.json());
+            } catch (error) {
+                body.innerHTML = '<div class="draft-sheet-empty">Draft sheet unavailable.</div>';
+            }
+        }
+
+        const BADGE_CLASS = {
+            'Best Available': 'badge-best', 'Best Fit': 'badge-best', 'Value': 'badge-value',
+            'Tier Cliff': 'badge-byerisk', 'Bye Risk': 'badge-byerisk', 'Team Changed': 'badge-teamchg',
+            'Injury': 'badge-injury', 'Current Context Missing': 'badge-missing', 'Needs Review': 'badge-review',
+        };
+
+        function sheetBadgeHtml(badges) {
+            return (badges || []).map(b => `<span class="sheet-badge ${BADGE_CLASS[b] || 'badge-missing'}">${escapeHtml(b)}</span>`).join('');
+        }
+
+        function tierClass(tier) {
+            const m = /([1-5])/.exec(tier || '');
+            return m ? `tier-${m[1]}` : '';
+        }
+
+        function fmtDelta(v) {
+            if (v === null || v === undefined) return '—';
+            const sign = v > 0 ? '+' : '';
+            const cls = v > 0 ? 'sheet-delta-pos' : (v < 0 ? 'sheet-delta-neg' : '');
+            return `<span class="${cls}">${sign}${v}</span>`;
+        }
+
+        function renderSheetTable(data) {
+            const body = document.getElementById('draftSheetBody');
+            let rows = (data && data.rows) || [];
+            // Client-side fallbacks for tabs the endpoint may not filter.
+            if (currentSheetTab === 'TARGETS') {
+                rows = rows.filter(r => (r.badges || []).some(b => ['Best Available', 'Best Fit', 'Value'].includes(b)));
+            } else if (currentSheetTab === 'MINE') {
+                rows = rows.filter(r => r.is_mine);
+            }
+            const summary = (data && data.summary) || {};
+            const meta = document.getElementById('draftSheetMeta');
+            if (meta) meta.textContent = `${summary.available_count ?? rows.length} available · ${summary.drafted_count ?? 0} drafted`;
+            if (!rows.length) {
+                body.innerHTML = '<div class="draft-sheet-empty">No players to show for this tab.</div>';
+                return;
+            }
+            const head = `<thead><tr>
+                <th>#</th><th>Player</th><th>Pos</th><th>Team</th><th>Bye</th><th>Tier</th>
+                <th class="sheet-num">Eff Rk</th><th>Src</th><th class="sheet-num">ECR</th>
+                <th class="sheet-num">Val Δ</th><th class="sheet-num">Age</th><th class="sheet-num">Exp</th>
+                <th>Inj</th><th>Flags</th><th>Actions</th></tr></thead>`;
+            const bodyRows = rows.map((r, i) => {
+                const team = r.current_context_available ? (r.current_team || 'FA') : (r.team || '—');
+                const inj = r.injury_status ? `<span class="sheet-badge badge-injury">${escapeHtml(r.injury_status)}</span>` : '—';
+                const drafted = r.is_drafted ? ' sheet-drafted' : '';
+                const nm = escapeHtml(r.player_name).replace(/'/g, "\\'");
+                return `<tr class="${tierClass(r.tier)}${drafted}">
+                    <td class="sheet-num">${i + 1}</td>
+                    <td class="sheet-player">${escapeHtml(r.player_name)}</td>
+                    <td><span class="sheet-pos-pill">${escapeHtml(r.position || '')}</span></td>
+                    <td>${escapeHtml(team)}</td>
+                    <td class="sheet-num">${r.bye_week ?? '—'}</td>
+                    <td>${escapeHtml(r.tier || '')}</td>
+                    <td class="sheet-num">${r.effective_rank ?? '—'}</td>
+                    <td>${escapeHtml(r.rank_source || '')}</td>
+                    <td class="sheet-num">${r.ecr ?? '—'}</td>
+                    <td class="sheet-num">${fmtDelta(r.value_delta)}</td>
+                    <td class="sheet-num">${r.age ?? '—'}</td>
+                    <td class="sheet-num">${r.years_exp ?? '—'}</td>
+                    <td>${inj}</td>
+                    <td>${sheetBadgeHtml(r.badges)}</td>
+                    <td><div class="sheet-actions">
+                        <button class="sheet-act they" onclick="sheetRecordPick('${nm}', false)" type="button" title="Another team drafted">They</button>
+                        <button class="sheet-act mine" onclick="sheetRecordPick('${nm}', true)" type="button" title="I drafted">Mine</button>
+                        <button class="sheet-act why" onclick="sheetAskWhy('${nm}')" type="button" title="Ask the agent why">Why</button>
+                    </div></td>
+                </tr>`;
+            }).join('');
+            body.innerHTML = `<table class="sheet-table">${head}<tbody>${bodyRows}</tbody></table>`;
+        }
+
+        async function sheetRecordPick(playerName, isMine) {
+            if (!authToken) return;
+            const leagueId = draftLeagueIdValue();
+            const pickNumber = draftPickNumber() || ((draftBoardPicks ? draftBoardPicks.length : 0) + 1);
+            const payload = {
+                pick_number: pickNumber,
+                team_name: isMine ? 'My Team' : 'Other',
+                player_name: playerName,
+            };
+            try {
+                const path = isMine ? `/leagues/${leagueId}/draft/my-pick` : `/leagues/${leagueId}/draft/picks`;
+                const response = await fetch(path, {
+                    method: 'POST',
+                    headers: authHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify(payload),
+                });
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error(error.detail || 'Could not record pick');
+                }
+                const pick = await response.json();
+                if (isMine) appendToRoster(pick.source_player_name);
+                draftPick.value = String((pick.pick_num || pickNumber) + 1);
+                saveDraftRoomState();
+                await loadDraftBoard();
+                await loadDraftSheet();
+            } catch (error) {
+                addMessage('error', error.message);
+            }
+        }
+
+        function sheetAskWhy(playerName) {
+            const leagueId = draftLeagueIdValue();
+            const pick = draftPick.value.trim();
+            const pickText = pick ? `I am at pick ${pick}. ` : '';
+            closeDraftSheet();
+            askQuestion(`League ID ${leagueId}. ${pickText}Why should I draft ${playerName} here? Use only the tool data.`);
+        }
+
         function toggleExamples() {
             const wrap = document.getElementById('examplesWrap');
             const collapsed = !wrap.classList.contains('collapsed');
@@ -1442,6 +1817,7 @@
                 const data = await response.json();
                 const allPicks = data.picks || [];
                 draftBoardPicks = allPicks;
+                if (draftSheetIsOpen()) loadDraftSheet();  // keep the live sheet in sync
                 const visiblePicks = draftBoardExpanded ? allPicks : allPicks.slice(-5);
                 draftBoardSummary.textContent = `Draft board: ${allPicks.length} pick${allPicks.length === 1 ? '' : 's'}`;
                 updateLauncherHint(allPicks.length);
@@ -2141,7 +2517,7 @@
 
         // Initialize on load
         document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape') closeDraftDrawer();
+            if (event.key === 'Escape') { closeDraftDrawer(); closeDraftSheet(); }
         });
 
         window.addEventListener('load', initializeSession);
