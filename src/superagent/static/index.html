@@ -551,6 +551,30 @@
             background: #e2e8f0;
         }
 
+        /* Live player search — sits at the end of the tab row, narrows the board as you type */
+        .sheet-search {
+            margin-left: auto;
+            width: 150px;
+            padding: 6px 12px;
+            border: 1px solid #dbe3ef;
+            border-radius: 999px;
+            font-size: 12px;
+            font-family: inherit;
+            color: var(--text);
+            background: #fff;
+            transition: width 0.15s ease, box-shadow 0.12s ease;
+        }
+        .sheet-search:focus {
+            outline: none;
+            width: 220px;
+            border-color: var(--brand);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+        }
+        @media (max-width: 640px) {
+            .sheet-search { margin-left: 0; width: 100%; }
+            .sheet-search:focus { width: 100%; }
+        }
+
         .sheet-tab.active {
             background: linear-gradient(180deg, var(--brand) 0%, var(--brand-2) 100%);
             color: #fff;
@@ -1456,6 +1480,17 @@
             50% { opacity: 1; }
         }
 
+        /* Football "working" indicator (replaces the generic spinner while the analyst answers) */
+        .loading-football {
+            display: inline-block;
+            font-size: 15px;
+            animation: football-bounce 0.85s ease-in-out infinite;
+        }
+        @keyframes football-bounce {
+            0%, 100% { transform: translateY(0) rotate(-12deg); }
+            50% { transform: translateY(-6px) rotate(12deg); }
+        }
+
         /* Responsive */
         @media (max-width: 768px) {
             .header-warning {
@@ -1567,6 +1602,7 @@
                         <button class="sheet-tab" data-pos="WR" onclick="setSheetTab('WR', this)" type="button">WR</button>
                         <button class="sheet-tab" data-pos="TE" onclick="setSheetTab('TE', this)" type="button">TE</button>
                         <button class="sheet-tab" data-pos="TARGETS" onclick="setSheetTab('TARGETS', this)" type="button">Targets</button>
+                        <input type="search" id="sheetSearch" class="sheet-search" placeholder="🔍 Search players" oninput="applySheetSearch()" autocomplete="off">
                     </div>
                     <div class="draft-sheet-body cockpit-sheet" id="draftSheetBody">
                         <div class="draft-sheet-empty">Tap <strong>📋 Update Board</strong> to paste your draft board — the best available players show up here, live.</div>
@@ -1931,6 +1967,8 @@
         // ---- Draft Sheet (live cockpit table) ----
         let currentSheetTab = 'ALL';
         let sheetRows = [];
+        let sheetSourceRows = [];   // tab-filtered rows before the live name search
+        let sheetSearchQuery = '';
         let selectedPlayer = null;
 
         // In the cockpit shell the sheet is the always-on canvas (no drawer).
@@ -2070,7 +2108,6 @@
         }
 
         function renderSheetTable(data) {
-            const body = document.getElementById('draftSheetBody');
             let rows = (data && data.rows) || [];
             // Client-side fallbacks for tabs the endpoint may not filter.
             if (currentSheetTab === 'TARGETS') {
@@ -2081,12 +2118,29 @@
             const summary = (data && data.summary) || {};
             const meta = document.getElementById('draftSheetMeta');
             if (meta) meta.textContent = `${summary.available_count ?? rows.length} available · ${summary.drafted_count ?? 0} drafted`;
+            sheetSourceRows = rows;
+            renderSheetRows();
+        }
+
+        // Live name search: narrows the visible board as you type (next to the tabs).
+        function applySheetSearch() {
+            const input = document.getElementById('sheetSearch');
+            sheetSearchQuery = ((input && input.value) || '').trim().toLowerCase();
+            renderSheetRows();
+        }
+
+        function renderSheetRows() {
+            const body = document.getElementById('draftSheetBody');
+            if (!body) return;
+            const q = sheetSearchQuery;
+            let rows = q ? sheetSourceRows.filter(r => (r.player_name || '').toLowerCase().includes(q)) : sheetSourceRows;
+            clearSelection();
             if (!rows.length) {
-                body.innerHTML = '<div class="draft-sheet-empty">No players to show for this tab.</div>';
+                body.innerHTML = `<div class="draft-sheet-empty">${q ? 'No players match “' + escapeHtml(q) + '.”' : 'No players to show for this tab.'}</div>`;
+                sheetRows = [];
                 return;
             }
             sheetRows = rows;
-            clearSelection();
             // Actions live in the selection detail bar now (no far-right column to reach for).
             const head = `<thead><tr>
                 <th>#</th><th>Player</th><th>Pos</th><th>Team</th><th>Bye</th><th>Tier</th>
@@ -2811,8 +2865,10 @@
             questionInput.value = '';
             const apiQuestion = augmentDraftQuestion(question);
 
-            // Show loading indicator
-            const loadingMsg = addMessage('assistant', '<span class="loading"></span> Thinking...', {renderHtml: true});
+            // Show loading indicator — football-themed "working" cue instead of "Thinking…"
+            const SCOUTING_LINES = ['Reading the field…', 'Scouting the board…', 'Checking the tape…', 'Working the angles…', 'Calling the play…', 'Studying the matchup…'];
+            const scoutLine = SCOUTING_LINES[Math.floor(Math.random() * SCOUTING_LINES.length)];
+            const loadingMsg = addMessage('assistant', `<span class="loading-football">🏈</span> ${scoutLine}`, {renderHtml: true});
 
             try {
                 // Create abort controller for timeout
