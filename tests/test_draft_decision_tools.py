@@ -29,6 +29,7 @@ from superagent.models import (  # noqa: E402
     League,
     LeagueDraftPick,
     LeagueSettings,
+    PlayerCurrentContext,
     PlayerSeason,
     User,
 )
@@ -704,6 +705,92 @@ def test_find_draft_targets_current_pick_bounds_out_deep_fallers():
     names = [r["player_name"] for r in bounded["data"]]
     assert "Deep Faller WR" not in names
     assert "Near Pick WR" in names
+
+
+def test_find_draft_targets_uses_current_context_team_over_market():
+    """current_team from provider context overrides the (stale) market team.
+    Regression for 'Mike Evans (WR, TB)' when he has moved teams."""
+    league_id, season, source = setup_draft_fixture()
+    with SessionLocal() as db:
+        # Lamar's market team is BAL; provider context says he moved to LV.
+        db.add(
+            PlayerCurrentContext(
+                canonical_player_id="nfl_lamar_jackson_tools",
+                season=season,
+                source="sleeper",
+                source_player_id=f"sleeper_lamar_{uuid.uuid4().hex[:8]}",
+                full_name="Lamar Jackson",
+                position="QB",
+                team="LV",
+                age=29,
+                years_exp=8,
+                entry_year=2018,
+                rookie_year=2018,
+                injury_status=None,
+                status="Active",
+            )
+        )
+        db.commit()
+
+    result = find_draft_targets(league_id=league_id, season=season, source=source, position="QB", limit=20)
+    assert result["ok"] is True
+    lamar = next(r for r in result["data"] if r["canonical_player_id"] == "nfl_lamar_jackson_tools")
+    assert lamar["current_context_available"] is True
+    assert lamar["team"] == "BAL"  # market team preserved for transparency
+    assert lamar["current_team"] == "LV"  # provider current team is authoritative
+    assert lamar["current_team_differs"] is True
+    assert lamar["years_exp"] == 8  # career stage now data, not a guess
+    assert lamar["age"] == 29
+
+
+def test_find_draft_targets_free_agent_context_signals_unsigned():
+    """A null provider team is a free-agent signal, not missing data."""
+    league_id, season, source = setup_draft_fixture()
+    with SessionLocal() as db:
+        db.add(
+            PlayerCurrentContext(
+                canonical_player_id="nfl_james_cook_tools",
+                season=season,
+                source="sleeper",
+                source_player_id=f"sleeper_cook_{uuid.uuid4().hex[:8]}",
+                full_name="James Cook",
+                position="RB",
+                team=None,  # free agent / unsigned per provider
+                years_exp=4,
+                status="Active",
+            )
+        )
+        db.commit()
+
+    result = find_draft_targets(league_id=league_id, season=season, source=source, position="RB", limit=20)
+    assert result["ok"] is True
+    cook = next(r for r in result["data"] if r["canonical_player_id"] == "nfl_james_cook_tools")
+    assert cook["current_context_available"] is True
+    assert cook["current_team"] is None
+    assert cook["current_team_is_free_agent"] is True
+
+
+def test_find_draft_targets_without_context_marks_unavailable():
+    """When no provider context exists, the tool says so rather than guessing."""
+    league_id, season, source = setup_draft_fixture()
+    with SessionLocal() as db:
+        import_batch = db.query(DraftMarketImport).filter(DraftMarketImport.source == source).first()
+        # Isolated player with a unique id so no other test attaches context to it.
+        add_player(db, "nfl_no_context_te", "No Context TE", "NYJ", "TE", season)
+        db.add(
+            DraftPlayerMarket(
+                import_id=import_batch.id, source=source, season=season,
+                canonical_player_id="nfl_no_context_te", source_player_name="No Context TE",
+                position="TE", team="NYJ", adp=60, ecr=58, value=30,
+            )
+        )
+        db.commit()
+
+    result = find_draft_targets(league_id=league_id, season=season, source=source, position="TE", limit=20)
+    assert result["ok"] is True
+    te = next(r for r in result["data"] if r["canonical_player_id"] == "nfl_no_context_te")
+    assert te["current_context_available"] is False
+    assert te["current_team"] is None
 
 
 def test_draft_decision_tools_registered_for_agent():

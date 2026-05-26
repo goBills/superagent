@@ -14,7 +14,14 @@ from sqlalchemy.orm import Session
 from superagent.canonical_resolution import normalize_player_name, resolve_to_canonical
 from superagent.db import SessionLocal
 from superagent.draft_value import adjust_draft_value
-from superagent.models import DraftPlayerMarket, League, LeagueDraftPick, LeagueRosterPlayer, LeagueSettings
+from superagent.models import (
+    DraftPlayerMarket,
+    League,
+    LeagueDraftPick,
+    LeagueRosterPlayer,
+    LeagueSettings,
+    PlayerCurrentContext,
+)
 from superagent.official_bye_weeks import (
     OFFICIAL_BYE_WEEK_SOURCE,
     latest_official_bye_week_season,
@@ -343,6 +350,55 @@ def _market_payload(
     }
 
 
+def _current_context_map(db: Session, canonical_ids: list[str | None]) -> dict[str, PlayerCurrentContext]:
+    """Most-recent current-context row per canonical player (provider-refreshed state).
+
+    Returns the freshest context regardless of season label so draft tools can show
+    current team / age / experience / injury sourced from a provider (e.g. Sleeper).
+    """
+    ids = [cid for cid in {c for c in canonical_ids} if cid]
+    if not ids:
+        return {}
+    out: dict[str, PlayerCurrentContext] = {}
+    rows = (
+        db.query(PlayerCurrentContext)
+        .filter(PlayerCurrentContext.canonical_player_id.in_(ids))
+        .order_by(PlayerCurrentContext.season.desc(), PlayerCurrentContext.updated_at.desc())
+        .all()
+    )
+    for ctx in rows:
+        if ctx.canonical_player_id not in out:  # first per id = most recent
+            out[ctx.canonical_player_id] = ctx
+    return out
+
+
+def _apply_current_context(payload: dict[str, Any], ctx: PlayerCurrentContext | None) -> dict[str, Any]:
+    """Merge provider current-context fields onto a market payload.
+
+    current_team is authoritative over the (possibly stale) market team. A null
+    provider team means free agent / unsigned, not missing data.
+    """
+    if ctx is None:
+        payload["current_context_available"] = False
+        payload["current_team"] = None
+        return payload
+    market_team = payload.get("team")
+    payload["current_context_available"] = True
+    payload["current_team"] = ctx.team
+    payload["current_team_is_free_agent"] = ctx.team is None
+    payload["current_team_differs"] = bool(ctx.team and market_team and ctx.team != market_team)
+    if ctx.age is not None:
+        payload["age"] = ctx.age
+    payload["years_exp"] = ctx.years_exp
+    payload["entry_year"] = ctx.entry_year
+    payload["rookie_year"] = ctx.rookie_year
+    payload["injury_status"] = ctx.injury_status  # null = healthy
+    payload["context_status"] = ctx.status
+    payload["context_source"] = ctx.source
+    payload["context_updated_at"] = ctx.updated_at.isoformat() if ctx.updated_at else None
+    return payload
+
+
 def find_draft_targets(
     league_id: int,
     position: str | None = None,
@@ -419,6 +475,10 @@ def find_draft_targets(
             if not _passes_default_position_filter(market, payload, position):
                 continue
             rows.append(payload)
+        # Enrich with provider current context (current team / age / experience / injury).
+        context_map = _current_context_map(db, [row["canonical_player_id"] for row in rows])
+        for row in rows:
+            _apply_current_context(row, context_map.get(row["canonical_player_id"]))
         if sort_by == "rank":
             # Best player available: lowest effective rank wins; value delta breaks ties.
             rows.sort(
@@ -543,6 +603,12 @@ def compare_draft_options(
             payload = _market_payload(market, settings, bye_week_season=bye_week_season)
             payload["ok"] = True
             rows.append(payload)
+        context_map = _current_context_map(
+            db, [row.get("canonical_player_id") for row in rows if row.get("ok")]
+        )
+        for row in rows:
+            if row.get("ok"):
+                _apply_current_context(row, context_map.get(row.get("canonical_player_id")))
         rows.sort(key=lambda row: row.get("adjusted_value", -999), reverse=True)
         return _response(
             True,
