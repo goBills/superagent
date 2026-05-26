@@ -444,7 +444,8 @@ TOOL_SCHEMAS = [
                     "description": "Season to use for bye weeks. Defaults to newest official bye-week data when available."
                 },
                 "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"},
-                "limit": {"type": "integer", "description": "Maximum rows to return"}
+                "limit": {"type": "integer", "description": "Maximum rows to return"},
+                "current_pick": {"type": "number", "description": "Current/next overall pick. Pass it for 'what's falling to me' or 'value at my pick' questions so results are bounded to a realistic window near the pick (~2 rounds past it). Without it, results span the whole draftable pool and will surface deep late-round values that are NOT relevant to an early pick."}
             },
             "required": ["league_id"]
         }
@@ -495,7 +496,8 @@ TOOL_SCHEMAS = [
                     "description": "Season to use for bye weeks. Defaults to newest official bye-week data when available."
                 },
                 "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"},
-                "limit": {"type": "integer", "description": "Maximum rows to return"}
+                "limit": {"type": "integer", "description": "Maximum rows to return"},
+                "current_pick": {"type": "number", "description": "Current/next overall pick. Pass it for 'what's falling to me' or 'value at my pick' questions so results are bounded to a realistic window near the pick (~2 rounds past it) instead of surfacing deep late-round values."}
             },
             "required": ["league_id"]
         }

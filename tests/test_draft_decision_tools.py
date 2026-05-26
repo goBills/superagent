@@ -668,6 +668,44 @@ def test_find_draft_targets_excludes_unresolved_pick_by_name():
     assert "Khalil Shakir" not in names
 
 
+def test_find_draft_targets_current_pick_bounds_out_deep_fallers():
+    """A high-value-delta player ranked far past the current pick is NOT 'falling to
+    you' at an early pick. current_pick should bound the pool to a realistic window.
+    Regression for rank-200 'fallers' being pitched as round-3 grabs."""
+    league_id, season, source = setup_draft_fixture()
+    with SessionLocal() as db:
+        import_batch = db.query(DraftMarketImport).filter(DraftMarketImport.source == source).first()
+        add_player(db, "nfl_near_pick_wr", "Near Pick WR", "DET", "WR", season)
+        add_player(db, "nfl_deep_faller_wr", "Deep Faller WR", "CLE", "WR", season)
+        db.add_all(
+            [
+                DraftPlayerMarket(
+                    import_id=import_batch.id, source=source, season=season,
+                    canonical_player_id="nfl_near_pick_wr", source_player_name="Near Pick WR",
+                    position="WR", team="DET", adp=10, ecr=10, value=80,
+                ),
+                DraftPlayerMarket(
+                    import_id=import_batch.id, source=source, season=season,
+                    canonical_player_id="nfl_deep_faller_wr", source_player_name="Deep Faller WR",
+                    position="WR", team="CLE", adp=150, ecr=95, value=20,  # big +55 delta, deep rank
+                ),
+            ]
+        )
+        db.commit()
+
+    # No current_pick: the deep faller (within the draftable range) shows up on a value sort.
+    wide = find_draft_targets(league_id=league_id, season=season, source=source, sort_by="value", limit=50)
+    assert "Deep Faller WR" in [r["player_name"] for r in wide["data"]]
+
+    # At pick 3: the deep faller is out of the realistic window; the near-pick player remains.
+    bounded = find_draft_targets(
+        league_id=league_id, season=season, source=source, sort_by="value", current_pick=3, limit=50
+    )
+    names = [r["player_name"] for r in bounded["data"]]
+    assert "Deep Faller WR" not in names
+    assert "Near Pick WR" in names
+
+
 def test_draft_decision_tools_registered_for_agent():
     names = {schema["name"] for schema in TOOL_SCHEMAS}
 

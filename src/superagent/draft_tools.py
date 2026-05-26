@@ -188,6 +188,18 @@ def _draftable_rank_limit(settings: LeagueSettings) -> int:
     return max(1, min(int(num_teams * roster_spots), 350))
 
 
+def _pick_window_max(settings: LeagueSettings, current_pick: float) -> float:
+    """Upper Effective Rank bound for targets relevant to the current pick.
+
+    Players ranked far below the current pick are not "falling to you" — they are
+    just late-round values. Bound the pool to ~2 rounds past the pick (capped at the
+    league draftable range) so value/next-pick answers stay relevant to where you are.
+    """
+    num_teams = settings.num_teams or 12
+    window = max(24, 2 * int(num_teams))
+    return min(float(current_pick) + window, float(_draftable_rank_limit(settings)))
+
+
 def _starter_requirements(settings: LeagueSettings) -> dict[str, int]:
     return {
         "QB": int(settings.qb_slots or 0) + int(settings.superflex_slots or 0),
@@ -346,12 +358,18 @@ def find_draft_targets(
     source: str | None = None,
     limit: int = 20,
     sort_by: str = "value",
+    current_pick: float | None = None,
 ) -> dict:
     """Find draft targets for a stored league using imported market data.
 
     sort_by="value" (default) ranks by value delta then adjusted value—best for
     "find me sleepers/values" requests. sort_by="rank" ranks by effective rank
     (best player available first)—best for "who should I draft next" requests.
+
+    current_pick (optional): when provided, bounds results to a realistic window
+    near the pick (~2 rounds past it). Pass it for "what's falling to me" / "grab
+    now" questions so deep late-round values aren't surfaced as picks for an early
+    round.
     """
     if min_effective_rank is None:
         min_effective_rank = min_adp
@@ -370,7 +388,12 @@ def find_draft_targets(
         draftable_rank_limit = _draftable_rank_limit(settings)
         applied_max_effective_rank = max_effective_rank
         if applied_max_effective_rank is None and not _is_explicit_special_teams_request(position):
-            applied_max_effective_rank = draftable_rank_limit
+            # A supplied current_pick narrows the default window to picks relevant to
+            # where the user is; otherwise fall back to the full draftable range.
+            if current_pick is not None:
+                applied_max_effective_rank = _pick_window_max(settings, current_pick)
+            else:
+                applied_max_effective_rank = draftable_rank_limit
         drafted = _drafted_ids(db, league_id, season, drafted_player_ids)
         drafted_names = _drafted_names(db, league_id, season)
         rows = []
@@ -424,6 +447,7 @@ def find_draft_targets(
                 "max_effective_rank": max_effective_rank,
                 "applied_max_effective_rank": applied_max_effective_rank,
                 "draftable_rank_limit": draftable_rank_limit,
+                "current_pick": current_pick,
                 "sort_by": sort_by,
                 "min_adp": min_adp,
                 "max_adp": max_adp,
@@ -454,8 +478,14 @@ def get_available_targets(
     bye_week_season: int | None = None,
     source: str | None = None,
     limit: int = 20,
+    sort_by: str = "value",
+    current_pick: float | None = None,
 ) -> dict:
-    """Return available draft targets after excluding the recorded league draft board."""
+    """Return available draft targets after excluding the recorded league draft board.
+
+    Pass current_pick for "what's falling to me" / "grab now" questions so results
+    stay relevant to the pick instead of surfacing deep late-round values.
+    """
     return find_draft_targets(
         league_id=league_id,
         position=position,
@@ -469,6 +499,8 @@ def get_available_targets(
         bye_week_season=bye_week_season,
         source=source,
         limit=limit,
+        sort_by=sort_by,
+        current_pick=current_pick,
     )
 
 
@@ -824,10 +856,7 @@ def recommend_next_pick_targets(
     if current_pick is not None:
         with SessionLocal() as db:
             settings = _league_settings(_get_league(db, league_id))
-            num_teams = settings.num_teams or 12
-            draftable_limit = _draftable_rank_limit(settings)
-        window = max(24, 2 * int(num_teams))
-        max_rank = min(float(current_pick) + window, float(draftable_limit))
+        max_rank = _pick_window_max(settings, current_pick)
     recommendations = []
     for position in needs["priority_positions"][:4]:
         targets = find_draft_targets(
