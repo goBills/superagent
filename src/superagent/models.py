@@ -222,6 +222,43 @@ class ExternalPlayerMapping(Base):
     canonical_player = relationship("CanonicalPlayer", back_populates="external_mappings")
 
 
+class PlayerCurrentContext(Base):
+    """Provider-refreshed current player context for draft-season decisions."""
+
+    __tablename__ = "player_current_contexts"
+    __table_args__ = (
+        UniqueConstraint("source", "season", "source_player_id", name="uq_player_current_context_source"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    canonical_player_id = Column(
+        String,
+        ForeignKey("canonical_players.canonical_player_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    season = Column(Integer, nullable=False, index=True)
+    source = Column(String, nullable=False, index=True)
+    source_player_id = Column(String, nullable=False, index=True)
+    full_name = Column(String, nullable=True)
+    normalized_name = Column(String, nullable=True, index=True)
+    position = Column(String, nullable=True, index=True)
+    team = Column(String, nullable=True, index=True)
+    age = Column(Integer, nullable=True)
+    birth_date = Column(String, nullable=True)
+    years_exp = Column(Integer, nullable=True)
+    entry_year = Column(Integer, nullable=True)
+    rookie_year = Column(Integer, nullable=True)
+    injury_status = Column(String, nullable=True)
+    status = Column(String, nullable=True)
+    depth_chart_position = Column(String, nullable=True)
+    raw_data = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    canonical_player = relationship("CanonicalPlayer")
+
+
 class DraftImportReview(Base):
     """Low-confidence external player mapping queued for operator review."""
 

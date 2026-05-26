@@ -631,6 +631,63 @@ class TestAdminQuestions:
         assert job["progress"]["stage"] == "test_import"
         assert job["result"]["rows_imported"] == 1
 
+    def test_admin_refresh_sleeper_context_requires_token(self, monkeypatch):
+        use_admin_token(monkeypatch)
+
+        response = client.post("/admin/refresh-sleeper-context?season=2026")
+
+        assert response.status_code == 401
+
+    def test_admin_refresh_sleeper_context_correct_token(self, monkeypatch):
+        token = use_admin_token(monkeypatch)
+
+        def fake_refresh(season):
+            assert season == 2026
+            return {
+                "source": "sleeper",
+                "season": season,
+                "players_seen": 1,
+                "contexts_created": 1,
+            }
+
+        monkeypatch.setattr("superagent.api.refresh_sleeper_context", fake_refresh)
+
+        response = client.post(f"/admin/refresh-sleeper-context?token={token}&season=2026&wait=true")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert data["summary"]["source"] == "sleeper"
+        assert data["summary"]["contexts_created"] == 1
+
+    def test_admin_refresh_sleeper_context_background_job(self, monkeypatch):
+        token = use_admin_token(monkeypatch)
+
+        def fake_refresh(season):
+            assert season == 2026
+            return {
+                "source": "sleeper",
+                "season": season,
+                "players_seen": 1,
+                "contexts_created": 1,
+            }
+
+        monkeypatch.setattr("superagent.api.refresh_sleeper_context", fake_refresh)
+
+        response = client.post(f"/admin/refresh-sleeper-context?token={token}&season=2026")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert data["job_id"]
+
+        status = client.get(f"/admin/jobs/{data['job_id']}?token={token}")
+        assert status.status_code == 200
+        job = status.json()
+        assert job["type"] == "refresh_sleeper_context"
+        assert job["status"] == "completed"
+        assert job["result"]["contexts_created"] == 1
+
     def test_admin_create_default_league_requires_token(self, monkeypatch):
         use_admin_token(monkeypatch)
 

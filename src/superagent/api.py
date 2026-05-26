@@ -24,6 +24,7 @@ from superagent.auth import create_token, hash_password, verify_password, verify
 from superagent.canonical_resolution import resolve_to_canonical, seed_canonical_players_from_nflverse
 from superagent.config import HOST, PORT, get_config
 from superagent.data.ingest_draft_sheets import DraftIngestionError, ingest_draft_market_file
+from superagent.data.refresh_sleeper_context import refresh_sleeper_context
 from superagent.db import get_db, init_db
 from superagent.espn_integration import ingest_espn_league
 from superagent.models import (
@@ -417,6 +418,21 @@ def _run_draft_import_job(
             os.remove(file_path)
         except OSError:
             pass
+        job["completed_at"] = utc_now().isoformat()
+
+
+def _run_sleeper_context_job(job_id: str, season: int) -> None:
+    """Run Sleeper current-context refresh outside the request/response cycle."""
+    job = ADMIN_JOBS[job_id]
+    job["status"] = "running"
+    job["started_at"] = utc_now().isoformat()
+    try:
+        job["result"] = refresh_sleeper_context(season=season)
+        job["status"] = "completed"
+    except Exception as exc:
+        job["error"] = str(exc)
+        job["status"] = "failed"
+    finally:
         job["completed_at"] = utc_now().isoformat()
 
 
@@ -1096,6 +1112,44 @@ def admin_job_status(
     if job is None:
         raise HTTPException(status_code=404, detail="Admin job not found")
     return job
+
+
+@app.post("/admin/refresh-sleeper-context")
+def admin_refresh_sleeper_context(
+    background_tasks: BackgroundTasks,
+    token: Optional[str] = None,
+    season: int = 2026,
+    wait: bool = False,
+) -> Dict[str, Any]:
+    """Refresh Sleeper current player context without production shell access."""
+    _require_admin_token(token)
+    if season < 2020 or season > 2035:
+        raise HTTPException(status_code=400, detail="Invalid season")
+
+    if not wait:
+        job_id = _create_admin_job(
+            "refresh_sleeper_context",
+            {
+                "season": season,
+                "source": "sleeper",
+            },
+        )
+        background_tasks.add_task(_run_sleeper_context_job, job_id, season)
+        return {
+            "ok": True,
+            "job_id": job_id,
+            "status": "queued",
+            "status_url": f"/admin/jobs/{job_id}?token=YOUR_ADMIN_TOKEN",
+        }
+
+    try:
+        summary = refresh_sleeper_context(season=season)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Sleeper context refresh failed: {exc}") from exc
+    return {
+        "ok": True,
+        "summary": summary,
+    }
 
 
 @app.post("/admin/draft-import")
