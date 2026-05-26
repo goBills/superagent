@@ -1297,25 +1297,31 @@
             }
         }
 
+        // Shared draft context block reused by both the shortcut buttons and
+        // free-text chat questions, so the agent never has to ask for league/season.
+        function draftBoardContextText() {
+            if (!draftBoardPicks || draftBoardPicks.length === 0) return '';
+            const total = draftBoardPicks.length;
+            const recent = draftBoardPicks.slice(-15);
+            const picksText = recent.map(p => `#${p.pick_num} ${p.fantasy_team_name || 'Team'}→${p.source_player_name}`).join('; ');
+            const countLabel = total > recent.length
+                ? `${total} picks recorded (most recent ${recent.length} shown)`
+                : `${total} pick${total === 1 ? '' : 's'} recorded`;
+            return `Draft board: ${countLabel}: ${picksText}. The draft tools already exclude every drafted player for this league—do not re-list them, just recommend the best available. `;
+        }
+
+        // Detect draft-intent in free-text so we only attach league context when relevant.
+        function looksLikeDraftQuestion(text) {
+            return /\b(draft|pick|drafting|target|sleeper|available|adp|ecr|round|reach|value|bye|roster|who should i|grab|snag|take next|on the board|best available|waiver|flex|handcuff|tier)\b/i.test(text || '');
+        }
+
         function draftRoomPrompt(kind) {
             const leagueId = draftLeagueIdValue();
             const pick = draftPick.value.trim();
             const roster = rosterPhrase();
             const rosterText = roster ? `My current roster is ${roster}. ` : '';
             const pickText = pick ? `I am at pick ${pick}. ` : '';
-
-            // Include recorded draft board picks (capped to keep prompts lean;
-            // the recommendation tools exclude ALL drafted players server-side by league_id).
-            let boardText = '';
-            if (draftBoardPicks && draftBoardPicks.length > 0) {
-                const total = draftBoardPicks.length;
-                const recent = draftBoardPicks.slice(-15);
-                const picksText = recent.map(p => `#${p.pick_num} ${p.fantasy_team_name || 'Team'}→${p.source_player_name}`).join('; ');
-                const countLabel = total > recent.length
-                    ? `${total} picks recorded (most recent ${recent.length} shown)`
-                    : `${total} pick${total === 1 ? '' : 's'} recorded`;
-                boardText = `Draft board: ${countLabel}: ${picksText}. The draft tools already exclude every drafted player for this league—do not re-list them, just recommend the best available. `;
-            }
+            const boardText = draftBoardContextText();
 
             if (kind === 'next') {
                 return `League ID ${leagueId}. ${rosterText}${boardText}${pickText}Recommend next available pick targets, excluding the recorded draft board.`;
@@ -1330,6 +1336,20 @@
                 return `League ID ${leagueId}. ${rosterText}${boardText}${pickText}Show available RB values with Effective Rank, Rank Source, ECR, adjusted value, and value delta, excluding the recorded draft board.`;
             }
             return `League ID ${leagueId}. ${rosterText}${boardText}${pickText}Help me with my next draft pick.`;
+        }
+
+        // Prepend league/season/roster/board context to a free-text draft question.
+        // Returns the question unchanged if it isn't draft-related.
+        function augmentDraftQuestion(question) {
+            if (!looksLikeDraftQuestion(question)) return question;
+            const leagueId = draftLeagueIdValue();
+            const pick = draftPick.value.trim();
+            const roster = rosterPhrase();
+            const rosterText = roster ? `My current roster is ${roster}. ` : '';
+            const pickText = pick ? `I am at pick ${pick}. ` : '';
+            const boardText = draftBoardContextText();
+            const seasonText = 'For draft purposes use 2025 market data (ADP/ECR) and 2026 bye weeks; do not ask me which season. ';
+            return `League ID ${leagueId}. ${seasonText}${rosterText}${boardText}${pickText}Question: ${question}`;
         }
 
         function draftRoomAsk(kind) {
@@ -1475,9 +1495,11 @@
             isWaiting = true;
             questionInput.disabled = true;
 
-            // Display user message
+            // Display the user's original text, but send draft context to the agent
+            // so free-text draft questions don't trigger "which league/season?" prompts.
             addMessage('user', question);
             questionInput.value = '';
+            const apiQuestion = augmentDraftQuestion(question);
 
             // Show loading indicator
             const loadingMsg = addMessage('assistant', '<span class="loading"></span> Thinking...', {renderHtml: true});
@@ -1494,7 +1516,7 @@
                         'Authorization': `Bearer ${authToken}`,
                     },
                     body: JSON.stringify({
-                        question: question,
+                        question: apiQuestion,
                         session_id: sessionId
                     }),
                     signal: controller.signal
