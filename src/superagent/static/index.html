@@ -53,12 +53,12 @@
             backdrop-filter: saturate(160%) blur(10px);
             -webkit-backdrop-filter: saturate(160%) blur(10px);
             border-bottom: 1px solid var(--border);
-            padding: 16px 24px;
+            padding: 9px 20px;
             box-shadow: var(--shadow-sm);
         }
 
         .header h1 {
-            font-size: 25px;
+            font-size: 19px;
             font-weight: 800;
             letter-spacing: -0.02em;
             background: linear-gradient(90deg, var(--brand) 0%, var(--brand-2) 100%);
@@ -97,10 +97,9 @@
             text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
         }
 
+        /* Global shell tagline is hidden: each workspace owns its own header/subtitle now. */
         .header p {
-            font-size: 13px;
-            color: var(--muted);
-            margin-top: 4px;
+            display: none;
         }
 
         .header-top {
@@ -761,14 +760,45 @@
             min-height: 0;
         }
 
-        /* Draft Mode: prominent always-visible paste bar (hidden unless draft mode is on) */
+        /* Draft Cockpit header — a focused workspace, not a homepage with controls bolted on */
+        .cockpit-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            padding: 11px 14px;
+            border-bottom: 1px solid var(--border);
+            background: linear-gradient(180deg, #f8fbff, var(--surface-2));
+        }
+        .cockpit-head-titles { min-width: 0; }
+        .cockpit-title {
+            font-size: 17px;
+            font-weight: 800;
+            letter-spacing: -0.01em;
+            color: var(--text);
+        }
+        .cockpit-subtitle {
+            font-size: 12.5px;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+        .cockpit-subtitle .draft-sheet-meta { margin-left: 4px; }
+        .cockpit-actions {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            flex-wrap: wrap;
+        }
+        /* Update Board is a tool, not a mode — subtle active state when the paste panel is open */
         .draft-mode-toggle.active {
-            background: linear-gradient(180deg, #16a34a, #15803d) !important;
-            color: #fff !important;
-            border-color: transparent !important;
-            box-shadow: 0 2px 8px rgba(22, 163, 74, 0.3) !important;
+            background: #eef4ff !important;
+            color: var(--brand) !important;
+            border-color: #c7d6f5 !important;
+            box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.12) !important;
         }
 
+        /* Update Board paste panel (revealed by the Update Board toolbar action) */
         .draft-paste-bar {
             display: none;
             gap: 10px;
@@ -870,7 +900,7 @@
         .cockpit:not(.mode-draft) .mode-placeholder { display: block; }
         .cockpit:not(.mode-draft) .draft-paste-bar,
         .cockpit:not(.mode-draft) .draft-sheet-tabs,
-        .cockpit:not(.mode-draft) .cockpit-toolbar,
+        .cockpit:not(.mode-draft) .cockpit-head,
         .cockpit:not(.mode-draft) #draftSheetBody { display: none !important; }
         .mode-placeholder-icon { font-size: 42px; }
         .mode-placeholder h3 { font-size: 20px; margin: 12px 0 8px; color: var(--text); }
@@ -908,6 +938,14 @@
             font-size: 15px;
             box-shadow: none !important;
             padding: 6px 2px !important;
+        }
+
+        /* Chat session controls live with the Ask bar now — chat is contextual, not a section */
+        .command-session {
+            flex: 0 0 auto;
+            max-width: 140px;
+            padding: 6px 8px;
+            font-size: 12px;
         }
 
         .command-send {
@@ -1759,8 +1797,12 @@
                 <button class="ws-tab" data-ws="waivers" onclick="setWorkspace('waivers', this)" type="button">🔄 Waivers <span class="ws-soon">Soon</span></button>
                 <button class="ws-tab" data-ws="trade" disabled type="button">🤝 Trade <span class="ws-soon">Soon</span></button>
             </div>
-            <div class="cockpit-toolbar">
-                <div class="cockpit-controls">
+            <div class="cockpit-head" id="cockpitHead">
+                <div class="cockpit-head-titles">
+                    <div class="cockpit-title">🏈 Draft Cockpit</div>
+                    <div class="cockpit-subtitle">Track picks, scan tiers, and manage your roster in one place.<span class="draft-sheet-meta" id="draftSheetMeta"></span><span class="pool-warning" id="poolWarning"></span></div>
+                </div>
+                <div class="cockpit-actions">
                     <label class="cockpit-field">
                         <span class="cockpit-field-label">League</span>
                         <input type="text" id="draftLeagueId" class="cockpit-league" placeholder="1" value="1" oninput="saveDraftRoomState()" onchange="loadDraftBoard(); loadDraftSheet();">
@@ -1769,25 +1811,17 @@
                         <span class="cockpit-field-label">Pick</span>
                         <input type="text" id="draftPick" class="cockpit-pick" placeholder="—" oninput="saveDraftRoomState()">
                     </label>
-                    <button class="example-btn draft-mode-toggle" id="draftModeToggle" onclick="toggleDraftMode()" type="button">🟢 On the clock</button>
+                    <button class="example-btn draft-mode-toggle" id="draftModeToggle" onclick="toggleDraftMode()" type="button">📋 Update Board</button>
+                    <button class="example-btn" onclick="undoDraftPick()" type="button">↶ Undo</button>
+                    <button class="example-btn reset-mock-inline" onclick="confirmResetDraft()" type="button">🔄 New Mock</button>
                     <button class="example-btn" onclick="openLeagueSettings()" type="button">⚙️ League</button>
-                    <button class="example-btn" onclick="openDraftDrawer()" type="button">📋 Manual / reset</button>
                     <button class="example-btn" onclick="loadDraftSheet()" type="button">↻ Refresh</button>
-                    <span class="draft-sheet-meta" id="draftSheetMeta"></span>
-                    <span class="pool-warning" id="poolWarning"></span>
-                </div>
-                <div class="cockpit-controls">
-                    <select id="sessionSelect" class="cockpit-select" onchange="loadSelectedSession()">
-                        <option value="">Recent chats</option>
-                    </select>
-                    <button class="example-btn" onclick="startNewChat()" type="button">New</button>
                 </div>
             </div>
             <div class="draft-paste-bar" id="draftPasteBar">
-                <textarea id="draftModePaste" class="draft-paste-bar-input" placeholder="📋 On the clock? Paste the round's picks here — they load the instant you paste (or hit Load)." onpaste="autoLoadOnPaste()"></textarea>
+                <textarea id="draftModePaste" class="draft-paste-bar-input" placeholder="Paste the round's picks here — they load the instant you paste (or hit Update)." onpaste="autoLoadOnPaste()"></textarea>
                 <div class="draft-paste-bar-actions">
-                    <button class="command-send" id="draftModeLoadBtn" onclick="parseAndLoadBoard('draftModePaste', 'draftModeLoadBtn')" type="button">Load</button>
-                    <button class="example-btn reset-mock-inline" onclick="confirmResetDraft()" type="button">🔄 New mock</button>
+                    <button class="command-send" id="draftModeLoadBtn" onclick="parseAndLoadBoard('draftModePaste', 'draftModeLoadBtn')" type="button">Update</button>
                     <span class="draft-paste-status draft-paste-bar-status"></span>
                 </div>
             </div>
@@ -1801,7 +1835,7 @@
                 <button class="sheet-tab" data-pos="MINE" onclick="setSheetTab('MINE', this)" type="button">My Roster</button>
             </div>
             <div class="draft-sheet-body cockpit-sheet" id="draftSheetBody">
-                <div class="draft-sheet-empty">Tap <strong>📋 Paste / record</strong> to load your draft board — the best available players show up here, live.</div>
+                <div class="draft-sheet-empty">Tap <strong>📋 Update Board</strong> to paste your draft board — the best available players show up here, live.</div>
             </div>
             <!-- Coming-soon panel for in-season workspaces (Roster / Waivers) -->
             <div class="mode-placeholder" id="modePlaceholder">
@@ -1831,10 +1865,14 @@
             </div>
         </div>
 
-        <!-- COMMAND BAR: AI on tap (expands into a Siri-style answer) -->
+        <!-- COMMAND BAR: AI analyst on tap (expands into a Siri-style answer). Chat is contextual, not the centerpiece. -->
         <div class="command-bar" id="commandBar">
             <span class="command-spark">⚡</span>
-            <input type="text" id="questionInput" class="command-input" placeholder="Ask Superagent — e.g. who should I draft at 31?" onkeypress="handleKeyPress(event)">
+            <input type="text" id="questionInput" class="command-input" placeholder="Ask the analyst — e.g. who should I draft at 31?" onkeypress="handleKeyPress(event)">
+            <select id="sessionSelect" class="cockpit-select command-session" onchange="loadSelectedSession()">
+                <option value="">Recent chats</option>
+            </select>
+            <button class="example-btn" onclick="startNewChat()" type="button">New</button>
             <button class="command-send" onclick="sendMessage()" type="button">Ask</button>
         </div>
     </div>
@@ -2847,15 +2885,13 @@
             }
         }
 
-        // Draft Mode: surface the paste bar on the cockpit so capturing picks is one paste away.
+        // Update Board: reveal the paste panel as a tool (not a mode). Label stays constant;
+        // only a subtle active state marks the panel open. (`draft-mode` is just the CSS hook.)
         function toggleDraftMode() {
             const on = !cockpit.classList.contains('draft-mode');
             cockpit.classList.toggle('draft-mode', on);
             const btn = document.getElementById('draftModeToggle');
-            if (btn) {
-                btn.classList.toggle('active', on);
-                btn.textContent = on ? '🟢 On the clock: ON' : '🟢 On the clock';
-            }
+            if (btn) btn.classList.toggle('active', on);
             localStorage.setItem('superagent_draft_mode', on ? '1' : '0');
             if (on) {
                 const box = document.getElementById('draftModePaste');
@@ -2867,7 +2903,7 @@
             if (localStorage.getItem('superagent_draft_mode') === '1') {
                 cockpit.classList.add('draft-mode');
                 const btn = document.getElementById('draftModeToggle');
-                if (btn) { btn.classList.add('active'); btn.textContent = '🟢 On the clock: ON'; }
+                if (btn) btn.classList.add('active');
             }
         }
 
