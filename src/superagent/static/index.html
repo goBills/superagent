@@ -813,6 +813,70 @@
             line-height: 1.25;
         }
 
+        /* New-mock reset, living inside the live-capture bar */
+        .reset-mock-inline {
+            border: 1px solid #fca5a5 !important;
+            background: #fff5f5 !important;
+            color: #b91c1c !important;
+            font-weight: 700;
+        }
+        .reset-mock-inline:hover { background: #fee2e2 !important; }
+
+        /* Workspace switch (Draft / Roster / Waivers / Trade) — top-level mode nav */
+        .workspace-switch {
+            display: flex;
+            gap: 6px;
+            padding: 10px 12px 4px;
+            flex-wrap: wrap;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+        }
+        .ws-tab {
+            position: relative;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--muted);
+            font-weight: 700;
+            font-size: 13px;
+            padding: 7px 15px;
+            border-radius: 999px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.12s ease;
+        }
+        .ws-tab:hover:not(.active):not(:disabled) { border-color: var(--brand); color: var(--text); }
+        .ws-tab.active {
+            background: linear-gradient(180deg, var(--brand), var(--brand-2));
+            color: #fff;
+            border-color: transparent;
+            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.28);
+        }
+        .ws-tab:disabled { cursor: default; opacity: 0.9; }
+        .ws-soon {
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            background: #eef2ff;
+            color: #818cf8;
+            border-radius: 999px;
+            padding: 2px 6px;
+        }
+
+        /* Coming-soon placeholder for non-draft workspaces */
+        .mode-placeholder { display: none; padding: 44px 24px; text-align: center; }
+        .cockpit:not(.mode-draft) .mode-placeholder { display: block; }
+        .cockpit:not(.mode-draft) .draft-paste-bar,
+        .cockpit:not(.mode-draft) .draft-sheet-tabs,
+        .cockpit:not(.mode-draft) .cockpit-toolbar,
+        .cockpit:not(.mode-draft) #draftSheetBody { display: none !important; }
+        .mode-placeholder-icon { font-size: 42px; }
+        .mode-placeholder h3 { font-size: 20px; margin: 12px 0 8px; color: var(--text); }
+        .mode-placeholder p { color: var(--muted); font-size: 14px; max-width: 460px; margin: 0 auto; line-height: 1.55; }
+        .mode-placeholder ul { display: inline-block; text-align: left; color: var(--muted); font-size: 13px; margin-top: 14px; line-height: 1.8; }
+
         /* Command bar (slim CLI-style input) */
         .command-bar {
             display: none;            /* shown when authed */
@@ -1645,8 +1709,8 @@
         <div class="header">
             <div class="header-top">
                 <div>
-                    <h1>⚡ Superagent <span class="season-badge">🏈 2026 Draft</span></h1>
-                    <p>Your AI draft war room — live board, current player data, grounded calls, zero hype.</p>
+                    <h1>⚡ Superagent <span class="season-badge" id="modeBadge">🏈 2026 Draft</span></h1>
+                    <p id="shellTagline">Your AI fantasy command center — current player data, grounded calls, zero hype.</p>
                 </div>
                 <button id="signOutButton" class="signout-btn" onclick="logout()">Sign out</button>
             </div>
@@ -1687,7 +1751,14 @@
         </div>
 
         <!-- COCKPIT: the spreadsheet is the primary canvas -->
-        <div class="cockpit" id="cockpit">
+        <div class="cockpit mode-draft" id="cockpit">
+            <!-- Top-level workspace switch: Draft now, in-season modes coming as data lands -->
+            <div class="workspace-switch" id="workspaceSwitch">
+                <button class="ws-tab active" data-ws="draft" onclick="setWorkspace('draft', this)" type="button">🏈 Draft</button>
+                <button class="ws-tab" data-ws="roster" onclick="setWorkspace('roster', this)" type="button">📋 Roster <span class="ws-soon">Soon</span></button>
+                <button class="ws-tab" data-ws="waivers" onclick="setWorkspace('waivers', this)" type="button">🔄 Waivers <span class="ws-soon">Soon</span></button>
+                <button class="ws-tab" data-ws="trade" disabled type="button">🤝 Trade <span class="ws-soon">Soon</span></button>
+            </div>
             <div class="cockpit-toolbar">
                 <div class="cockpit-controls">
                     <label class="cockpit-field">
@@ -1698,7 +1769,7 @@
                         <span class="cockpit-field-label">Pick</span>
                         <input type="text" id="draftPick" class="cockpit-pick" placeholder="—" oninput="saveDraftRoomState()">
                     </label>
-                    <button class="example-btn draft-mode-toggle" id="draftModeToggle" onclick="toggleDraftMode()" type="button">🟢 Draft Mode</button>
+                    <button class="example-btn draft-mode-toggle" id="draftModeToggle" onclick="toggleDraftMode()" type="button">🟢 On the clock</button>
                     <button class="example-btn" onclick="openLeagueSettings()" type="button">⚙️ League</button>
                     <button class="example-btn" onclick="openDraftDrawer()" type="button">📋 Manual / reset</button>
                     <button class="example-btn" onclick="loadDraftSheet()" type="button">↻ Refresh</button>
@@ -1716,6 +1787,7 @@
                 <textarea id="draftModePaste" class="draft-paste-bar-input" placeholder="📋 On the clock? Paste the round's picks here — they load the instant you paste (or hit Load)." onpaste="autoLoadOnPaste()"></textarea>
                 <div class="draft-paste-bar-actions">
                     <button class="command-send" id="draftModeLoadBtn" onclick="parseAndLoadBoard('draftModePaste', 'draftModeLoadBtn')" type="button">Load</button>
+                    <button class="example-btn reset-mock-inline" onclick="confirmResetDraft()" type="button">🔄 New mock</button>
                     <span class="draft-paste-status draft-paste-bar-status"></span>
                 </div>
             </div>
@@ -1730,6 +1802,13 @@
             </div>
             <div class="draft-sheet-body cockpit-sheet" id="draftSheetBody">
                 <div class="draft-sheet-empty">Tap <strong>📋 Paste / record</strong> to load your draft board — the best available players show up here, live.</div>
+            </div>
+            <!-- Coming-soon panel for in-season workspaces (Roster / Waivers) -->
+            <div class="mode-placeholder" id="modePlaceholder">
+                <div class="mode-placeholder-icon" id="modePlaceholderIcon">📋</div>
+                <h3 id="modePlaceholderTitle">Roster mode is coming soon</h3>
+                <p id="modePlaceholderText">In-season tools land once live roster, usage, and injury data is wired in.</p>
+                <ul id="modePlaceholderList"></ul>
             </div>
         </div>
 
@@ -1808,7 +1887,7 @@
                 <div class="draft-board-empty">No draft picks recorded yet.</div>
             </div>
             <div class="draft-room-footer">
-                <button class="reset-mock-btn" id="resetBoardBtn" onclick="resetDraftBoard()" type="button">🔄 Start new mock</button>
+                <button class="reset-mock-btn" id="resetBoardBtn" onclick="confirmResetDraft()" type="button">🔄 Start new mock</button>
                 <button class="draft-room-clear" onclick="clearDraftRoom()" type="button">Clear inputs only</button>
             </div>
             <div class="draft-room-note">
@@ -1848,6 +1927,23 @@
             <div class="modal-actions">
                 <button class="secondary-btn" onclick="closeLeagueSettings()" type="button">Cancel</button>
                 <button id="saveLeagueSettingsBtn" onclick="saveLeagueSettings()" type="button">Save settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reset / New-mock confirmation -->
+    <div id="resetConfirmModal" class="modal-overlay" onclick="closeResetModal(event)">
+        <div class="modal-card">
+            <h2>🔄 Start a new mock?</h2>
+            <p style="font-size:13px;color:var(--muted);margin-bottom:10px;">This clears the board so you can re-draft from scratch.</p>
+            <ul>
+                <li><strong>Wipes:</strong> every recorded pick, your roster, the current pick, the selected player, and the paste box.</li>
+                <li><strong>Keeps:</strong> your league settings (teams / roster / scoring / superflex) and your ⭐ watchlist.</li>
+            </ul>
+            <p style="font-size:12px;color:var(--muted);margin-top:10px;">To change league format instead, use ⚙️ League. This can't be undone.</p>
+            <div class="modal-actions">
+                <button class="secondary-btn" onclick="closeResetModal()" type="button">Cancel</button>
+                <button id="resetConfirmBtn" class="reset-mock-inline" onclick="resetDraftBoard()" type="button">🔄 Reset board</button>
             </div>
         </div>
     </div>
@@ -1904,6 +2000,7 @@
                 questionInput.focus();
                 loadSessions();
                 restoreDraftMode();
+                setWorkspace('draft', document.querySelector('#workspaceSwitch .ws-tab[data-ws="draft"]'));
                 loadDraftSheet();   // cockpit canvas is the spreadsheet
             } else {
                 authArea.style.display = 'flex';
@@ -2472,11 +2569,24 @@
             draftPick.focus();
         }
 
+        // Open the confirmation modal (the only entry point to a destructive reset).
+        function confirmResetDraft() {
+            if (!authToken) return;
+            const modal = document.getElementById('resetConfirmModal');
+            if (modal) modal.style.display = 'flex';
+        }
+
+        function closeResetModal(event) {
+            if (event && event.target && event.target.id !== 'resetConfirmModal') return;
+            const modal = document.getElementById('resetConfirmModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        // Executes the wipe. Confirmation already happened via the modal.
         async function resetDraftBoard() {
             if (!authToken) return;
-            if (!confirm('Start a new mock? This permanently clears the entire recorded draft board AND your roster for this league.')) return;
             const leagueId = draftLeagueIdValue();
-            const btn = document.getElementById('resetBoardBtn');
+            const btn = document.getElementById('resetConfirmBtn');
             const original = btn ? btn.textContent : '';
             if (btn) { btn.disabled = true; btn.textContent = '⏳ Resetting…'; }
             try {
@@ -2489,13 +2599,19 @@
                     throw new Error(error.detail || 'Could not reset the board');
                 }
                 const data = await response.json();
-                // Wipe local inputs too and reset the pick counter.
+                // Wipe local draft state: pick, roster inputs, paste boxes, selection, and the view.
                 draftPick.value = '';
                 draftRoster.value = '';
                 draftPickTeam.value = '';
                 draftPickPlayer.value = '';
-                const box = document.getElementById('draftPasteBox');
-                if (box) box.value = '';
+                const drawerBox = document.getElementById('draftPasteBox');
+                if (drawerBox) drawerBox.value = '';
+                const liveBox = document.getElementById('draftModePaste');
+                if (liveBox) liveBox.value = '';
+                clearSelection();
+                currentSheetTab = 'ALL';
+                document.querySelectorAll('#draftSheetTabs .sheet-tab').forEach(b =>
+                    b.classList.toggle('active', b.dataset.pos === 'ALL'));
                 saveDraftRoomState();
                 await loadDraftBoard();
                 await loadDraftSheet();
@@ -2503,7 +2619,8 @@
             } catch (error) {
                 draftPasteStatus(`❌ ${error.message}`, '#dc2626');
             } finally {
-                if (btn) { btn.disabled = false; btn.textContent = original || '🔄 Start new mock'; }
+                if (btn) { btn.disabled = false; btn.textContent = original || '🔄 Reset board'; }
+                closeResetModal();
             }
         }
 
@@ -2666,6 +2783,70 @@
             });
         }
 
+        // Top-level workspaces. Draft is live today; in-season modes show a coming-soon
+        // panel until Codex's roster/usage/injury data lands. Draft copy only dominates
+        // the shell while the Draft workspace is active.
+        const WORKSPACE_META = {
+            draft: {
+                badge: '🏈 2026 Draft',
+                tagline: 'Draft war room — live board, current player data, grounded calls, zero hype.',
+            },
+            roster: {
+                badge: '📋 Roster',
+                tagline: 'Your AI fantasy command center — current player data, grounded calls, zero hype.',
+                icon: '📋',
+                title: 'Roster mode is coming soon',
+                text: 'Manage your team week to week — wired up once live roster, usage, and injury data lands.',
+                list: [
+                    'Your roster by position, with byes & injury flags',
+                    'Recent usage — snaps, targets, carries, red-zone touches',
+                    'Start/sit context and weekly matchups',
+                    'The same fast player detail panel you use on the draft board',
+                ],
+            },
+            waivers: {
+                badge: '🔄 Waivers',
+                tagline: 'Your AI fantasy command center — current player data, grounded calls, zero hype.',
+                icon: '🔄',
+                title: 'Waivers mode is coming soon',
+                text: 'Find the adds that matter — available once in-season usage and opportunity data is wired in.',
+                list: [
+                    'Available players ranked by recent usage & opportunity',
+                    'Injury-replacement and rest-of-season value',
+                    'Compare any add directly against your current roster',
+                    'Watch targets and track them week to week',
+                ],
+            },
+        };
+
+        function setWorkspace(name, btn) {
+            if (!cockpit || !WORKSPACE_META[name]) return;
+            ['mode-draft', 'mode-roster', 'mode-waivers', 'mode-trade'].forEach(c => cockpit.classList.remove(c));
+            cockpit.classList.add('mode-' + name);
+            document.querySelectorAll('#workspaceSwitch .ws-tab').forEach(b => b.classList.remove('active'));
+            if (btn) {
+                btn.classList.add('active');
+            } else {
+                const tab = document.querySelector(`#workspaceSwitch .ws-tab[data-ws="${name}"]`);
+                if (tab) tab.classList.add('active');
+            }
+            const meta = WORKSPACE_META[name];
+            const badge = document.getElementById('modeBadge');
+            const tagline = document.getElementById('shellTagline');
+            if (badge) badge.textContent = meta.badge;
+            if (tagline) tagline.textContent = meta.tagline;
+            if (name !== 'draft') {
+                const icon = document.getElementById('modePlaceholderIcon');
+                const title = document.getElementById('modePlaceholderTitle');
+                const text = document.getElementById('modePlaceholderText');
+                const listEl = document.getElementById('modePlaceholderList');
+                if (icon) icon.textContent = meta.icon || '🚧';
+                if (title) title.textContent = meta.title || 'Coming soon';
+                if (text) text.textContent = meta.text || '';
+                if (listEl) listEl.innerHTML = (meta.list || []).map(li => `<li>${escapeHtml(li)}</li>`).join('');
+            }
+        }
+
         // Draft Mode: surface the paste bar on the cockpit so capturing picks is one paste away.
         function toggleDraftMode() {
             const on = !cockpit.classList.contains('draft-mode');
@@ -2673,7 +2854,7 @@
             const btn = document.getElementById('draftModeToggle');
             if (btn) {
                 btn.classList.toggle('active', on);
-                btn.textContent = on ? '🟢 Draft Mode: ON' : '🟢 Draft Mode';
+                btn.textContent = on ? '🟢 On the clock: ON' : '🟢 On the clock';
             }
             localStorage.setItem('superagent_draft_mode', on ? '1' : '0');
             if (on) {
@@ -2686,7 +2867,7 @@
             if (localStorage.getItem('superagent_draft_mode') === '1') {
                 cockpit.classList.add('draft-mode');
                 const btn = document.getElementById('draftModeToggle');
-                if (btn) { btn.classList.add('active'); btn.textContent = '🟢 Draft Mode: ON'; }
+                if (btn) { btn.classList.add('active'); btn.textContent = '🟢 On the clock: ON'; }
             }
         }
 
