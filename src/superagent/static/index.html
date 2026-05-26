@@ -1304,11 +1304,17 @@
             const rosterText = roster ? `My current roster is ${roster}. ` : '';
             const pickText = pick ? `I am at pick ${pick}. ` : '';
 
-            // Include recorded draft board picks
+            // Include recorded draft board picks (capped to keep prompts lean;
+            // the recommendation tools exclude ALL drafted players server-side by league_id).
             let boardText = '';
             if (draftBoardPicks && draftBoardPicks.length > 0) {
-                const picksText = draftBoardPicks.map(p => `#${p.pick_num} ${p.fantasy_team_name || 'Team'} took ${p.source_player_name}`).join('; ');
-                boardText = `Recorded draft board: ${picksText}. `;
+                const total = draftBoardPicks.length;
+                const recent = draftBoardPicks.slice(-15);
+                const picksText = recent.map(p => `#${p.pick_num} ${p.fantasy_team_name || 'Team'}→${p.source_player_name}`).join('; ');
+                const countLabel = total > recent.length
+                    ? `${total} picks recorded (most recent ${recent.length} shown)`
+                    : `${total} pick${total === 1 ? '' : 's'} recorded`;
+                boardText = `Draft board: ${countLabel}: ${picksText}. The draft tools already exclude every drafted player for this league—do not re-list them, just recommend the best available. `;
             }
 
             if (kind === 'next') {
