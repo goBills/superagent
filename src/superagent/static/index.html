@@ -374,8 +374,66 @@
             border: 1px solid #dbe3ef;
             border-radius: 8px;
             background: #f8fbff;
-            margin-bottom: 12px;
-            padding: 12px;
+            margin-bottom: 10px;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        /* Collapsible section headers (Draft Room, Examples) */
+        .collapse-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            width: 100%;
+            background: transparent;
+            border: none;
+            border-radius: 0;
+            padding: 10px 12px;
+            color: #1f2937;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .collapse-header:hover {
+            background: #eef4ff;
+        }
+
+        .collapse-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .chevron {
+            display: inline-block;
+            color: #1a73e8;
+            font-size: 11px;
+            transition: transform 0.15s ease;
+        }
+
+        .draft-room:not(.collapsed) .chevron,
+        .examples-wrap:not(.collapsed) .chevron {
+            transform: rotate(90deg);
+        }
+
+        .collapse-hint {
+            color: #94a3b8;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .draft-room.collapsed .draft-room-body,
+        .examples-wrap.collapsed .examples {
+            display: none;
+        }
+
+        .draft-room-body {
+            padding: 0 12px 12px;
         }
 
         .draft-room-header {
@@ -602,11 +660,18 @@
         }
 
         /* Example prompts */
+        .examples-wrap {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+
         .examples {
             display: flex;
             gap: 8px;
             flex-wrap: wrap;
-            margin-bottom: 12px;
+            padding: 0 12px 12px;
         }
 
         .example-btn {
@@ -807,57 +872,70 @@
                 <button class="secondary-btn" onclick="startNewChat()" type="button">New chat</button>
             </div>
 
-            <div class="draft-room" id="draftRoom">
-                <div class="draft-room-header">
-                    <div>
-                        <span class="draft-room-title">Draft Room</span>
+            <div class="draft-room collapsed" id="draftRoom">
+                <button class="collapse-header" onclick="toggleDraftRoomCollapse()" type="button">
+                    <span class="collapse-left">
+                        <span class="chevron">▶</span>
+                        <span class="draft-room-title">🏈 Draft Room</span>
                         <span class="draft-room-status" id="draftRoomStatus">Saved</span>
-                    </div>
+                    </span>
+                    <span class="collapse-hint" id="draftRoomHint">tap to open</span>
+                </button>
+                <div class="draft-room-body">
                     <div class="draft-room-actions">
                         <button class="example-btn" onclick="draftRoomAsk('next')">Next pick</button>
                         <button class="example-btn" onclick="draftRoomAsk('needs')">Position needs</button>
                         <button class="example-btn" onclick="draftRoomAsk('byes')">Bye check</button>
                         <button class="example-btn" onclick="draftRoomAsk('rb')">RB values</button>
                     </div>
-                </div>
-                <div class="draft-room-grid">
-                    <input type="text" id="draftLeagueId" placeholder="League ID" value="1" oninput="saveDraftRoomState()" onchange="loadDraftBoard()">
-                    <input type="text" id="draftPick" placeholder="Pick #" oninput="saveDraftRoomState()">
-                    <textarea id="draftRoster" placeholder="Paste roster: Josh Allen, James Cook, ..." oninput="saveDraftRoomState()"></textarea>
-                </div>
-                <div class="draft-pick-grid">
-                    <input type="text" id="draftPickTeam" placeholder="Team">
-                    <input type="text" id="draftPickPlayer" placeholder="Player picked">
-                    <button class="example-btn" onclick="recordTheyPicked()" type="button">They picked</button>
-                    <button class="example-btn" onclick="recordIPicked()" type="button">I picked</button>
-                    <button class="example-btn" onclick="undoDraftPick()" type="button">Undo</button>
-                </div>
-                <div class="draft-board-toggle">
-                    <span class="draft-board-summary" id="draftBoardSummary">Draft board: 0 picks</span>
-                    <button onclick="toggleDraftBoard()" type="button" id="draftBoardToggle">Show full board</button>
-                </div>
-                <div class="draft-board" id="draftBoard">
-                    <div class="draft-board-empty">No draft picks recorded yet.</div>
-                </div>
-                <div class="draft-room-footer">
-                    <div class="draft-room-note">
-                        Saved in this browser. Record every pick so recommendations exclude drafted players.
+                    <div class="draft-room-grid">
+                        <input type="text" id="draftLeagueId" placeholder="League ID" value="1" oninput="saveDraftRoomState()" onchange="loadDraftBoard()">
+                        <input type="text" id="draftPick" placeholder="Pick #" oninput="saveDraftRoomState()">
+                        <textarea id="draftRoster" placeholder="Paste roster: Josh Allen, James Cook, ..." oninput="saveDraftRoomState()"></textarea>
                     </div>
-                    <button class="draft-room-clear" onclick="clearDraftRoom()" type="button">Clear draft room</button>
+                    <div class="draft-pick-grid">
+                        <input type="text" id="draftPickTeam" placeholder="Team">
+                        <input type="text" id="draftPickPlayer" placeholder="Player picked">
+                        <button class="example-btn" onclick="recordTheyPicked()" type="button">They picked</button>
+                        <button class="example-btn" onclick="recordIPicked()" type="button">I picked</button>
+                        <button class="example-btn" onclick="undoDraftPick()" type="button">Undo</button>
+                    </div>
+                    <div class="draft-board-toggle">
+                        <span class="draft-board-summary" id="draftBoardSummary">Draft board: 0 picks</span>
+                        <button onclick="toggleDraftBoard()" type="button" id="draftBoardToggle">Show full board</button>
+                    </div>
+                    <div class="draft-board" id="draftBoard">
+                        <div class="draft-board-empty">No draft picks recorded yet.</div>
+                    </div>
+                    <div class="draft-room-footer">
+                        <div class="draft-room-note">
+                            Saved in this browser. Record every pick so recommendations exclude drafted players.
+                        </div>
+                        <button class="draft-room-clear" onclick="clearDraftRoom()" type="button">Clear draft room</button>
+                    </div>
                 </div>
             </div>
 
-            <div class="examples">
-                <button class="example-btn" onclick="askQuestion('What\\'s Josh Allen\\'s EPA per play in 2024?')">Josh Allen EPA/play</button>
-                <button class="example-btn" onclick="askQuestion('Compare Bills RB usage in 2024')">Bills RB usage</button>
-                <button class="example-btn" onclick="askQuestion('Find WR target opportunities in 2024')">WR targets</button>
-                <button class="example-btn" onclick="askQuestion('Late-season RB breakouts in 2024')">RB breakouts</button>
-                <button class="example-btn" onclick="askQuestion('When are the Bills on bye in 2026?')">Bills bye week</button>
-                <button class="example-btn" onclick="askQuestion('Show the Bills schedule for 2025')">Bills schedule</button>
-                <button class="example-btn" onclick="askQuestion('Who do the Bills play from Week 10 on in 2025?')">From Week 10</button>
-                <button class="example-btn" onclick="askQuestion('List all NFL bye weeks in 2026')">All bye weeks</button>
-                <button class="example-btn" onclick="askQuestion('What should I know about Josh Allen\\'s fantasy schedule for 2025?')">Josh schedule</button>
-                <button class="example-btn" onclick="askQuestion('Compare James Cook and Khalil Shakir fantasy context from Week 10')">Compare context</button>
+            <div class="examples-wrap collapsed" id="examplesWrap">
+                <button class="collapse-header" onclick="toggleExamples()" type="button">
+                    <span class="collapse-left">
+                        <span class="chevron">▶</span>
+                        <span>💡 Example questions</span>
+                    </span>
+                    <span class="collapse-hint">tap to open</span>
+                </button>
+                <div class="examples">
+                    <button class="example-btn" onclick="askQuestion('What\\'s Josh Allen\\'s EPA per play in 2024?')">Josh Allen EPA/play</button>
+                    <button class="example-btn" onclick="askQuestion('Compare Bills RB usage in 2024')">Bills RB usage</button>
+                    <button class="example-btn" onclick="askQuestion('Find WR target opportunities in 2024')">WR targets</button>
+                    <button class="example-btn" onclick="askQuestion('Late-season RB breakouts in 2024')">RB breakouts</button>
+                    <button class="example-btn" onclick="askQuestion('When are the Bills on bye in 2026?')">Bills bye week</button>
+                    <button class="example-btn" onclick="askQuestion('Show the Bills schedule for 2025')">Bills schedule</button>
+                    <button class="example-btn" onclick="askQuestion('Who do the Bills play from Week 10 on in 2025?')">From Week 10</button>
+                    <button class="example-btn" onclick="askQuestion('List all NFL bye weeks in 2026')">All bye weeks</button>
+                    <button class="example-btn" onclick="askQuestion('What should I know about Josh Allen\\'s fantasy schedule for 2025?')">Josh schedule</button>
+                    <button class="example-btn" onclick="askQuestion('Compare James Cook and Khalil Shakir fantasy context from Week 10')">Compare context</button>
+                </div>
             </div>
 
             <div class="input-container">
@@ -930,6 +1008,7 @@
             }
             sessionId = stored;
             loadDraftRoomState();
+            restoreCollapseState();
             updateAuthView();
             loadDraftBoard();
         }
@@ -1111,6 +1190,35 @@
             } catch (error) {
                 localStorage.removeItem('superagent_draft_room');
             }
+        }
+
+        function setSectionCollapsed(el, hintEl, collapsed) {
+            el.classList.toggle('collapsed', collapsed);
+            if (hintEl) hintEl.textContent = collapsed ? 'tap to open' : 'tap to hide';
+        }
+
+        function toggleDraftRoomCollapse() {
+            const room = document.getElementById('draftRoom');
+            const collapsed = !room.classList.contains('collapsed');
+            setSectionCollapsed(room, document.getElementById('draftRoomHint'), collapsed);
+            localStorage.setItem('superagent_draft_room_collapsed', collapsed ? '1' : '0');
+        }
+
+        function toggleExamples() {
+            const wrap = document.getElementById('examplesWrap');
+            const collapsed = !wrap.classList.contains('collapsed');
+            const hint = wrap.querySelector('.collapse-hint');
+            setSectionCollapsed(wrap, hint, collapsed);
+            localStorage.setItem('superagent_examples_collapsed', collapsed ? '1' : '0');
+        }
+
+        function restoreCollapseState() {
+            // Default both collapsed so the chat owns the screen. Honor saved choice.
+            const roomCollapsed = localStorage.getItem('superagent_draft_room_collapsed') !== '0';
+            const examplesCollapsed = localStorage.getItem('superagent_examples_collapsed') !== '0';
+            setSectionCollapsed(document.getElementById('draftRoom'), document.getElementById('draftRoomHint'), roomCollapsed);
+            const wrap = document.getElementById('examplesWrap');
+            setSectionCollapsed(wrap, wrap.querySelector('.collapse-hint'), examplesCollapsed);
         }
 
         function clearDraftRoom() {
