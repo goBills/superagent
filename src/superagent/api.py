@@ -21,7 +21,11 @@ from sqlalchemy.orm import Session
 
 from superagent.agent import run_agent
 from superagent.auth import create_token, hash_password, verify_password, verify_token
-from superagent.canonical_resolution import resolve_to_canonical, seed_canonical_players_from_nflverse
+from superagent.canonical_resolution import (
+    normalize_player_name,
+    resolve_to_canonical,
+    seed_canonical_players_from_nflverse,
+)
 from superagent.config import HOST, PORT, get_config
 from superagent.data.ingest_draft_sheets import DraftIngestionError, ingest_draft_market_file
 from superagent.data.refresh_sleeper_context import refresh_sleeper_context
@@ -690,6 +694,36 @@ def _upsert_my_roster_player(
     roster_player.position = pick.position
     roster_player.canonical_player_id = pick.canonical_player_id
     roster_player.mapping_status = pick.mapping_status
+
+
+def _draft_pick_is_unchanged(existing: Optional[LeagueDraftPick], player_name: str, team_name: str) -> bool:
+    """Return true when a bulk-pasted row matches the persisted pick exactly enough to skip resolving."""
+    if existing is None:
+        return False
+    return (
+        normalize_player_name(existing.source_player_name or "") == normalize_player_name(player_name)
+        and (existing.fantasy_team_name or "") == team_name
+    )
+
+
+def _roster_player_exists_for_pick(
+    db: Session,
+    league: League,
+    pick: LeagueDraftPick,
+    fantasy_team_name: str,
+) -> bool:
+    """Check whether an already-recorded own pick is also present in the stored roster."""
+    return (
+        db.query(LeagueRosterPlayer.id)
+        .filter(
+            LeagueRosterPlayer.league_id == league.id,
+            LeagueRosterPlayer.season == pick.season,
+            LeagueRosterPlayer.fantasy_team_name == fantasy_team_name,
+            LeagueRosterPlayer.source_player_name == pick.source_player_name,
+        )
+        .first()
+        is not None
+    )
 
 
 @app.get("/health")
@@ -1541,6 +1575,7 @@ def record_draft_picks_bulk(
     recorded = 0
     updated = 0
     skipped = 0
+    unchanged = 0
     needs_review = 0
     needs_review_players: List[str] = []
     for item in request.picks:
@@ -1557,6 +1592,12 @@ def record_draft_picks_bulk(
             .first()
         )
         default_team = "My Team" if item.is_mine else "Other"
+        team_name = (item.team_name or default_team).strip() or default_team
+        if _draft_pick_is_unchanged(existing, item.player_name, team_name):
+            if not item.is_mine or _roster_player_exists_for_pick(db, league, existing, team_name):
+                skipped += 1
+                unchanged += 1
+                continue
         pick_request = DraftPickRequest(
             pick_number=item.pick_number,
             player_name=item.player_name,
@@ -1566,7 +1607,6 @@ def record_draft_picks_bulk(
         )
         pick = _upsert_draft_pick(db, league, pick_request, default_team_name=default_team)
         if item.is_mine:
-            team_name = (item.team_name or "My Team").strip() or "My Team"
             pick.fantasy_team_name = team_name
             _upsert_my_roster_player(db, league, pick, team_name)
         db.flush()
@@ -1593,6 +1633,7 @@ def record_draft_picks_bulk(
             "recorded": recorded,
             "updated": updated,
             "skipped": skipped,
+            "unchanged": unchanged,
             "needs_review": needs_review,
             "needs_review_players": needs_review_players,
             "total_on_board": len(picks),

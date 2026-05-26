@@ -24,6 +24,7 @@ from superagent.models import (
     DraftMarketImport,
     DraftPlayerMarket,
     League,
+    LeagueDraftPick,
     LeagueRosterPlayer,
     LeagueSettings,
     Message,
@@ -208,15 +209,95 @@ def test_reset_draft_board_clears_picks_and_roster():
         assert roster == []
 
 
-def test_bulk_draft_picks_is_idempotent_on_repaste():
+def test_bulk_draft_picks_skips_unchanged_repaste_without_resolving(monkeypatch):
     headers, league_id, season, players = setup_draft_league_api()
     pick = {"pick_number": 1, "player_name": players["other"], "team_name": "Other", "is_mine": False}
     first = client.post(f"/leagues/{league_id}/draft/picks/bulk", json={"season": season, "picks": [pick]}, headers=headers)
     assert first.status_code == 200
-    # Re-paste the same pick number — should update in place, not duplicate.
+
+    def fail_resolve(*args, **kwargs):
+        raise AssertionError("unchanged bulk pick should not resolve again")
+
+    monkeypatch.setattr("superagent.api._resolve_draft_pick_player", fail_resolve)
+
+    # Re-paste the same pick number — should short-circuit before expensive resolution.
     second = client.post(f"/leagues/{league_id}/draft/picks/bulk", json={"season": season, "picks": [pick]}, headers=headers)
     assert second.status_code == 200
-    assert len(second.json()["picks"]) == 1
+    data = second.json()
+    assert len(data["picks"]) == 1
+    assert data["summary"]["recorded"] == 0
+    assert data["summary"]["updated"] == 0
+    assert data["summary"]["skipped"] == 1
+    assert data["summary"]["unchanged"] == 1
+
+
+def test_bulk_draft_picks_reprocesses_changed_pick_same_slot():
+    headers, league_id, season, players = setup_draft_league_api()
+    first_pick = {"pick_number": 1, "player_name": players["other"], "team_name": "Other", "is_mine": False}
+    first = client.post(
+        f"/leagues/{league_id}/draft/picks/bulk",
+        json={"season": season, "picks": [first_pick]},
+        headers=headers,
+    )
+    assert first.status_code == 200
+
+    corrected_pick = {"pick_number": 1, "player_name": players["mine"], "team_name": "Your Team", "is_mine": True}
+    second = client.post(
+        f"/leagues/{league_id}/draft/picks/bulk",
+        json={"season": season, "picks": [corrected_pick]},
+        headers=headers,
+    )
+
+    assert second.status_code == 200, second.text
+    data = second.json()
+    assert len(data["picks"]) == 1
+    assert data["picks"][0]["source_player_name"] == players["mine"]
+    assert data["summary"]["recorded"] == 0
+    assert data["summary"]["updated"] == 1
+    assert data["summary"]["unchanged"] == 0
+    with SessionLocal() as db:
+        roster_names = {
+            r.source_player_name
+            for r in db.query(LeagueRosterPlayer).filter(LeagueRosterPlayer.league_id == league_id).all()
+        }
+    assert players["mine"] in roster_names
+
+
+def test_bulk_draft_picks_repairs_missing_roster_for_unchanged_my_pick():
+    headers, league_id, season, players = setup_draft_league_api()
+    with SessionLocal() as db:
+        league = db.query(League).filter(League.id == league_id).first()
+        pick = LeagueDraftPick(
+            league_id=league.id,
+            season=season,
+            pick_num=1,
+            round_num=1,
+            fantasy_team_name="Your Team",
+            source_player_name=players["mine"],
+            position="RB",
+            canonical_player_id=f"nfl_mine_{players['source'].replace('api-draft-', '')}",
+            mapping_status="mapped",
+        )
+        db.add(pick)
+        db.commit()
+
+    my_pick = {"pick_number": 1, "player_name": players["mine"], "team_name": "Your Team", "is_mine": True}
+    response = client.post(
+        f"/leagues/{league_id}/draft/picks/bulk",
+        json={"season": season, "picks": [my_pick]},
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    summary = response.json()["summary"]
+    assert summary["unchanged"] == 0
+    assert summary["updated"] == 1
+    with SessionLocal() as db:
+        roster = db.query(LeagueRosterPlayer).filter(
+            LeagueRosterPlayer.league_id == league_id,
+            LeagueRosterPlayer.source_player_name == players["mine"],
+        ).first()
+    assert roster is not None
 
 
 def test_draft_sheet_endpoint_returns_available_rows_and_excludes_drafted():
