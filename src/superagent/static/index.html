@@ -619,6 +619,171 @@
             text-align: center;
         }
 
+        /* ---- Cockpit-first shell: spreadsheet is the canvas ---- */
+        .cockpit {
+            flex: 1;
+            display: none;            /* shown when authed (updateAuthView) */
+            flex-direction: column;
+            min-height: 0;            /* allow inner scroll */
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin: 14px 14px 0;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .cockpit-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface-2);
+        }
+
+        .cockpit-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .cockpit-league, .cockpit-pick {
+            width: 78px;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            font-weight: 700;
+            background: var(--surface);
+        }
+        .cockpit-pick { width: 64px; }
+
+        .cockpit-select {
+            max-width: 200px;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 12px;
+            color: #334155;
+            background: var(--surface);
+        }
+
+        .cockpit-sheet {
+            flex: 1;
+            min-height: 0;
+        }
+
+        /* Command bar (slim CLI-style input) */
+        .command-bar {
+            display: none;            /* shown when authed */
+            align-items: center;
+            gap: 10px;
+            margin: 12px 14px 16px;
+            padding: 8px 10px 8px 14px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            box-shadow: var(--shadow);
+        }
+
+        .command-bar:focus-within {
+            border-color: #c7d6f5;
+            box-shadow: var(--shadow), 0 0 0 3px rgba(37, 99, 235, 0.12);
+        }
+
+        .command-spark {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        .command-input {
+            flex: 1;
+            border: none !important;
+            outline: none;
+            background: transparent !important;
+            font-size: 15px;
+            box-shadow: none !important;
+            padding: 6px 2px !important;
+        }
+
+        .command-send {
+            flex-shrink: 0;
+            padding: 9px 20px;
+            border-radius: 999px;
+        }
+
+        /* Siri-style answer overlay */
+        .answer-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.18);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.22s ease;
+            z-index: 980;
+        }
+        .answer-backdrop.open { opacity: 1; visibility: visible; }
+
+        .answer-overlay {
+            position: fixed;
+            left: 50%;
+            bottom: 92px;
+            transform: translate(-50%, 12px) scale(0.98);
+            width: min(760px, 94vw);
+            max-height: 70vh;
+            display: flex;
+            flex-direction: column;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            box-shadow: var(--shadow-lg);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.34, 1.3, 0.5, 1);
+            z-index: 985;
+        }
+        .answer-overlay.open {
+            opacity: 1;
+            visibility: visible;
+            transform: translate(-50%, 0) scale(1);
+        }
+
+        .answer-overlay-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        .answer-overlay-title {
+            font-weight: 800;
+            font-size: 14px;
+            background: linear-gradient(90deg, var(--brand), var(--brand-2));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .answer-overlay-body {
+            overflow-y: auto;
+            padding: 6px 16px 16px;
+        }
+
+        .draft-roster-box {
+            width: 100%;
+            min-height: 52px;
+            resize: vertical;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-family: inherit;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
         table.sheet-table {
             border-collapse: collapse;
             width: 100%;
@@ -1245,151 +1410,108 @@
             </div>
         </div>
 
-        <div class="chat-area" id="chatArea">
-            <div class="message assistant">
-                <div class="message-bubble">
-                    👋 Welcome to Superagent! Ask me about NFL stats, player performance, fantasy metrics, or draft research.
+        <!-- COCKPIT: the spreadsheet is the primary canvas -->
+        <div class="cockpit" id="cockpit">
+            <div class="cockpit-toolbar">
+                <div class="cockpit-controls">
+                    <input type="text" id="draftLeagueId" class="cockpit-league" placeholder="League" value="1" oninput="saveDraftRoomState()" onchange="loadDraftBoard(); loadDraftSheet();">
+                    <input type="text" id="draftPick" class="cockpit-pick" placeholder="Pick #" oninput="saveDraftRoomState()">
+                    <button class="example-btn" onclick="openDraftDrawer()" type="button">📋 Paste / record</button>
+                    <button class="example-btn" onclick="loadDraftSheet()" type="button">↻ Refresh</button>
+                    <span class="draft-sheet-meta" id="draftSheetMeta"></span>
                 </div>
+                <div class="cockpit-controls">
+                    <select id="sessionSelect" class="cockpit-select" onchange="loadSelectedSession()">
+                        <option value="">Recent chats</option>
+                    </select>
+                    <button class="example-btn" onclick="startNewChat()" type="button">New</button>
+                </div>
+            </div>
+            <div class="draft-sheet-tabs" id="draftSheetTabs">
+                <button class="sheet-tab active" data-pos="ALL" onclick="setSheetTab('ALL', this)" type="button">All</button>
+                <button class="sheet-tab" data-pos="QB" onclick="setSheetTab('QB', this)" type="button">QB</button>
+                <button class="sheet-tab" data-pos="RB" onclick="setSheetTab('RB', this)" type="button">RB</button>
+                <button class="sheet-tab" data-pos="WR" onclick="setSheetTab('WR', this)" type="button">WR</button>
+                <button class="sheet-tab" data-pos="TE" onclick="setSheetTab('TE', this)" type="button">TE</button>
+                <button class="sheet-tab" data-pos="TARGETS" onclick="setSheetTab('TARGETS', this)" type="button">Targets</button>
+                <button class="sheet-tab" data-pos="MINE" onclick="setSheetTab('MINE', this)" type="button">My Roster</button>
+            </div>
+            <div class="draft-sheet-body cockpit-sheet" id="draftSheetBody">
+                <div class="draft-sheet-empty">Tap <strong>📋 Paste / record</strong> to load your draft board — the best available players show up here, live.</div>
             </div>
         </div>
 
-        <div class="input-area">
-            <div class="session-bar">
-                <select id="sessionSelect" onchange="loadSelectedSession()">
-                    <option value="">Recent chats</option>
-                </select>
-                <button class="secondary-btn" onclick="loadSessions()" type="button">Refresh</button>
-                <button class="secondary-btn" onclick="startNewChat()" type="button">New chat</button>
-            </div>
-
-            <button class="draft-launcher" id="draftLauncher" onclick="openDraftDrawer()" type="button">
-                <span class="draft-launcher-left">🏈 <span>Draft Room</span></span>
-                <span class="draft-launcher-hint" id="draftLauncherHint">paste your board &amp; track picks ▸</span>
-            </button>
-
-            <button class="draft-launcher draft-sheet-launcher" id="draftSheetLauncher" onclick="openDraftSheet()" type="button">
-                <span class="draft-launcher-left">📋 <span>Draft Sheet</span></span>
-                <span class="draft-launcher-hint">best available, live ▸</span>
-            </button>
-
-            <div class="draft-backdrop" id="draftBackdrop" onclick="closeDraftDrawer()"></div>
-            <aside class="draft-drawer" id="draftDrawer" aria-hidden="true">
-                <div class="draft-drawer-header">
-                    <span class="draft-drawer-title">🏈 Draft Room <span class="draft-room-status" id="draftRoomStatus">Saved</span></span>
-                    <button class="draft-drawer-close" onclick="closeDraftDrawer()" type="button" aria-label="Close draft room">&times;</button>
-                </div>
-                <div class="draft-drawer-body">
-                    <div class="draft-room-actions">
-                        <button class="example-btn" onclick="draftRoomAsk('next')">Next pick</button>
-                        <button class="example-btn" onclick="draftRoomAsk('needs')">Position needs</button>
-                        <button class="example-btn" onclick="draftRoomAsk('byes')">Bye check</button>
-                        <button class="example-btn" onclick="draftRoomAsk('rb')">RB values</button>
-                    </div>
-                    <div class="draft-paste">
-                        <div class="draft-paste-label">📋 Paste draft board (fastest) — copy picks from your draft site and paste here</div>
-                        <textarea id="draftPasteBox" placeholder="Paste the picks list (round by round is fine). I'll parse the players, mark your own picks, and load the board automatically."></textarea>
-                        <div class="draft-paste-row">
-                            <button class="example-btn" id="draftPasteBtn" onclick="parseAndLoadBoard()" type="button">Parse &amp; load board</button>
-                            <span class="draft-paste-status" id="draftPasteStatus"></span>
-                        </div>
-                    </div>
-                    <div class="draft-room-grid">
-                        <input type="text" id="draftLeagueId" placeholder="League ID" value="1" oninput="saveDraftRoomState()" onchange="loadDraftBoard()">
-                        <input type="text" id="draftPick" placeholder="Pick #" oninput="saveDraftRoomState()">
-                        <textarea id="draftRoster" placeholder="Paste roster: Josh Allen, James Cook, ..." oninput="saveDraftRoomState()"></textarea>
-                    </div>
-                    <div class="draft-pick-grid">
-                        <input type="text" id="draftPickTeam" placeholder="Team">
-                        <input type="text" id="draftPickPlayer" placeholder="Player picked">
-                        <button class="example-btn" onclick="recordTheyPicked()" type="button">They picked</button>
-                        <button class="example-btn" onclick="recordIPicked()" type="button">I picked</button>
-                        <button class="example-btn" onclick="undoDraftPick()" type="button">Undo</button>
-                    </div>
-                    <div class="draft-board-toggle">
-                        <span class="draft-board-summary" id="draftBoardSummary">Draft board: 0 picks</span>
-                        <button onclick="toggleDraftBoard()" type="button" id="draftBoardToggle">Show full board</button>
-                    </div>
-                    <div class="draft-board" id="draftBoard">
-                        <div class="draft-board-empty">No draft picks recorded yet.</div>
-                    </div>
-                    <div class="draft-room-footer">
-                        <div class="draft-room-note">
-                            Saved in this browser. Record every pick so recommendations exclude drafted players.
-                        </div>
-                        <button class="draft-room-clear" onclick="clearDraftRoom()" type="button">Clear draft room</button>
-                    </div>
-                </div>
-            </aside>
-
-            <div class="draft-backdrop" id="draftSheetBackdrop" onclick="closeDraftSheet()"></div>
-            <aside class="draft-sheet-drawer" id="draftSheetDrawer" aria-hidden="true">
-                <div class="draft-drawer-header">
-                    <span class="draft-drawer-title">📋 Draft Sheet
-                        <span class="draft-sheet-meta" id="draftSheetMeta"></span>
-                    </span>
-                    <div class="draft-sheet-header-actions">
-                        <button class="example-btn" onclick="loadDraftSheet()" type="button">Refresh</button>
-                        <button class="draft-drawer-close" onclick="closeDraftSheet()" type="button" aria-label="Close draft sheet">&times;</button>
-                    </div>
-                </div>
-                <div class="draft-sheet-tabs" id="draftSheetTabs">
-                    <button class="sheet-tab active" data-pos="ALL" onclick="setSheetTab('ALL', this)" type="button">All</button>
-                    <button class="sheet-tab" data-pos="QB" onclick="setSheetTab('QB', this)" type="button">QB</button>
-                    <button class="sheet-tab" data-pos="RB" onclick="setSheetTab('RB', this)" type="button">RB</button>
-                    <button class="sheet-tab" data-pos="WR" onclick="setSheetTab('WR', this)" type="button">WR</button>
-                    <button class="sheet-tab" data-pos="TE" onclick="setSheetTab('TE', this)" type="button">TE</button>
-                    <button class="sheet-tab" data-pos="TARGETS" onclick="setSheetTab('TARGETS', this)" type="button">Targets</button>
-                    <button class="sheet-tab" data-pos="MINE" onclick="setSheetTab('MINE', this)" type="button">My Roster</button>
-                </div>
-                <div class="draft-sheet-body" id="draftSheetBody">
-                    <div class="draft-sheet-empty">Open to load the board.</div>
-                </div>
-            </aside>
-
-            <div class="examples-wrap collapsed" id="examplesWrap">
-                <button class="collapse-header" onclick="toggleExamples()" type="button">
-                    <span class="collapse-left">
-                        <span class="chevron">▶</span>
-                        <span>💡 Example questions</span>
-                    </span>
-                    <span class="collapse-hint">tap to open</span>
-                </button>
-                <div class="examples">
-                    <button class="example-btn" onclick="askQuestion('What\\'s Josh Allen\\'s EPA per play in 2024?')">Josh Allen EPA/play</button>
-                    <button class="example-btn" onclick="askQuestion('Compare Bills RB usage in 2024')">Bills RB usage</button>
-                    <button class="example-btn" onclick="askQuestion('Find WR target opportunities in 2024')">WR targets</button>
-                    <button class="example-btn" onclick="askQuestion('Late-season RB breakouts in 2024')">RB breakouts</button>
-                    <button class="example-btn" onclick="askQuestion('When are the Bills on bye in 2026?')">Bills bye week</button>
-                    <button class="example-btn" onclick="askQuestion('Show the Bills schedule for 2025')">Bills schedule</button>
-                    <button class="example-btn" onclick="askQuestion('Who do the Bills play from Week 10 on in 2025?')">From Week 10</button>
-                    <button class="example-btn" onclick="askQuestion('List all NFL bye weeks in 2026')">All bye weeks</button>
-                    <button class="example-btn" onclick="askQuestion('What should I know about Josh Allen\\'s fantasy schedule for 2025?')">Josh schedule</button>
-                    <button class="example-btn" onclick="askQuestion('Compare James Cook and Khalil Shakir fantasy context from Week 10')">Compare context</button>
-                </div>
-            </div>
-
-            <div class="input-container">
-                <input
-                    type="text"
-                    id="questionInput"
-                    placeholder="Ask a question..."
-                    onkeypress="handleKeyPress(event)"
-                >
-                <button onclick="sendMessage()">Send</button>
-                <button onclick="clearChat()" style="background: #f0f0f0; color: #333; border: 1px solid #d0d0d0;">Clear</button>
-            </div>
-
-            <div class="disclaimer">
-                Stats through 2025 · 2026 draft prep · current player context via Sleeper
-            </div>
+        <!-- COMMAND BAR: AI on tap (expands into a Siri-style answer) -->
+        <div class="command-bar" id="commandBar">
+            <span class="command-spark">⚡</span>
+            <input type="text" id="questionInput" class="command-input" placeholder="Ask Superagent — e.g. who should I draft at 31?" onkeypress="handleKeyPress(event)">
+            <button class="command-send" onclick="sendMessage()" type="button">Ask</button>
         </div>
     </div>
 
+    <!-- Siri-style answer overlay (body-level, fixed) -->
+    <div class="answer-backdrop" id="answerBackdrop" onclick="closeAnswer()"></div>
+    <aside class="answer-overlay" id="answerOverlay" aria-hidden="true">
+        <div class="answer-overlay-head">
+            <span class="answer-overlay-title">⚡ Superagent</span>
+            <button class="draft-drawer-close" onclick="closeAnswer()" type="button" aria-label="Close">&times;</button>
+        </div>
+        <div class="answer-overlay-body" id="answerBody"></div>
+    </aside>
+
+    <!-- Draft Room drawer (paste board / record picks), body-level -->
+    <div class="draft-backdrop" id="draftBackdrop" onclick="closeDraftDrawer()"></div>
+    <aside class="draft-drawer" id="draftDrawer" aria-hidden="true">
+        <div class="draft-drawer-header">
+            <span class="draft-drawer-title">🏈 Draft Room <span class="draft-room-status" id="draftRoomStatus">Saved</span></span>
+            <button class="draft-drawer-close" onclick="closeDraftDrawer()" type="button" aria-label="Close draft room">&times;</button>
+        </div>
+        <div class="draft-drawer-body">
+            <div class="draft-room-actions">
+                <button class="example-btn" onclick="draftRoomAsk('next')">Next pick</button>
+                <button class="example-btn" onclick="draftRoomAsk('needs')">Position needs</button>
+                <button class="example-btn" onclick="draftRoomAsk('byes')">Bye check</button>
+                <button class="example-btn" onclick="draftRoomAsk('rb')">RB values</button>
+            </div>
+            <div class="draft-paste">
+                <div class="draft-paste-label">📋 Paste draft board (fastest) — copy picks from your draft site and paste here</div>
+                <textarea id="draftPasteBox" placeholder="Paste the picks list (round by round is fine). I'll parse the players, mark your own picks, and load the board automatically."></textarea>
+                <div class="draft-paste-row">
+                    <button class="example-btn" id="draftPasteBtn" onclick="parseAndLoadBoard()" type="button">Parse &amp; load board</button>
+                    <span class="draft-paste-status" id="draftPasteStatus"></span>
+                </div>
+            </div>
+            <textarea id="draftRoster" class="draft-roster-box" placeholder="My roster (optional): Josh Allen, James Cook, ..." oninput="saveDraftRoomState()"></textarea>
+            <div class="draft-pick-grid">
+                <input type="text" id="draftPickTeam" placeholder="Team">
+                <input type="text" id="draftPickPlayer" placeholder="Player picked">
+                <button class="example-btn" onclick="recordTheyPicked()" type="button">They picked</button>
+                <button class="example-btn" onclick="recordIPicked()" type="button">I picked</button>
+                <button class="example-btn" onclick="undoDraftPick()" type="button">Undo</button>
+            </div>
+            <div class="draft-board-toggle">
+                <span class="draft-board-summary" id="draftBoardSummary">Draft board: 0 picks</span>
+                <button onclick="toggleDraftBoard()" type="button" id="draftBoardToggle">Show full board</button>
+            </div>
+            <div class="draft-board" id="draftBoard">
+                <div class="draft-board-empty">No draft picks recorded yet.</div>
+            </div>
+            <div class="draft-room-footer">
+                <div class="draft-room-note">
+                    Saved in this browser. Record every pick so recommendations exclude drafted players.
+                </div>
+                <button class="draft-room-clear" onclick="clearDraftRoom()" type="button">Clear draft room</button>
+            </div>
+        </div>
+    </aside>
+
     <script>
         const REQUEST_TIMEOUT_MS = 60000;
-        const chatArea = document.getElementById('chatArea');
+        // Cockpit shell: answers render into the Siri-style overlay (#answerBody).
+        const chatArea = document.getElementById('answerBody');
+        const cockpit = document.getElementById('cockpit');
+        const commandBar = document.getElementById('commandBar');
         const questionInput = document.getElementById('questionInput');
-        const inputArea = document.querySelector('.input-area');
         const authArea = document.getElementById('authArea');
         const signOutButton = document.getElementById('signOutButton');
         const draftLeagueId = document.getElementById('draftLeagueId');
@@ -1429,17 +1551,31 @@
         function updateAuthView() {
             if (authToken) {
                 authArea.style.display = 'none';
-                chatArea.style.display = 'flex';
-                inputArea.style.display = 'block';
+                cockpit.style.display = 'flex';
+                commandBar.style.display = 'flex';
                 signOutButton.style.display = 'inline-block';
                 questionInput.focus();
-                loadSessions().then(() => loadCurrentSessionMessages());
+                loadSessions();
+                loadDraftSheet();   // cockpit canvas is the spreadsheet
             } else {
                 authArea.style.display = 'flex';
-                chatArea.style.display = 'none';
-                inputArea.style.display = 'none';
+                cockpit.style.display = 'none';
+                commandBar.style.display = 'none';
                 signOutButton.style.display = 'none';
             }
+        }
+
+        // ---- Siri-style answer overlay ----
+        function openAnswer() {
+            document.getElementById('answerOverlay').classList.add('open');
+            document.getElementById('answerBackdrop').classList.add('open');
+            document.getElementById('answerOverlay').setAttribute('aria-hidden', 'false');
+        }
+
+        function closeAnswer() {
+            document.getElementById('answerOverlay').classList.remove('open');
+            document.getElementById('answerBackdrop').classList.remove('open');
+            document.getElementById('answerOverlay').setAttribute('aria-hidden', 'true');
         }
 
         function generateUUID() {
@@ -1547,6 +1683,7 @@
                 clearChat();
                 return;
             }
+            openAnswer();  // show the loaded conversation in the overlay
             for (const message of messages) {
                 addMessage(message.role, message.content);
                 if (message.role === 'assistant' && message.tools_used && message.tools_used.length > 0) {
@@ -1631,28 +1768,18 @@
         // ---- Draft Sheet (live cockpit table) ----
         let currentSheetTab = 'ALL';
 
+        // In the cockpit shell the sheet is the always-on canvas (no drawer).
         function draftSheetIsOpen() {
-            const d = document.getElementById('draftSheetDrawer');
-            return d && d.classList.contains('open');
+            return !!authToken;
         }
 
         function openDraftSheet() {
             if (!authToken) { showAuthError('loginError', 'Please sign in to use the draft sheet.'); return; }
-            closeDraftDrawer();  // only one right-side drawer open at a time
-            const drawer = document.getElementById('draftSheetDrawer');
-            drawer.classList.add('open');
-            document.getElementById('draftSheetBackdrop').classList.add('open');
-            drawer.setAttribute('aria-hidden', 'false');
-            document.body.style.overflow = 'hidden';
             loadDraftSheet();
         }
 
         function closeDraftSheet() {
-            const drawer = document.getElementById('draftSheetDrawer');
-            drawer.classList.remove('open');
-            document.getElementById('draftSheetBackdrop').classList.remove('open');
-            drawer.setAttribute('aria-hidden', 'true');
-            document.body.style.overflow = '';
+            // No-op in the cockpit shell (kept for callers; sheet is always visible).
         }
 
         function setSheetTab(pos, btn) {
@@ -1804,10 +1931,7 @@
         }
 
         function restoreCollapseState() {
-            // Examples default collapsed so the chat owns the screen. Honor saved choice.
-            const examplesCollapsed = localStorage.getItem('superagent_examples_collapsed') !== '0';
-            const wrap = document.getElementById('examplesWrap');
-            setSectionCollapsed(wrap, wrap.querySelector('.collapse-hint'), examplesCollapsed);
+            // Examples section was removed in the cockpit shell; nothing to restore.
         }
 
         function updateLauncherHint(count) {
@@ -2265,13 +2389,7 @@
 
         function clearChat() {
             chatArea.innerHTML = '';
-            const welcomeMsg = document.createElement('div');
-            welcomeMsg.className = 'message assistant';
-            const bubble = document.createElement('div');
-            bubble.className = 'message-bubble';
-            bubble.textContent = '👋 Welcome to Superagent! Ask me about NFL stats, player performance, fantasy metrics, or draft research.';
-            welcomeMsg.appendChild(bubble);
-            chatArea.appendChild(welcomeMsg);
+            closeAnswer();
             questionInput.focus();
         }
 
@@ -2287,6 +2405,10 @@
             // Disable input while processing
             isWaiting = true;
             questionInput.disabled = true;
+
+            // Expand the Siri-style overlay with a fresh exchange (current Q&A only).
+            chatArea.innerHTML = '';
+            openAnswer();
 
             // Display the user's original text, but send draft context to the agent
             // so free-text draft questions don't trigger "which league/season?" prompts.
@@ -2539,7 +2661,7 @@
 
         // Initialize on load
         document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape') { closeDraftDrawer(); closeDraftSheet(); }
+            if (event.key === 'Escape') { closeAnswer(); closeDraftDrawer(); closeDraftSheet(); }
         });
 
         window.addEventListener('load', initializeSession);
