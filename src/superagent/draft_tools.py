@@ -399,6 +399,62 @@ def _apply_current_context(payload: dict[str, Any], ctx: PlayerCurrentContext | 
     return payload
 
 
+def _draft_sheet_tier(effective_rank: float | None) -> dict[str, Any]:
+    """Simple rank-based tiering for the live draft sheet MVP."""
+    if effective_rank is None:
+        return {"tier": "Unranked", "tier_level": None}
+    rank = float(effective_rank)
+    if rank <= 12:
+        return {"tier": "Tier 1", "tier_level": 1}
+    if rank <= 36:
+        return {"tier": "Tier 2", "tier_level": 2}
+    if rank <= 72:
+        return {"tier": "Tier 3", "tier_level": 3}
+    if rank <= 120:
+        return {"tier": "Tier 4", "tier_level": 4}
+    return {"tier": "Tier 5", "tier_level": 5}
+
+
+def _position_needs_from_counts(settings: LeagueSettings, counts: dict[str, int]) -> dict[str, int]:
+    requirements = _starter_requirements(settings)
+    return {
+        "QB": max(0, requirements["QB"] - counts.get("QB", 0)),
+        "RB": max(0, requirements["RB"] - counts.get("RB", 0)),
+        "WR": max(0, requirements["WR"] - counts.get("WR", 0)),
+        "TE": max(0, requirements["TE"] - counts.get("TE", 0)),
+        "FLEX": max(0, requirements["FLEX"] - sum(counts.get(pos, 0) for pos in FLEX_ELIGIBLE_POSITIONS)),
+    }
+
+
+def _draft_sheet_badges(
+    row: dict[str, Any],
+    *,
+    best_available_id: str | None,
+    best_fit_id: str | None,
+    roster_bye_counts: dict[int, int],
+) -> list[str]:
+    """Data-derived badges for the live draft sheet."""
+    badges: list[str] = []
+    if row.get("canonical_player_id") == best_available_id:
+        badges.append("Best Available")
+    if row.get("canonical_player_id") == best_fit_id:
+        badges.append("Best Fit")
+    if row.get("value_delta") is not None and row["value_delta"] >= 8:
+        badges.append("Value")
+    bye_week = row.get("bye_week")
+    if bye_week is not None and roster_bye_counts.get(int(bye_week), 0) >= 2:
+        badges.append("Bye Risk")
+    if row.get("current_team_differs"):
+        badges.append("Team Changed")
+    if row.get("current_context_available") is False:
+        badges.append("Current Context Missing")
+    if row.get("injury_status"):
+        badges.append("Injury")
+    if row.get("canonical_player_id") is None:
+        badges.append("Needs Review")
+    return badges
+
+
 def find_draft_targets(
     league_id: int,
     position: str | None = None,
@@ -562,6 +618,141 @@ def get_available_targets(
         sort_by=sort_by,
         current_pick=current_pick,
     )
+
+
+def get_draft_sheet(
+    league_id: int,
+    season: int | None = None,
+    bye_week_season: int | None = None,
+    position: str | None = None,
+    source: str | None = None,
+    limit: int = 200,
+    targets: bool = False,
+    roster: str | None = None,
+) -> dict:
+    """Return a single-pass live draft sheet for spreadsheet-style scanning.
+
+    This intentionally does not call the agent or loop through draft tools. It
+    preloads the market, drafted board, current context, and roster state once,
+    then computes availability, tiers, and badges in memory.
+    """
+    with SessionLocal() as db:
+        league = _get_league(db, league_id)
+        if league is None:
+            return _response(False, error=f"League {league_id} not found")
+        season = season or _latest_market_season(db)
+        if season is None:
+            return _response(False, error="No draft market data imported")
+        bye_week_season = _bye_week_season(season, bye_week_season)
+        settings = _league_settings(league)
+        drafted = _drafted_ids(db, league_id, season)
+        drafted_names = _drafted_names(db, league_id, season)
+        draftable_rank_limit = _draftable_rank_limit(settings)
+
+        roster_names = _stored_roster_names(db, league_id, season)
+        roster_markets, _ = _roster_markets(db, roster_names, season, source=source)
+        roster_counts = _roster_counts(roster_markets)
+        position_needs = _position_needs_from_counts(settings, roster_counts)
+        roster_bye_counts: dict[int, int] = {}
+        for market in roster_markets:
+            bye_week, _, _ = _market_bye_week(market, bye_week_season)
+            if bye_week is not None:
+                roster_bye_counts[int(bye_week)] = roster_bye_counts.get(int(bye_week), 0) + 1
+
+        rows: list[dict[str, Any]] = []
+        mode = "my_roster" if (roster or "").lower() == "mine" else "available"
+        market_rows = roster_markets if mode == "my_roster" else _market_rows(db, season, source=source, position=position)
+        for market in market_rows:
+            if position and (market.position or "").upper() != position.upper():
+                continue
+            if mode == "available":
+                if market.canonical_player_id in drafted:
+                    continue
+                if normalize_player_name(market.source_player_name) in drafted_names:
+                    continue
+            payload = _market_payload(market, settings, bye_week_season=bye_week_season)
+            effective_rank = payload["effective_rank"]
+            if mode == "available" and (effective_rank is None or effective_rank > draftable_rank_limit):
+                continue
+            if mode == "available" and not _passes_default_position_filter(market, payload, position):
+                continue
+            rows.append(payload)
+
+        context_map = _current_context_map(db, [row["canonical_player_id"] for row in rows])
+        for row in rows:
+            _apply_current_context(row, context_map.get(row["canonical_player_id"]))
+            row.update(_draft_sheet_tier(row.get("effective_rank")))
+            row["is_drafted"] = mode == "my_roster" or row["canonical_player_id"] in drafted
+            row["is_mine"] = mode == "my_roster"
+
+        rows.sort(
+            key=lambda row: (
+                row["effective_rank"] if row["effective_rank"] is not None else float("inf"),
+                -(row["value_delta"] or 0),
+            )
+        )
+
+        best_available_id = rows[0]["canonical_player_id"] if rows else None
+        fit_candidates = [
+            row
+            for row in rows
+            if row.get("position") in {"QB", "RB", "WR", "TE"}
+            and (
+                position_needs.get(row.get("position"), 0) > 0
+                or (row.get("position") in FLEX_ELIGIBLE_POSITIONS and position_needs.get("FLEX", 0) > 0)
+            )
+        ]
+        best_fit_id = fit_candidates[0]["canonical_player_id"] if fit_candidates else None
+
+        for row in rows:
+            row["badges"] = _draft_sheet_badges(
+                row,
+                best_available_id=best_available_id if mode == "available" else None,
+                best_fit_id=best_fit_id if mode == "available" else None,
+                roster_bye_counts=roster_bye_counts,
+            )
+
+        if targets and mode == "available":
+            target_badges = {"Best Available", "Best Fit", "Value"}
+            rows = [row for row in rows if target_badges.intersection(row.get("badges", []))]
+
+        limit = max(1, min(limit, 300))
+        drafted_count = (
+            db.query(LeagueDraftPick)
+            .filter(LeagueDraftPick.league_id == league_id, LeagueDraftPick.season == season)
+            .count()
+        )
+        visible_rows = rows[:limit]
+        return _response(
+            True,
+            data={
+                "league_id": league_id,
+                "season": season,
+                "market_season": season,
+                "bye_week_season": bye_week_season,
+                "position": position,
+                "source": source,
+                "mode": mode,
+                "targets": targets,
+                "rows": visible_rows,
+                "summary": {
+                    "available_count": len(rows),
+                    "roster_count": len(roster_markets),
+                    "returned_count": len(visible_rows),
+                    "drafted_count": drafted_count,
+                    "draftable_rank_limit": draftable_rank_limit,
+                    "best_available": rows[0]["player_name"] if rows else None,
+                    "best_fit": next((row["player_name"] for row in rows if row["canonical_player_id"] == best_fit_id), None),
+                    "position_needs": position_needs,
+                },
+            },
+            meta={
+                "single_pass": True,
+                "rank_semantics": "Effective Rank uses ADP when available, otherwise avg rank, otherwise overall rank.",
+                "tier_semantics": "Tier 1: 1-12, Tier 2: 13-36, Tier 3: 37-72, Tier 4: 73-120, Tier 5: 121+.",
+                "context_semantics": "current_team/age/years_exp/injury_status come from provider current context when available.",
+            },
+        )
 
 
 def compare_draft_options(

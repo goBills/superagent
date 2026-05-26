@@ -47,7 +47,7 @@ def setup_draft_league_api():
     season = 2027
     suffix = uuid.uuid4().hex[:10]
     source = f"api-draft-{suffix}"
-    players = {"other": f"Aywr Receiver {suffix}", "mine": f"Bxrb Runner {suffix}"}
+    players = {"other": f"Aywr Receiver {suffix}", "mine": f"Bxrb Runner {suffix}", "source": source}
     with SessionLocal() as db:
         user = db.query(User).filter(User.email == email).first()
         league = League(user_id=user.id, league_name="API Draft League", league_type="snake")
@@ -170,6 +170,30 @@ def test_bulk_draft_picks_is_idempotent_on_repaste():
     second = client.post(f"/leagues/{league_id}/draft/picks/bulk", json={"season": season, "picks": [pick]}, headers=headers)
     assert second.status_code == 200
     assert len(second.json()["picks"]) == 1
+
+
+def test_draft_sheet_endpoint_returns_available_rows_and_excludes_drafted():
+    headers, league_id, season, players = setup_draft_league_api()
+    pick = {"pick_number": 1, "player_name": players["other"], "team_name": "Other", "is_mine": False}
+    response = client.post(
+        f"/leagues/{league_id}/draft/picks/bulk",
+        json={"season": season, "picks": [pick]},
+        headers=headers,
+    )
+    assert response.status_code == 200
+
+    sheet = client.get(
+        f"/leagues/{league_id}/draft/sheet?season={season}&source={players['source']}&limit=20",
+        headers=headers,
+    )
+
+    assert sheet.status_code == 200, sheet.text
+    data = sheet.json()
+    names = [row["player_name"] for row in data["rows"]]
+    assert players["other"] not in names
+    assert players["mine"] in names
+    assert data["summary"]["drafted_count"] == 1
+    assert data["summary"]["returned_count"] == 1
 
 
 def auth_headers() -> dict:

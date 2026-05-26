@@ -16,6 +16,7 @@ from superagent.draft_tools import (  # noqa: E402
     find_draft_targets,
     get_bye_week_analysis,
     get_draft_context,
+    get_draft_sheet,
     get_position_needs,
     get_roster_construction_context,
     recommend_next_pick_targets,
@@ -28,6 +29,7 @@ from superagent.models import (  # noqa: E402
     DraftPlayerMarket,
     League,
     LeagueDraftPick,
+    LeagueRosterPlayer,
     LeagueSettings,
     PlayerCurrentContext,
     PlayerSeason,
@@ -158,6 +160,131 @@ def test_get_available_targets_excludes_recorded_draft_board():
 
     assert result["ok"] is True
     assert "Josh Allen" not in [row["player_name"] for row in result["data"]]
+
+
+def test_get_draft_sheet_excludes_drafted_and_badges_best_available():
+    league_id, season, source = setup_draft_fixture()
+
+    result = get_draft_sheet(league_id=league_id, season=season, source=source, limit=10)
+
+    assert result["ok"] is True
+    data = result["data"]
+    rows = data["rows"]
+    names = [row["player_name"] for row in rows]
+    assert "Josh Allen" not in names
+    assert names[:3] == ["Lamar Jackson", "James Cook", "Khalil Shakir"]
+    assert rows[0]["tier"] == "Tier 2"
+    assert rows[0]["tier_level"] == 2
+    assert "Best Available" in rows[0]["badges"]
+    assert data["summary"]["drafted_count"] == 1
+    assert result["meta"]["single_pass"] is True
+
+
+def test_get_draft_sheet_uses_current_context_and_flags_team_change():
+    league_id, season, source = setup_draft_fixture()
+    with SessionLocal() as db:
+        db.query(PlayerCurrentContext).filter(
+            PlayerCurrentContext.canonical_player_id == "nfl_lamar_jackson_tools",
+            PlayerCurrentContext.source == "sleeper-test",
+        ).delete()
+        db.add(
+            PlayerCurrentContext(
+                canonical_player_id="nfl_lamar_jackson_tools",
+                season=season + 10,
+                source="sleeper-test",
+                source_player_id=f"sleeper_lamar_{uuid.uuid4().hex}",
+                full_name="Lamar Jackson",
+                normalized_name=normalize_player_name("Lamar Jackson"),
+                position="QB",
+                team="LV",
+                age=29,
+                years_exp=9,
+                injury_status="Questionable",
+                status="Active",
+            )
+        )
+        db.commit()
+
+    result = get_draft_sheet(league_id=league_id, season=season, source=source, position="QB", limit=10)
+
+    assert result["ok"] is True
+    row = result["data"]["rows"][0]
+    assert row["player_name"] == "Lamar Jackson"
+    assert row["team"] == "BAL"
+    assert row["current_team"] == "LV"
+    assert row["current_team_differs"] is True
+    assert row["age"] == 29
+    assert row["years_exp"] == 9
+    assert "Team Changed" in row["badges"]
+    assert "Injury" in row["badges"]
+    with SessionLocal() as db:
+        db.query(PlayerCurrentContext).filter(
+            PlayerCurrentContext.canonical_player_id == "nfl_lamar_jackson_tools",
+            PlayerCurrentContext.source == "sleeper-test",
+        ).delete()
+        db.commit()
+
+
+def test_get_draft_sheet_marks_bye_risk_from_user_roster():
+    league_id, season, source = setup_draft_fixture()
+    with SessionLocal() as db:
+        db.add_all(
+            [
+                LeagueRosterPlayer(
+                    league_id=league_id,
+                    season=season,
+                    fantasy_team_name="My Team",
+                    source_player_name="Josh Allen",
+                    position="QB",
+                    canonical_player_id="nfl_josh_allen_tools",
+                    mapping_status="mapped",
+                ),
+                LeagueRosterPlayer(
+                    league_id=league_id,
+                    season=season,
+                    fantasy_team_name="My Team",
+                    source_player_name="James Cook",
+                    position="RB",
+                    canonical_player_id="nfl_james_cook_tools",
+                    mapping_status="mapped",
+                ),
+            ]
+        )
+        db.commit()
+
+    result = get_draft_sheet(league_id=league_id, season=season, source=source, position="WR", limit=10)
+
+    assert result["ok"] is True
+    row = result["data"]["rows"][0]
+    assert row["player_name"] == "Khalil Shakir"
+    assert "Bye Risk" in row["badges"]
+
+
+def test_get_draft_sheet_roster_mode_returns_my_roster_rows():
+    league_id, season, source = setup_draft_fixture()
+    with SessionLocal() as db:
+        db.add(
+            LeagueRosterPlayer(
+                league_id=league_id,
+                season=season,
+                fantasy_team_name="My Team",
+                source_player_name="James Cook",
+                position="RB",
+                canonical_player_id="nfl_james_cook_tools",
+                mapping_status="mapped",
+            )
+        )
+        db.commit()
+
+    result = get_draft_sheet(league_id=league_id, season=season, source=source, roster="mine", limit=10)
+
+    assert result["ok"] is True
+    data = result["data"]
+    assert data["mode"] == "my_roster"
+    assert data["rows"][0]["player_name"] == "James Cook"
+    assert data["rows"][0]["is_mine"] is True
+    assert data["rows"][0]["is_drafted"] is True
+    assert data["summary"]["roster_count"] == 1
 
 
 def test_find_draft_targets_filters_position_adp_and_bye():
@@ -712,6 +839,9 @@ def test_find_draft_targets_uses_current_context_team_over_market():
     Regression for 'Mike Evans (WR, TB)' when he has moved teams."""
     league_id, season, source = setup_draft_fixture()
     with SessionLocal() as db:
+        db.query(PlayerCurrentContext).filter(
+            PlayerCurrentContext.canonical_player_id == "nfl_lamar_jackson_tools"
+        ).delete()
         # Lamar's market team is BAL; provider context says he moved to LV.
         db.add(
             PlayerCurrentContext(

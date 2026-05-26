@@ -26,6 +26,7 @@ from superagent.config import HOST, PORT, get_config
 from superagent.data.ingest_draft_sheets import DraftIngestionError, ingest_draft_market_file
 from superagent.data.refresh_sleeper_context import refresh_sleeper_context
 from superagent.db import get_db, init_db
+from superagent.draft_tools import get_draft_sheet
 from superagent.espn_integration import ingest_espn_league
 from superagent.models import (
     ConversationSession,
@@ -1399,6 +1400,36 @@ def list_draft_picks(
         season=season,
         picks=[_draft_pick_to_response(pick).model_dump() for pick in picks],
     )
+
+
+@app.get("/leagues/{league_id}/draft/sheet")
+def get_league_draft_sheet(
+    league_id: int,
+    season: Optional[int] = None,
+    bye_week_season: Optional[int] = None,
+    position: Optional[str] = None,
+    source: Optional[str] = None,
+    limit: int = 200,
+    targets: bool = False,
+    roster: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Return a fast live draft sheet for spreadsheet-style draft scanning."""
+    _get_owned_league(db, league_id, current_user.id)
+    result = get_draft_sheet(
+        league_id=league_id,
+        season=season,
+        bye_week_season=bye_week_season,
+        position=position,
+        source=source,
+        limit=limit,
+        targets=targets,
+        roster=roster,
+    )
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Draft sheet unavailable"))
+    return result["data"]
 
 
 @app.post("/leagues/{league_id}/draft/picks", response_model=DraftPickResponse)
