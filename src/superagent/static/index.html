@@ -918,6 +918,7 @@
         let draftRoomStatusTimer = null;
         let sessionsLoaded = false;
         let draftBoardExpanded = false;
+        let draftBoardPicks = [];
 
         // Initialize session ID from localStorage
         function initializeSession() {
@@ -1142,10 +1143,12 @@
                 });
                 if (!response.ok) {
                     draftBoard.innerHTML = '<div class="draft-board-empty">Draft board unavailable.</div>';
+                    draftBoardPicks = [];
                     return;
                 }
                 const data = await response.json();
                 const allPicks = data.picks || [];
+                draftBoardPicks = allPicks;
                 const visiblePicks = draftBoardExpanded ? allPicks : allPicks.slice(-5);
                 draftBoardSummary.textContent = `Draft board: ${allPicks.length} pick${allPicks.length === 1 ? '' : 's'}`;
                 draftBoardToggle.textContent = draftBoardExpanded ? 'Hide full board' : 'Show full board';
@@ -1163,6 +1166,7 @@
                 `).join('');
             } catch (error) {
                 draftBoard.innerHTML = '<div class="draft-board-empty">Draft board unavailable.</div>';
+                draftBoardPicks = [];
             }
         }
 
@@ -1191,6 +1195,17 @@
                 addMessage('error', 'Enter a pick number and player name first.');
                 return;
             }
+
+            // Find and disable the button that was clicked
+            const buttonText = isMine ? 'I picked' : 'They picked';
+            const buttons = Array.from(document.querySelectorAll('button.example-btn')).filter(b => b.textContent.trim() === buttonText);
+            const button = buttons[0];
+            if (!button) return;
+
+            const originalText = button.textContent;
+            button.disabled = true;
+            button.textContent = '⏳ Recording...';
+
             const leagueId = draftLeagueIdValue();
             const payload = {
                 pick_number: pickNumber,
@@ -1211,16 +1226,43 @@
                     throw new Error(error.detail || 'Could not record draft pick');
                 }
                 const pick = await response.json();
+
+                // Show success state briefly
+                button.textContent = '✅ Recorded!';
+                button.style.background = '#15803d';
+                button.style.color = 'white';
+
+                // Clear after success
                 if (isMine) appendToRoster(pick.source_player_name);
                 draftPick.value = String(pick.pick_num + 1);
                 draftPickPlayer.value = '';
+                draftPickTeam.value = '';
                 saveDraftRoomState();
                 await loadDraftBoard();
+
+                // Reset button state after 1 second
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    button.style.background = '';
+                    button.style.color = '';
+                }, 1000);
+
                 if (isMine) {
                     askQuestion(draftRoomPrompt('next'));
                 }
             } catch (error) {
+                // Show error state and reset button
+                button.textContent = '❌ Error';
+                button.style.background = '#dc2626';
+                button.style.color = 'white';
                 addMessage('error', error.message);
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    button.style.background = '';
+                    button.style.color = '';
+                }, 2000);
             }
         }
 
@@ -1262,19 +1304,26 @@
             const rosterText = roster ? `My current roster is ${roster}. ` : '';
             const pickText = pick ? `I am at pick ${pick}. ` : '';
 
+            // Include recorded draft board picks
+            let boardText = '';
+            if (draftBoardPicks && draftBoardPicks.length > 0) {
+                const picksText = draftBoardPicks.map(p => `#${p.pick_num} ${p.fantasy_team_name || 'Team'} took ${p.source_player_name}`).join('; ');
+                boardText = `Recorded draft board: ${picksText}. `;
+            }
+
             if (kind === 'next') {
-                return `League ID ${leagueId}. ${rosterText}${pickText}Recommend next available pick targets, excluding the recorded draft board.`;
+                return `League ID ${leagueId}. ${rosterText}${boardText}${pickText}Recommend next available pick targets, excluding the recorded draft board.`;
             }
             if (kind === 'needs') {
-                return `League ID ${leagueId}. ${rosterText}Show my position needs and what to prioritize next.`;
+                return `League ID ${leagueId}. ${rosterText}${boardText}Show my position needs and what to prioritize next.`;
             }
             if (kind === 'byes') {
-                return `League ID ${leagueId}. ${rosterText}Check my bye week conflicts and what to avoid next.`;
+                return `League ID ${leagueId}. ${rosterText}${boardText}Check my bye week conflicts and what to avoid next.`;
             }
             if (kind === 'rb') {
-                return `League ID ${leagueId}. ${rosterText}${pickText}Show available RB values with Effective Rank, Rank Source, ECR, adjusted value, and value delta, excluding the recorded draft board.`;
+                return `League ID ${leagueId}. ${rosterText}${boardText}${pickText}Show available RB values with Effective Rank, Rank Source, ECR, adjusted value, and value delta, excluding the recorded draft board.`;
             }
-            return `League ID ${leagueId}. ${rosterText}${pickText}Help me with my next draft pick.`;
+            return `League ID ${leagueId}. ${rosterText}${boardText}${pickText}Help me with my next draft pick.`;
         }
 
         function draftRoomAsk(kind) {
