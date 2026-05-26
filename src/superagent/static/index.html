@@ -852,6 +852,59 @@
             border-radius: 999px;
         }
 
+        /* Clickable rows + selection */
+        table.sheet-table tbody tr.sheet-row { cursor: pointer; }
+        table.sheet-table tbody tr.selected {
+            background-color: #dbeafe;
+            box-shadow: inset 3px 0 0 var(--brand);
+        }
+        table.sheet-table tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--brand); }
+
+        /* Selection detail + action bar */
+        .detail-bar {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            margin: 12px 14px 0;
+            padding: 10px 14px;
+            background: var(--surface);
+            border: 1px solid #c7d6f5;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+        .detail-bar.open { display: flex; }
+
+        .detail-info { min-width: 0; }
+        .detail-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .detail-name { font-size: 16px; font-weight: 800; color: var(--text); }
+        .detail-meta { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+        .detail-read { font-size: 12px; color: #475569; margin-top: 3px; }
+
+        .detail-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+        .detail-actions .sheet-act { padding: 8px 12px; font-size: 12px; }
+        .detail-close {
+            background: transparent;
+            border: none;
+            color: #94a3b8;
+            font-size: 22px;
+            line-height: 1;
+            padding: 0 6px;
+            cursor: pointer;
+            box-shadow: none;
+        }
+        .detail-close:hover { color: var(--text); transform: none; box-shadow: none; }
+
         /* Siri-style answer overlay */
         .answer-backdrop {
             position: fixed;
@@ -1680,6 +1733,25 @@
             </div>
         </div>
 
+        <!-- Selection detail + action bar (appears when a player row is clicked) -->
+        <div class="detail-bar" id="playerDetailBar" aria-hidden="true">
+            <div class="detail-info">
+                <div class="detail-head">
+                    <span class="detail-name" id="detailName"></span>
+                    <span class="detail-meta" id="detailMeta"></span>
+                </div>
+                <div class="detail-read" id="detailRead"></div>
+            </div>
+            <div class="detail-actions">
+                <button class="sheet-act mine" onclick="detailAction('mine')" type="button">I picked</button>
+                <button class="sheet-act they" onclick="detailAction('they')" type="button">They picked</button>
+                <button class="sheet-act why" onclick="detailAction('why')" type="button">Why?</button>
+                <button class="sheet-act" onclick="detailAction('compare')" type="button">Compare</button>
+                <button class="sheet-act" id="detailWatchBtn" onclick="detailAction('watch')" type="button">☆ Watch</button>
+                <button class="detail-close" onclick="clearSelection()" type="button" aria-label="Close">&times;</button>
+            </div>
+        </div>
+
         <!-- COMMAND BAR: AI on tap (expands into a Siri-style answer) -->
         <div class="command-bar" id="commandBar">
             <span class="command-spark">⚡</span>
@@ -2043,6 +2115,8 @@
 
         // ---- Draft Sheet (live cockpit table) ----
         let currentSheetTab = 'ALL';
+        let sheetRows = [];
+        let selectedPlayer = null;
 
         // In the cockpit shell the sheet is the always-on canvas (no drawer).
         function draftSheetIsOpen() {
@@ -2210,19 +2284,22 @@
                 body.innerHTML = '<div class="draft-sheet-empty">No players to show for this tab.</div>';
                 return;
             }
+            sheetRows = rows;
+            clearSelection();
+            // Actions live in the selection detail bar now (no far-right column to reach for).
             const head = `<thead><tr>
                 <th>#</th><th>Player</th><th>Pos</th><th>Team</th><th>Bye</th><th>Tier</th>
                 <th class="sheet-num">Eff Rk</th><th>Src</th><th class="sheet-num">ECR</th>
                 <th class="sheet-num">Val Δ</th><th class="sheet-num">Age</th><th class="sheet-num">Exp</th>
-                <th>Inj</th><th>Flags</th><th>Actions</th></tr></thead>`;
+                <th>Inj</th><th>Flags</th></tr></thead>`;
             const bodyRows = rows.map((r, i) => {
                 const team = r.current_context_available ? (r.current_team || 'FA') : (r.team || '—');
                 const inj = r.injury_status ? `<span class="sheet-badge badge-injury">${escapeHtml(r.injury_status)}</span>` : '—';
                 const drafted = r.is_drafted ? ' sheet-drafted' : '';
-                const nm = escapeHtml(r.player_name).replace(/'/g, "\\'");
-                return `<tr class="${tierClass(r.tier)}${drafted}">
+                const star = isWatched(r.canonical_player_id) ? '⭐ ' : '';
+                return `<tr class="sheet-row ${tierClass(r.tier)}${drafted}" data-idx="${i}" onclick="selectPlayer(${i})">
                     <td class="sheet-num">${i + 1}</td>
-                    <td class="sheet-player">${escapeHtml(r.player_name)}</td>
+                    <td class="sheet-player">${star}${escapeHtml(r.player_name)}</td>
                     <td><span class="sheet-pos-pill pos-${escapeHtml(r.position || '')}">${escapeHtml(r.position || '')}</span></td>
                     <td>${escapeHtml(team)}</td>
                     <td class="sheet-num">${r.bye_week ?? '—'}</td>
@@ -2235,14 +2312,86 @@
                     <td class="sheet-num">${r.years_exp ?? '—'}</td>
                     <td>${inj}</td>
                     <td>${sheetBadgeHtml(r.badges)}</td>
-                    <td><div class="sheet-actions">
-                        <button class="sheet-act they" onclick="sheetRecordPick('${nm}', false)" type="button" title="Another team drafted">They</button>
-                        <button class="sheet-act mine" onclick="sheetRecordPick('${nm}', true)" type="button" title="I drafted">Mine</button>
-                        <button class="sheet-act why" onclick="sheetAskWhy('${nm}')" type="button" title="Ask the agent why">Why</button>
-                    </div></td>
                 </tr>`;
             }).join('');
             body.innerHTML = `<table class="sheet-table">${head}<tbody>${bodyRows}</tbody></table>`;
+        }
+
+        // ---- Row selection + detail/action bar (scan → click → act, no far-right reach) ----
+        function getWatchSet() {
+            try { return new Set(JSON.parse(localStorage.getItem('superagent_watchlist') || '[]')); }
+            catch (e) { return new Set(); }
+        }
+        function isWatched(id) { return !!id && getWatchSet().has(id); }
+        function toggleWatch(id) {
+            if (!id) return false;
+            const set = getWatchSet();
+            if (set.has(id)) set.delete(id); else set.add(id);
+            localStorage.setItem('superagent_watchlist', JSON.stringify([...set]));
+            return set.has(id);
+        }
+
+        function buildDataRead(r) {
+            const parts = [`${r.tier || 'Tier ?'} ${r.position || ''}`.trim()];
+            if (r.effective_rank != null) parts.push(`Effective Rank ${r.effective_rank}${r.ecr != null ? ` (ECR ${r.ecr})` : ''}`);
+            if (r.value_delta != null) parts.push(`value ${r.value_delta > 0 ? '+' : ''}${r.value_delta}`);
+            if (r.current_context_available) {
+                if (r.age != null) parts.push(`age ${r.age}`);
+                if (r.years_exp != null) parts.push(`${r.years_exp} yrs exp`);
+                if (r.injury_status) parts.push(`injury: ${r.injury_status}`);
+            } else {
+                parts.push('current context unavailable');
+            }
+            if (r.bye_week != null) parts.push(`bye ${r.bye_week}`);
+            return parts.join(' · ');
+        }
+
+        function renderDetailBar(r) {
+            const team = r.current_context_available ? (r.current_team || 'Free agent') : (r.team || '—');
+            document.getElementById('detailName').innerHTML = (isWatched(r.canonical_player_id) ? '⭐ ' : '') + escapeHtml(r.player_name);
+            document.getElementById('detailMeta').innerHTML =
+                `<span class="sheet-pos-pill pos-${escapeHtml(r.position || '')}">${escapeHtml(r.position || '')}</span> ${escapeHtml(team)} · Bye ${r.bye_week ?? '—'} · ${escapeHtml(r.tier || '')}`;
+            document.getElementById('detailRead').textContent = buildDataRead(r);
+            const wbtn = document.getElementById('detailWatchBtn');
+            if (wbtn) wbtn.textContent = isWatched(r.canonical_player_id) ? '⭐ Watching' : '☆ Watch';
+            const bar = document.getElementById('playerDetailBar');
+            bar.classList.add('open');
+            bar.setAttribute('aria-hidden', 'false');
+        }
+
+        function selectPlayer(idx) {
+            const r = sheetRows[idx];
+            if (!r) return;
+            selectedPlayer = r;
+            document.querySelectorAll('#draftSheetBody tr.selected').forEach(tr => tr.classList.remove('selected'));
+            const tr = document.querySelector(`#draftSheetBody tr[data-idx="${idx}"]`);
+            if (tr) tr.classList.add('selected');
+            renderDetailBar(r);
+        }
+
+        function clearSelection() {
+            selectedPlayer = null;
+            document.querySelectorAll('#draftSheetBody tr.selected').forEach(tr => tr.classList.remove('selected'));
+            const bar = document.getElementById('playerDetailBar');
+            if (bar) { bar.classList.remove('open'); bar.setAttribute('aria-hidden', 'true'); }
+        }
+
+        function detailAction(kind) {
+            const r = selectedPlayer;
+            if (!r) return;
+            if (kind === 'mine') sheetRecordPick(r.player_name, true);
+            else if (kind === 'they') sheetRecordPick(r.player_name, false);
+            else if (kind === 'why') sheetAskWhy(r.player_name);
+            else if (kind === 'compare') {
+                questionInput.value = `Compare ${r.player_name} and `;
+                questionInput.focus();
+            } else if (kind === 'watch') {
+                const nowWatched = toggleWatch(r.canonical_player_id);
+                renderDetailBar(r);
+                const idx = sheetRows.indexOf(r);
+                const cell = document.querySelector(`#draftSheetBody tr[data-idx="${idx}"] .sheet-player`);
+                if (cell) cell.innerHTML = (nowWatched ? '⭐ ' : '') + escapeHtml(r.player_name);
+            }
         }
 
         async function sheetRecordPick(playerName, isMine) {
@@ -3106,7 +3255,15 @@
 
         // Initialize on load
         document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape') { closeAnswer(); closeDraftDrawer(); closeDraftSheet(); }
+            if (event.key === 'Escape') { closeAnswer(); closeDraftDrawer(); closeDraftSheet(); clearSelection(); return; }
+            // Draft-speed shortcuts: only with a selected player and not while typing.
+            const tag = (document.activeElement && document.activeElement.tagName) || '';
+            if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
+            if (event.metaKey || event.ctrlKey || event.altKey || !selectedPlayer) return;
+            const k = event.key.toLowerCase();
+            if (k === 'm') { event.preventDefault(); detailAction('mine'); }
+            else if (k === 't') { event.preventDefault(); detailAction('they'); }
+            else if (k === 'w') { event.preventDefault(); detailAction('watch'); }
         });
 
         window.addEventListener('load', initializeSession);
