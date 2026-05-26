@@ -1478,8 +1478,51 @@
         .modal-actions {
             display: flex;
             justify-content: flex-end;
+            gap: 8px;
             margin-top: 20px;
         }
+
+        .settings-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .settings-field {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #475569;
+        }
+        .settings-field input,
+        .settings-field select {
+            padding: 9px 11px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            font-weight: 600;
+            background: var(--surface);
+        }
+        .settings-toggle {
+            flex-direction: row;
+            align-items: center;
+            gap: 8px;
+            grid-column: 1 / -1;
+        }
+        .settings-toggle input { width: auto; }
+
+        .pool-warning {
+            display: none;
+            font-size: 11px;
+            font-weight: 700;
+            color: #9a3412;
+            background: #ffedd5;
+            border: 1px solid #fdba74;
+            border-radius: 999px;
+            padding: 3px 10px;
+        }
+        .pool-warning.show { display: inline-block; }
 
         .secondary-btn {
             background: #f0f0f0;
@@ -1603,9 +1646,11 @@
                         <input type="text" id="draftPick" class="cockpit-pick" placeholder="—" oninput="saveDraftRoomState()">
                     </label>
                     <button class="example-btn draft-mode-toggle" id="draftModeToggle" onclick="toggleDraftMode()" type="button">🟢 Draft Mode</button>
+                    <button class="example-btn" onclick="openLeagueSettings()" type="button">⚙️ League</button>
                     <button class="example-btn" onclick="openDraftDrawer()" type="button">📋 Manual / reset</button>
                     <button class="example-btn" onclick="loadDraftSheet()" type="button">↻ Refresh</button>
                     <span class="draft-sheet-meta" id="draftSheetMeta"></span>
+                    <span class="pool-warning" id="poolWarning"></span>
                 </div>
                 <div class="cockpit-controls">
                     <select id="sessionSelect" class="cockpit-select" onchange="loadSelectedSession()">
@@ -1699,6 +1744,41 @@
             </div>
         </div>
     </aside>
+
+    <!-- League Settings modal -->
+    <div id="leagueSettingsModal" class="modal-overlay" onclick="closeLeagueSettings(event)">
+        <div class="modal-card">
+            <h2>⚙️ League Settings</h2>
+            <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">The draft board scales to your league — size, scoring, and roster format.</p>
+            <div id="leagueSettingsError" class="auth-error"></div>
+            <div class="settings-grid">
+                <label class="settings-field">
+                    <span>Teams</span>
+                    <input type="number" id="setNumTeams" min="4" max="20" value="12">
+                </label>
+                <label class="settings-field">
+                    <span>Roster spots</span>
+                    <input type="number" id="setRosterSpots" min="1" max="40" value="16">
+                </label>
+                <label class="settings-field">
+                    <span>Scoring</span>
+                    <select id="setPprType">
+                        <option value="standard">Standard</option>
+                        <option value="half">Half-PPR</option>
+                        <option value="ppr">Full PPR</option>
+                    </select>
+                </label>
+                <label class="settings-field settings-toggle">
+                    <input type="checkbox" id="setSuperflex">
+                    <span>Superflex (2-QB)</span>
+                </label>
+            </div>
+            <div class="modal-actions">
+                <button class="secondary-btn" onclick="closeLeagueSettings()" type="button">Cancel</button>
+                <button id="saveLeagueSettingsBtn" onclick="saveLeagueSettings()" type="button">Save settings</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         const REQUEST_TIMEOUT_MS = 60000;
@@ -1985,11 +2065,83 @@
             loadDraftSheet();
         }
 
+        // ---- League Settings (drives board size / scoring / format) ----
+        let leagueContext = null;
+
+        async function openLeagueSettings() {
+            if (!authToken) return;
+            const errEl = document.getElementById('leagueSettingsError');
+            if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+            try {
+                const response = await fetch(`/leagues/${draftLeagueIdValue()}`, { headers: authHeaders() });
+                if (response.ok) leagueContext = await response.json();
+            } catch (error) { /* open with whatever we have */ }
+            const s = (leagueContext && leagueContext.settings) || {};
+            document.getElementById('setNumTeams').value = s.num_teams ?? 12;
+            document.getElementById('setRosterSpots').value = s.roster_spots ?? 16;
+            document.getElementById('setPprType').value = s.ppr_type || 'ppr';
+            document.getElementById('setSuperflex').checked = (s.superflex_slots || 0) >= 1;
+            document.getElementById('leagueSettingsModal').style.display = 'flex';
+        }
+
+        function closeLeagueSettings(event) {
+            if (event && event.target && event.target.id !== 'leagueSettingsModal') return;
+            document.getElementById('leagueSettingsModal').style.display = 'none';
+        }
+
+        async function saveLeagueSettings() {
+            if (!authToken) return;
+            const btn = document.getElementById('saveLeagueSettingsBtn');
+            const errEl = document.getElementById('leagueSettingsError');
+            const teams = parseInt(document.getElementById('setNumTeams').value, 10);
+            const roster = parseInt(document.getElementById('setRosterSpots').value, 10);
+            if (!Number.isFinite(teams) || teams < 4 || !Number.isFinite(roster) || roster < 1) {
+                if (errEl) { errEl.textContent = 'Enter valid team and roster numbers.'; errEl.style.display = 'block'; }
+                return;
+            }
+            // Preserve existing scoring; drop nulls so backend defaults fill any gaps.
+            const settings = {};
+            const base = (leagueContext && leagueContext.settings) || {};
+            for (const [k, v] of Object.entries(base)) {
+                if (v !== null && v !== undefined) settings[k] = v;
+            }
+            settings.num_teams = teams;
+            settings.roster_spots = roster;
+            settings.ppr_type = document.getElementById('setPprType').value;
+            settings.superflex_slots = document.getElementById('setSuperflex').checked ? 1 : 0;
+            const payload = {
+                league_name: (leagueContext && leagueContext.league_name) || 'My League',
+                league_type: (leagueContext && leagueContext.league_type) || 'snake',
+                settings,
+            };
+            const original = btn ? btn.textContent : '';
+            if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+            try {
+                const response = await fetch(`/leagues/${draftLeagueIdValue()}`, {
+                    method: 'PUT',
+                    headers: authHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify(payload),
+                });
+                if (!response.ok) {
+                    const e = await response.json().catch(() => ({}));
+                    throw new Error(e.detail || 'Could not save settings');
+                }
+                leagueContext = await response.json();
+                closeLeagueSettings();
+                await loadDraftSheet();
+            } catch (error) {
+                if (errEl) { errEl.textContent = error.message; errEl.style.display = 'block'; }
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = original; }
+            }
+        }
+
         async function loadDraftSheet() {
             const body = document.getElementById('draftSheetBody');
             if (!authToken || !body) return;
             const leagueId = draftLeagueIdValue();
-            const params = new URLSearchParams({ limit: '200' });
+            // Pull deep enough for big leagues (14x16 = 224 draftable; backend caps at 300).
+            const params = new URLSearchParams({ limit: '300' });
             if (['QB', 'RB', 'WR', 'TE'].includes(currentSheetTab)) params.set('position', currentSheetTab);
             if (currentSheetTab === 'TARGETS') params.set('targets', 'true');
             if (currentSheetTab === 'MINE') params.set('roster', 'mine');
@@ -2040,6 +2192,20 @@
             const summary = (data && data.summary) || {};
             const meta = document.getElementById('draftSheetMeta');
             if (meta) meta.textContent = `${summary.available_count ?? rows.length} available · ${summary.drafted_count ?? 0} drafted`;
+            // Pool-low warning: not enough players left to fill the league's remaining picks.
+            const warn = document.getElementById('poolWarning');
+            if (warn) {
+                const total = summary.draftable_rank_limit;
+                const drafted = summary.drafted_count ?? 0;
+                const available = summary.available_count ?? 0;
+                const remaining = (typeof total === 'number') ? (total - drafted) : null;
+                if (currentSheetTab !== 'MINE' && remaining !== null && available < remaining) {
+                    warn.textContent = `⚠️ Pool running short: ${available} left, league needs ${remaining} more picks`;
+                    warn.classList.add('show');
+                } else {
+                    warn.classList.remove('show');
+                }
+            }
             if (!rows.length) {
                 body.innerHTML = '<div class="draft-sheet-empty">No players to show for this tab.</div>';
                 return;
