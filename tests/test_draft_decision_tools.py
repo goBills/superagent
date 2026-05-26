@@ -561,8 +561,8 @@ def test_recommend_next_pick_prioritizes_best_available_over_sleepers():
                     source_player_name="Sleeper WR",
                     position="WR",
                     team="CLE",
-                    adp=150,  # within the 12x16=192 draftable window
-                    ecr=95,  # large +55 value delta, the bug's trap
+                    adp=22,  # within the next-pick window at pick 3
+                    ecr=5,  # large +17 value delta, the bug's trap
                     value=20,
                 ),
             ]
@@ -584,6 +584,47 @@ def test_recommend_next_pick_prioritizes_best_available_over_sleepers():
     elite_idx = next(i for i, r in enumerate(wr_recs) if r["player_name"] == "Elite WR")
     sleeper_idx = next(i for i, r in enumerate(wr_recs) if r["player_name"] == "Sleeper WR")
     assert elite_idx < sleeper_idx, "best player available must outrank the sleeper"
+
+
+def test_recommend_next_pick_surfaces_fallen_elite_ranked_better_than_pick():
+    """An elite player who falls and is still available must surface even when
+    ranked better than the current pick. Regression for the lower-bound bug where
+    min_effective_rank=current_pick filtered out e.g. a rank-1 player at pick 3."""
+    league_id, season, source = setup_draft_fixture()
+    with SessionLocal() as db:
+        import_batch = db.query(DraftMarketImport).filter(DraftMarketImport.source == source).first()
+        # Rank-1 RB that is NOT drafted (still on the board) while we sit at pick 3.
+        add_player(db, "nfl_fallen_elite_rb_tools", "Fallen Elite RB", "SF", "RB", season)
+        db.add(
+            DraftPlayerMarket(
+                import_id=import_batch.id,
+                source=source,
+                season=season,
+                canonical_player_id="nfl_fallen_elite_rb_tools",
+                source_player_name="Fallen Elite RB",
+                position="RB",
+                team="SF",
+                adp=1,
+                ecr=1,
+                value=99,
+            )
+        )
+        db.commit()
+
+    result = recommend_next_pick_targets(
+        league_id=league_id,
+        season=season,
+        source=source,
+        current_roster=[],
+        current_pick=3,
+        limit=10,
+    )
+
+    assert result["ok"] is True
+    names = [r["player_name"] for r in result["data"]["recommendations"]]
+    assert "Fallen Elite RB" in names, "rank-1 faller still available must be recommended at pick 3"
+    # And it should lead the board, being the best player available.
+    assert result["data"]["recommendations"][0]["player_name"] == "Fallen Elite RB"
 
 
 def test_find_draft_targets_sort_by_rank_orders_by_effective_rank():

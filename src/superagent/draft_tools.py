@@ -782,13 +782,26 @@ def recommend_next_pick_targets(
     season = context["meta"]["season"]
     needs = context["data"]["position_needs"]
     drafted_ids = [row["canonical_player_id"] for row in needs["roster"] if row.get("canonical_player_id")]
-    min_rank = current_pick
+    # Next-pick best-player-available. Availability is already handled by the recorded
+    # draft board (drafted_ids), so we must NOT use current_pick as a lower bound—an
+    # elite player who falls and is still available (e.g. CMC at rank 1 still on the
+    # board at pick 3) must surface. Instead bound the pool from above with a window so
+    # recommendations stay realistic for the pick (e.g. ~ranks 1-31 at pick 3, 1-98 at
+    # pick 70 for a 14-team league), capped at the league's draftable range.
+    max_rank = None
+    if current_pick is not None:
+        with SessionLocal() as db:
+            settings = _league_settings(_get_league(db, league_id))
+            num_teams = settings.num_teams or 12
+            draftable_limit = _draftable_rank_limit(settings)
+        window = max(24, 2 * int(num_teams))
+        max_rank = min(float(current_pick) + window, float(draftable_limit))
     recommendations = []
     for position in needs["priority_positions"][:4]:
         targets = find_draft_targets(
             league_id=league_id,
             position=position,
-            min_effective_rank=min_rank,
+            max_effective_rank=max_rank,
             drafted_player_ids=drafted_ids,
             season=season,
             bye_week_season=context["meta"].get("bye_week_season"),
@@ -831,7 +844,15 @@ def recommend_next_pick_targets(
             "market_season": season,
             "bye_week_season": context["meta"].get("bye_week_season"),
             "current_pick": current_pick,
-            "rank_window_note": "When current_pick is supplied, targets use Effective Rank at or after that pick and within the league draftable range.",
+            "max_effective_rank": max_rank,
+            "rank_window_note": (
+                "Best player available: drafted players are excluded by the recorded board, "
+                "then remaining players are ranked by Effective Rank. There is no lower-rank "
+                "bound, so an elite player who falls and is still available will surface even "
+                "if ranked better than the current pick. When current_pick is supplied, the "
+                "pool is bounded from above (current_pick + ~2 rounds, capped at the league "
+                "draftable range) to keep recommendations realistic."
+            ),
             "historical_research_only": True,
         },
     )
