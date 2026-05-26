@@ -310,6 +310,27 @@ def _passes_default_position_filter(market: DraftPlayerMarket, payload: dict[str
     return True
 
 
+def _passes_sheet_position_filter(
+    market: DraftPlayerMarket,
+    payload: dict[str, Any],
+    position: str | None,
+    *,
+    include_depth_special_teams: bool = False,
+) -> bool:
+    """Sheet-specific position filter.
+
+    Chat/recommendation tools keep hiding kickers and non-elite defenses by
+    default. The live sheet is different: it must fill an entire league draft
+    board. For deep/large leagues, allow K and D/ST rows into the sheet so the
+    cockpit does not run out of players in the late rounds.
+    """
+    if _passes_default_position_filter(market, payload, position):
+        return True
+    if not include_depth_special_teams or _is_explicit_special_teams_request(position):
+        return False
+    return (market.position or "").upper() in {"K", "DST", "D/ST", "DEF"}
+
+
 def _market_payload(
     market: DraftPlayerMarket,
     settings: LeagueSettings,
@@ -648,6 +669,7 @@ def get_draft_sheet(
         drafted = _drafted_ids(db, league_id, season)
         drafted_names = _drafted_names(db, league_id, season)
         draftable_rank_limit = _draftable_rank_limit(settings)
+        total_draft_picks = draftable_rank_limit
 
         roster_names = _stored_roster_names(db, league_id, season)
         roster_markets, _ = _roster_markets(db, roster_names, season, source=source)
@@ -674,7 +696,12 @@ def get_draft_sheet(
             effective_rank = payload["effective_rank"]
             if mode == "available" and (effective_rank is None or effective_rank > draftable_rank_limit):
                 continue
-            if mode == "available" and not _passes_default_position_filter(market, payload, position):
+            if mode == "available" and not _passes_sheet_position_filter(
+                market,
+                payload,
+                position,
+                include_depth_special_teams=True,
+            ):
                 continue
             rows.append(payload)
 
@@ -722,6 +749,8 @@ def get_draft_sheet(
             .filter(LeagueDraftPick.league_id == league_id, LeagueDraftPick.season == season)
             .count()
         )
+        remaining_picks = max(0, total_draft_picks - drafted_count)
+        pool_shortfall = max(0, remaining_picks - len(rows)) if mode == "available" else 0
         visible_rows = rows[:limit]
         return _response(
             True,
@@ -736,6 +765,11 @@ def get_draft_sheet(
                 "targets": targets,
                 "rows": visible_rows,
                 "summary": {
+                    "num_teams": int(settings.num_teams or 12),
+                    "roster_spots": int(settings.roster_spots or 16),
+                    "total_draft_picks": total_draft_picks,
+                    "remaining_picks": remaining_picks,
+                    "pool_shortfall": pool_shortfall,
                     "available_count": len(rows),
                     "roster_count": len(roster_markets),
                     "returned_count": len(visible_rows),

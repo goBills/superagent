@@ -287,6 +287,71 @@ def test_get_draft_sheet_roster_mode_returns_my_roster_rows():
     assert data["summary"]["roster_count"] == 1
 
 
+def test_get_draft_sheet_summary_exposes_league_size_math():
+    league_id, season, source = setup_draft_fixture()
+
+    result = get_draft_sheet(league_id=league_id, season=season, source=source, limit=10)
+
+    assert result["ok"] is True
+    summary = result["data"]["summary"]
+    assert summary["num_teams"] == 12
+    assert summary["roster_spots"] == 16
+    assert summary["total_draft_picks"] == 192
+    assert summary["drafted_count"] == 1
+    assert summary["remaining_picks"] == 191
+    assert summary["pool_shortfall"] == 188
+
+
+def test_get_draft_sheet_includes_depth_k_and_dst_for_large_league_pool():
+    league_id, season, source = setup_draft_fixture()
+    with SessionLocal() as db:
+        league = db.query(League).filter(League.id == league_id).first()
+        league.settings.num_teams = 14
+        league.settings.roster_spots = 16
+        import_batch = db.query(DraftMarketImport).filter(DraftMarketImport.source == source).first()
+        add_player(db, "nfl_depth_k_tools", "Depth Kicker", "BUF", "K", season)
+        add_player(db, "nfl_depth_dst_tools", "Depth Defense", "BUF", "DST", season)
+        db.add_all(
+            [
+                DraftPlayerMarket(
+                    import_id=import_batch.id,
+                    source=source,
+                    season=season,
+                    canonical_player_id="nfl_depth_k_tools",
+                    source_player_name="Depth Kicker",
+                    position="K",
+                    team="BUF",
+                    avg_rank=200,
+                    ecr=205,
+                    value=3,
+                ),
+                DraftPlayerMarket(
+                    import_id=import_batch.id,
+                    source=source,
+                    season=season,
+                    canonical_player_id="nfl_depth_dst_tools",
+                    source_player_name="Depth Defense",
+                    position="DST",
+                    team="BUF",
+                    avg_rank=210,
+                    ecr=215,
+                    value=3,
+                ),
+            ]
+        )
+        db.commit()
+
+    result = get_draft_sheet(league_id=league_id, season=season, source=source, limit=20)
+
+    assert result["ok"] is True
+    names = [row["player_name"] for row in result["data"]["rows"]]
+    assert "Depth Kicker" in names
+    assert "Depth Defense" in names
+    summary = result["data"]["summary"]
+    assert summary["num_teams"] == 14
+    assert summary["total_draft_picks"] == 224
+
+
 def test_find_draft_targets_filters_position_adp_and_bye():
     league_id, season, source = setup_draft_fixture()
 
