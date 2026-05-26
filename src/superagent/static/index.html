@@ -348,6 +348,28 @@
             margin-bottom: 12px;
         }
 
+        .session-bar {
+            align-items: center;
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .session-bar select {
+            flex: 1;
+            min-width: 0;
+            padding: 9px 10px;
+            border: 1px solid #d0d7e2;
+            border-radius: 8px;
+            color: #334155;
+            font-size: 12px;
+        }
+
+        .session-bar button {
+            padding: 9px 12px;
+            font-size: 12px;
+        }
+
         .draft-room {
             border: 1px solid #dbe3ef;
             border-radius: 8px;
@@ -626,6 +648,13 @@
             .draft-room-grid textarea {
                 grid-column: 1 / -1;
             }
+            .session-bar {
+                align-items: stretch;
+                flex-direction: column;
+            }
+            .session-bar button {
+                width: 100%;
+            }
             .input-area {
                 padding: 12px 16px;
             }
@@ -690,6 +719,14 @@
         </div>
 
         <div class="input-area">
+            <div class="session-bar">
+                <select id="sessionSelect" onchange="loadSelectedSession()">
+                    <option value="">Recent chats</option>
+                </select>
+                <button class="secondary-btn" onclick="loadSessions()" type="button">Refresh</button>
+                <button class="secondary-btn" onclick="startNewChat()" type="button">New chat</button>
+            </div>
+
             <div class="draft-room" id="draftRoom">
                 <div class="draft-room-header">
                     <div>
@@ -774,11 +811,13 @@
         const draftPick = document.getElementById('draftPick');
         const draftRoster = document.getElementById('draftRoster');
         const draftRoomStatus = document.getElementById('draftRoomStatus');
+        const sessionSelect = document.getElementById('sessionSelect');
         let sessionId = null;
         let authToken = null;
         let isWaiting = false;
         let requestTimeout = null;
         let draftRoomStatusTimer = null;
+        let sessionsLoaded = false;
 
         // Initialize session ID from localStorage
         function initializeSession() {
@@ -800,6 +839,7 @@
                 inputArea.style.display = 'block';
                 signOutButton.style.display = 'inline-block';
                 questionInput.focus();
+                loadSessions().then(() => loadCurrentSessionMessages());
             } else {
                 authArea.style.display = 'flex';
                 chatArea.style.display = 'none';
@@ -834,6 +874,99 @@
             }
             questionInput.value = question;
             sendMessage();
+        }
+
+        function authHeaders(extra = {}) {
+            return {
+                ...extra,
+                'Authorization': `Bearer ${authToken}`,
+            };
+        }
+
+        function sessionOptionLabel(session) {
+            const date = new Date(session.last_active).toLocaleString([], {
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit'
+            });
+            const preview = session.preview || 'Untitled chat';
+            return `${date} · ${preview.slice(0, 64)}`;
+        }
+
+        async function loadSessions() {
+            if (!authToken) return;
+            try {
+                const response = await fetch('/sessions', {
+                    headers: authHeaders()
+                });
+                if (!response.ok) return;
+                const sessions = await response.json();
+                sessionSelect.innerHTML = '<option value="">Recent chats</option>';
+                for (const session of sessions) {
+                    const option = document.createElement('option');
+                    option.value = session.id;
+                    option.textContent = sessionOptionLabel(session);
+                    sessionSelect.appendChild(option);
+                }
+                if (sessionId && sessions.some(session => session.id === sessionId)) {
+                    sessionSelect.value = sessionId;
+                }
+                sessionsLoaded = true;
+            } catch (error) {
+                sessionsLoaded = false;
+            }
+        }
+
+        async function loadSelectedSession() {
+            const selected = sessionSelect.value;
+            if (!selected || !authToken) return;
+            await loadSessionMessages(selected);
+        }
+
+        async function loadCurrentSessionMessages() {
+            if (!authToken || !sessionId || !sessionsLoaded) return;
+            if (!Array.from(sessionSelect.options).some(option => option.value === sessionId)) return;
+            await loadSessionMessages(sessionId);
+        }
+
+        async function loadSessionMessages(selectedSessionId) {
+            try {
+                const response = await fetch(`/sessions/${selectedSessionId}`, {
+                    headers: authHeaders()
+                });
+                if (response.status === 404) return;
+                if (!response.ok) throw new Error('Could not load chat history');
+                const detail = await response.json();
+                sessionId = detail.id;
+                localStorage.setItem('superagent_session_id', sessionId);
+                sessionSelect.value = sessionId;
+                renderSessionMessages(detail.messages || []);
+            } catch (error) {
+                addMessage('error', error.message);
+            }
+        }
+
+        function renderSessionMessages(messages) {
+            chatArea.innerHTML = '';
+            if (!messages.length) {
+                clearChat();
+                return;
+            }
+            for (const message of messages) {
+                addMessage(message.role, message.content);
+                if (message.role === 'assistant' && message.tools_used && message.tools_used.length > 0) {
+                    addToolsSection(message.tools_used);
+                }
+            }
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        function startNewChat() {
+            resetSessionId();
+            sessionSelect.value = '';
+            clearChat();
+            questionInput.focus();
         }
 
         function rosterNames() {
@@ -894,18 +1027,18 @@
             const pickText = pick ? `I am at pick ${pick}. ` : '';
 
             if (kind === 'next') {
-                return `Using league ID ${leagueId}, ${rosterText}${pickText}What positions and players should I target next?`;
+                return `League ID ${leagueId}. ${rosterText}${pickText}Recommend next pick targets.`;
             }
             if (kind === 'needs') {
-                return `Using league ID ${leagueId}, ${rosterText}what positions am I weak at and what should I prioritize next?`;
+                return `League ID ${leagueId}. ${rosterText}Show my position needs and what to prioritize next.`;
             }
             if (kind === 'byes') {
-                return `Using league ID ${leagueId}, ${rosterText}check my bye week conflicts and tell me what to avoid next.`;
+                return `League ID ${leagueId}. ${rosterText}Check my bye week conflicts and what to avoid next.`;
             }
             if (kind === 'rb') {
-                return `Using league ID ${leagueId}, ${rosterText}${pickText}show me RB values with Effective Rank, Rank Source, ECR, adjusted value, and value delta.`;
+                return `League ID ${leagueId}. ${rosterText}${pickText}Show RB values with Effective Rank, Rank Source, ECR, adjusted value, and value delta.`;
             }
-            return `Using league ID ${leagueId}, ${rosterText}${pickText}help me with my next draft pick.`;
+            return `League ID ${leagueId}. ${rosterText}${pickText}Help me with my next draft pick.`;
         }
 
         function draftRoomAsk(kind) {
@@ -1107,6 +1240,7 @@
                     if (data.tools_used && data.tools_used.length > 0) {
                         addToolsSection(data.tools_used);
                     }
+                    loadSessions();
                 } else {
                     addMessage('error', `Error: ${formatApiError(data, response)}`);
                 }
