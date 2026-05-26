@@ -66,6 +66,42 @@ class TestAgentBasic:
         assert "13-4" in result["answer"]
         assert result["tools_used"] == []
         assert result["raw_response"]["stop_reason"] == "end_turn"
+        # Clean answer: no narrative guard regeneration, so exactly one model call.
+        assert mock_client.messages.create.call_count == 1
+
+    def test_agent_regenerates_when_answer_editorializes(self):
+        """If the synthesis hypes beyond the data, the guard forces one fact-only rewrite."""
+        mock_client = Mock()
+        hype = MockMessage(
+            content=[Mock(type="text", text="He has Hall of Fame caliber, third-year breakout potential.")]
+        )
+        clean = MockMessage(
+            content=[Mock(type="text", text="Current team SF, age 23, years_exp 2. ECR 32, value delta +11.7.")]
+        )
+        mock_client.messages.create.side_effect = [hype, clean]
+
+        result = run_agent("Tell me about this player for my pick", client=mock_client)
+
+        assert result["ok"] == True
+        # The hyped answer was replaced by the clean rewrite.
+        assert "Hall of Fame" not in result["answer"]
+        assert "breakout" not in result["answer"]
+        assert "ECR 32" in result["answer"]
+        # Exactly one regeneration (two model calls total).
+        assert mock_client.messages.create.call_count == 2
+
+    def test_agent_regenerates_only_once(self):
+        """Guard retries at most once; a still-hyped rewrite is returned, not looped forever."""
+        mock_client = Mock()
+        hype = MockMessage(content=[Mock(type="text", text="Hall of Fame breakout, must-grab.")])
+        still_hype = MockMessage(content=[Mock(type="text", text="Still a breakout must-grab pick.")])
+        mock_client.messages.create.side_effect = [hype, still_hype]
+
+        result = run_agent("Tell me about this player", client=mock_client)
+
+        assert result["ok"] == True
+        # Did not loop infinitely — stopped after one retry.
+        assert mock_client.messages.create.call_count == 2
 
     def test_agent_with_tool_use_single_tool(self):
         """Test agent that calls a single tool and gets answer."""
@@ -194,7 +230,8 @@ class TestAgentBasic:
 
         assert result["ok"] == False
         assert "max tool rounds" in result["error"].lower()
-        assert result["raw_response"]["tool_rounds"] == 5
+        # Cap raised to 6 in v0.6.2 to leave one round for the narrative-guard rewrite.
+        assert result["raw_response"]["tool_rounds"] == 6
 
     def test_agent_output_is_json_safe(self):
         """Test agent output is JSON-serializable."""

@@ -9,6 +9,7 @@ import json
 from anthropic import Anthropic
 from superagent.tool_schemas import tool_schema_for_claude, get_tool_by_name
 from superagent.config import get_config
+from superagent.answer_guard import detect_unsupported_narrative
 
 config = get_config()
 
@@ -32,9 +33,16 @@ Rules:
 - For roster construction answers, explain the trade-off in plain language: roster need, market value, bye risk, and position scarcity. Avoid presenting any recommendation as guaranteed or predictive.
 - When a user asks for targets during a live or mock draft, prefer get_available_targets or recommend_next_pick_targets so recorded league draft picks are excluded from the available pool.
 - For "what's falling to me", "best value", or "who should I grab now" questions during a draft, pass current_pick to the targets tools so results are bounded to players relevant to that pick. A high value delta on a player ranked far below the current pick (for example Effective Rank ~200 when the user is in round 3) does NOT mean "grab now" — that player is a late-round value, not someone falling to this pick. Never pitch a player whose Effective Rank is far past the current pick as a must-grab for an early round; judge "falling" relative to where the user is actually picking.
-- Current team, age, years of experience, and injury status come from provider current-context fields in the draft tool output (current_team, age, years_exp, entry_year, rookie_year, injury_status, context_updated_at, sourced from Sleeper). When current_context_available is true, these are AUTHORITATIVE for 2026: use current_team, NOT the market "team" field. If current_team_differs is true, note the market sheet listed the player's old team. If current_team is null (current_team_is_free_agent), say the player is currently a free agent/unsigned per the provider. Use years_exp/rookie_year for career stage (for example years_exp 2 = entering year 3) instead of guessing — never call a third-year player a "second-year breakout". injury_status null means healthy; cite context_updated_at when freshness matters.
-- If current_context_available is false for a player, say current context is unavailable for them rather than inventing team, age, or experience.
-- Still ground player pitches in data: production and efficiency stats, recent season-over-season trend, market signal (ECR vs Effective Rank/ADP vs the current pick), positional need, and bye week. Before pitching a player check the recent multi-season trend; if the most recent season declined, report it plainly as a risk and never spin a down year as a "breakout" or invent a "prime/development window". You still have no projections or coaching/scheme/trade-rumor data — do not speculate about those. Lead with what the data shows, then the market signal, then the trade-offs and uncertainty. No hype language.
+
+PLAYER ANSWER CONTRACT (read this carefully — it overrides any instinct to write engaging analysis):
+When you evaluate, compare, or recommend a player, every sentence must be traceable to a fact a tool returned. Allowed claims, and nothing else:
+  1. Current context (provider fields): current_team (authoritative — use it, NOT the market "team"; if current_team_differs note the market sheet listed the old team; if current_team is null say the player is a free agent/unsigned per the provider), age, years_exp/entry_year/rookie_year for career stage, injury_status (null = healthy), context_updated_at for freshness. If current_context_available is false, say current context is unavailable rather than inventing it.
+  2. Market signal: Effective Rank (+ rank source), ECR, value delta, adjusted value, and the current pick.
+  3. Production: stats from the player tools and their season-over-season trend. If the latest season declined, state the decline plainly as a risk.
+  4. Roster fit and bye week.
+Then end with a one-or-two-sentence "Data read" that only restates the above.
+FORBIDDEN (these are guesses Superagent has NO data for — never write them): career-arc language (breakout, "second/third-year breakout", prime/development window, leap), team or situation speculation (team upgrade, better offense, "could boost his opportunities", QB situation/play, landing spot), hype superlatives (Hall of Fame, elite, must-grab, ceiling, can't-miss), draft pedigree, coaching/scheme changes, trade rumors, and any cause for missing games (do not say "injury-shortened" unless injury_status explicitly returned it). Use years_exp for career stage, never a guess — a player with years_exp 2 is entering year 3, not a "second-year breakout".
+Before you finalize a player answer, re-read it and delete any sentence not backed by one of the four allowed categories. No hype.
 """
 
 
@@ -68,6 +76,22 @@ def _prepare_history(history: Optional[List[Dict[str, str]]], limit: int = 12) -
         prepared.pop(0)
 
     return prepared
+
+
+def _narrative_correction(flagged: List[str]) -> str:
+    """Build the fact-only rewrite instruction when the answer editorialized."""
+    phrases = "; ".join(flagged[:8])
+    return (
+        "Your previous answer included claims that are NOT supported by any tool data: "
+        f"{phrases}. Rewrite the answer now using ONLY facts the tools returned: current "
+        "team, age, years_exp, injury_status, context_updated_at, market rank/value/value "
+        "delta, production stats and their season-over-season trend, bye week, and roster "
+        "fit. Remove ALL career-arc language (breakout, prime/development window, leap), "
+        "team or situation speculation (team upgrade, better offense, QB situation/play, "
+        "landing spot), hype superlatives (Hall of Fame, must-grab), and any injury cause "
+        "(only state injury_status if a tool returned it). State uncertainty plainly. "
+        "Output only the rewritten answer."
+    )
 
 
 def run_agent(
@@ -128,8 +152,9 @@ def run_agent(
         model = config.ANTHROPIC_MODEL
 
     tools_used = []
-    max_tool_rounds = 5
+    max_tool_rounds = 6
     tool_round = 0
+    narrative_retry_used = False
 
     try:
         # Initialize messages with prior conversation history (capped at last 12 items = 6 turns)
@@ -164,6 +189,16 @@ def run_agent(
                 for block in response.content:
                     if hasattr(block, "text"):
                         answer += block.text
+
+                # Deterministic guardrail: if the synthesis editorialized beyond the
+                # tool data (career-arc/hype/team-situation/injury-cause language),
+                # force exactly one fact-only rewrite before returning.
+                flagged = detect_unsupported_narrative(answer)
+                if flagged and not narrative_retry_used:
+                    narrative_retry_used = True
+                    messages.append({"role": "assistant", "content": answer})
+                    messages.append({"role": "user", "content": _narrative_correction(flagged)})
+                    continue
 
                 # Prepare simplified response metadata
                 raw_response = {
