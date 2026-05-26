@@ -45,6 +45,7 @@ This is a **peer model**, not a strict handoff. Whoever is best positioned does 
 
 | Version | Commit | What |
 |---------|--------|------|
+| v0.13.2 | `3780fde` | (Claude) Chunk large board pastes (10/req) with a live "X/N done" counter — responsive + survives cold-start; small pastes stay one request. Perceived-speed/robustness half; resolver batching is the throughput half (see P1). |
 | v0.13.1 | `7986c4d` | (Codex) Backend defense-in-depth for bulk paste: `/draft/picks/bulk` skips unchanged existing picks before name resolution; identical over-sends no longer hit the resolver, changed same-slot picks still update, and own-pick roster repair still runs. |
 | v0.13.0 | `ca55726` | (Claude) Live player search on the board + football working cue. |
 | v0.12.2 | `c15b229` | (Claude) Update Board sends only new/changed pasted picks from the client, making whole-board re-paste as fast as one-round paste in the common case. |
@@ -95,6 +96,7 @@ The draft-sheet `rows[]` fields the UI reads: `canonical_player_id`, `player_nam
 
 ### Codex priorities (P0 / P1)
 - **P0 — Bulk-paste perf. DONE in layers.** Re-pasting a growing board reached ~40s late in the draft. *Client half shipped (v0.12.2, `c15b229`):* the frontend diffs the paste against local `draftBoardPicks` and POSTs only new/changed picks. *Backend defense-in-depth shipped (v0.13.1, `7986c4d`):* `/draft/picks/bulk` skips unchanged existing picks before name resolution, so stale clients can over-send safely without re-triggering the slow resolver. These stack: frontend sends fewer rows; backend resolves fewer rows even if a client sends the whole board. Server-side tests cover identical re-paste skipping resolution, changed same-slot picks still updating, and roster repair for own picks.
+- **P1 — Resolver batching (the remaining throughput lever).** Skip-unchanged doesn't help the **first** full-board paste — those picks are all new, so they all hit the resolver. Measured on live: **~6s warm for 27 clean picks (~0.22s/pick), worse on a cold instance or when names miss the alias table and fall to fuzzy**. The fix is to resolve a batch in one pass: load the alias/canonical tables **once**, match all names in-memory, and only fuzzy-fallback the misses (against the in-memory set) — instead of per-name full scans + N+1 queries. Client now chunks large pastes (v0.13.2) for progress/robustness, but that doesn't reduce total resolution work — this does.
 - **P0 — Pool depth.** Sheet is improved but large leagues can still shortfall (`pool_shortfall: 14` live for 12×16). Focus on **K / D-ST / team-defense mapping, deep rows, and unresolved DraftSheets review**.
 - **P1 — Reset endpoint tests.** Frontend modal uses the existing `DELETE /leagues/{id}/draft/picks` (returns `picks_deleted`); add backend coverage that clearing board/roster/pick state **preserves league settings**. Endpoint exists — needs tests, not a rebuild.
 - **P1 — Deploy hardening.** Render bootstrap/build fragility is still real (Dockerfile runtime-bootstrap path, see Deploy status above); **document whether the DuckDB/data bootstrap should stay build-time or move to an async/runtime-safe path.**
