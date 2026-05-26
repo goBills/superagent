@@ -14,10 +14,126 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from superagent.api import app
+from superagent.canonical_resolution import normalize_player_name
 from superagent.db import SessionLocal
-from superagent.models import ConversationSession, DraftImportReview, League, Message, User
+from superagent.models import (
+    CanonicalPlayer,
+    CanonicalPlayerAlias,
+    ConversationSession,
+    DraftImportReview,
+    DraftMarketImport,
+    DraftPlayerMarket,
+    League,
+    LeagueRosterPlayer,
+    LeagueSettings,
+    Message,
+    PlayerSeason,
+    User,
+)
 
 client = TestClient(app)
+
+
+def setup_draft_league_api():
+    """Register a user and give them a league with draft market data.
+
+    Uses unique player names per call so resolution is deterministic in the
+    shared test DB (no alias collisions). Returns the names so tests can post them.
+    """
+    email = f"draft-api-{uuid.uuid4().hex}@example.com"
+    register = client.post("/auth/register", json={"email": email, "password": "password123"})
+    assert register.status_code == 200
+    headers = {"Authorization": f"Bearer {register.json()['token']}"}
+    season = 2027
+    suffix = uuid.uuid4().hex[:10]
+    source = f"api-draft-{suffix}"
+    players = {"other": f"Aywr Receiver {suffix}", "mine": f"Bxrb Runner {suffix}"}
+    with SessionLocal() as db:
+        user = db.query(User).filter(User.email == email).first()
+        league = League(user_id=user.id, league_name="API Draft League", league_type="snake")
+        db.add(league)
+        db.flush()
+        db.add(LeagueSettings(league_id=league.id, ppr_type="ppr", num_teams=14))
+        import_batch = DraftMarketImport(
+            source=source, season=season, file_name=f"{source}.csv", rows_seen=2, rows_imported=2
+        )
+        db.add(import_batch)
+        db.flush()
+        rows = [
+            (f"nfl_other_{suffix}", players["other"], "WR", "CIN", 2, 2),
+            (f"nfl_mine_{suffix}", players["mine"], "RB", "DET", 3, 3),
+        ]
+        for pid, name, pos, team, adp, ecr in rows:
+            db.add(
+                CanonicalPlayer(
+                    canonical_player_id=pid,
+                    nflverse_player_id=pid,
+                    full_name=name,
+                    normalized_name=normalize_player_name(name),
+                )
+            )
+            db.flush()
+            db.add(PlayerSeason(canonical_player_id=pid, season=season, team=team, position=pos))
+            db.add(
+                CanonicalPlayerAlias(
+                    canonical_player_id=pid,
+                    alias=name,
+                    normalized_alias=normalize_player_name(name),
+                    source="api-test",
+                )
+            )
+            db.add(
+                DraftPlayerMarket(
+                    import_id=import_batch.id,
+                    source=source,
+                    season=season,
+                    canonical_player_id=pid,
+                    source_player_name=name,
+                    position=pos,
+                    team=team,
+                    adp=adp,
+                    ecr=ecr,
+                    value=50,
+                )
+            )
+        db.commit()
+        return headers, league.id, season, players
+
+
+def test_bulk_draft_picks_records_board_and_roster():
+    headers, league_id, season, players = setup_draft_league_api()
+    payload = {
+        "season": season,
+        "picks": [
+            {"pick_number": 1, "player_name": players["other"], "team_name": "Captain Jahmyrica", "is_mine": False},
+            {"pick_number": 3, "player_name": players["mine"], "team_name": "Your Team", "is_mine": True},
+        ],
+    }
+    response = client.post(f"/leagues/{league_id}/draft/picks/bulk", json=payload, headers=headers)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert len(data["picks"]) == 2
+    # Both resolved to a canonical id (full names hit the fast exact alias path).
+    assert all(p["mapping_status"] == "mapped" for p in data["picks"]), data["picks"]
+    # The "is_mine" pick is added to the user's stored roster; the other pick is not.
+    with SessionLocal() as db:
+        roster_names = {
+            r.source_player_name
+            for r in db.query(LeagueRosterPlayer).filter(LeagueRosterPlayer.league_id == league_id).all()
+        }
+    assert players["mine"] in roster_names
+    assert players["other"] not in roster_names
+
+
+def test_bulk_draft_picks_is_idempotent_on_repaste():
+    headers, league_id, season, players = setup_draft_league_api()
+    pick = {"pick_number": 1, "player_name": players["other"], "team_name": "Other", "is_mine": False}
+    first = client.post(f"/leagues/{league_id}/draft/picks/bulk", json={"season": season, "picks": [pick]}, headers=headers)
+    assert first.status_code == 200
+    # Re-paste the same pick number — should update in place, not duplicate.
+    second = client.post(f"/leagues/{league_id}/draft/picks/bulk", json={"season": season, "picks": [pick]}, headers=headers)
+    assert second.status_code == 200
+    assert len(second.json()["picks"]) == 1
 
 
 def auth_headers() -> dict:

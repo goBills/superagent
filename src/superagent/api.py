@@ -236,6 +236,23 @@ class DraftBoardResponse(BaseModel):
     picks: List[Dict[str, Any]]
 
 
+class DraftBulkPickItem(BaseModel):
+    """One pick within a bulk paste of the draft board."""
+
+    pick_number: int
+    player_name: str
+    team_name: Optional[str] = None
+    is_mine: bool = False
+
+
+class DraftBulkRequest(BaseModel):
+    """Bulk-record many draft picks in a single request (e.g. pasted board)."""
+
+    picks: List[DraftBulkPickItem]
+    season: Optional[int] = None
+    source: Optional[str] = None
+
+
 def _extract_bearer_token(authorization: Optional[str]) -> Optional[str]:
     if not authorization:
         return None
@@ -1354,6 +1371,60 @@ def record_my_pick(
     db.commit()
     db.refresh(pick)
     return _draft_pick_to_response(pick)
+
+
+@app.post("/leagues/{league_id}/draft/picks/bulk", response_model=DraftBoardResponse)
+def record_draft_picks_bulk(
+    league_id: int,
+    request: DraftBulkRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DraftBoardResponse:
+    """Bulk-record a pasted draft board in one request.
+
+    Resolves and upserts every pick (keyed by pick_num), routes the user's own
+    picks ("is_mine") into the stored roster, and commits once at the end so a
+    whole round saves in a single round-trip instead of one slow request per pick.
+    """
+    league = _get_owned_league(db, league_id, current_user.id)
+    season = request.season or _latest_draft_market_season(db)
+    if season is None:
+        raise HTTPException(status_code=400, detail="No draft market data imported")
+
+    recorded = 0
+    for item in request.picks:
+        if not item.player_name or not item.player_name.strip():
+            continue
+        if item.pick_number < 1:
+            continue
+        default_team = "My Team" if item.is_mine else "Other"
+        pick_request = DraftPickRequest(
+            pick_number=item.pick_number,
+            player_name=item.player_name,
+            team_name=item.team_name,
+            season=season,
+            source=request.source,
+        )
+        pick = _upsert_draft_pick(db, league, pick_request, default_team_name=default_team)
+        if item.is_mine:
+            team_name = (item.team_name or "My Team").strip() or "My Team"
+            pick.fantasy_team_name = team_name
+            _upsert_my_roster_player(db, league, pick, team_name)
+        db.flush()
+        recorded += 1
+    db.commit()
+
+    picks = (
+        db.query(LeagueDraftPick)
+        .filter(LeagueDraftPick.league_id == league_id, LeagueDraftPick.season == season)
+        .order_by(LeagueDraftPick.pick_num.asc(), LeagueDraftPick.id.asc())
+        .all()
+    )
+    return DraftBoardResponse(
+        league_id=league_id,
+        season=season,
+        picks=[_draft_pick_to_response(pick).model_dump() for pick in picks],
+    )
 
 
 @app.delete("/leagues/{league_id}/draft/picks/last")

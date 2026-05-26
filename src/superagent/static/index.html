@@ -469,6 +469,52 @@
             gap: 6px;
         }
 
+        .draft-paste {
+            background: #eef6ff;
+            border: 1px solid #cfe0f7;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .draft-paste-label {
+            color: #1557b0;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .draft-paste textarea {
+            width: 100%;
+            min-height: 70px;
+            resize: vertical;
+            padding: 10px 12px;
+            border: 1px solid #cfe0f7;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 13px;
+            line-height: 1.35;
+        }
+
+        .draft-paste textarea:focus {
+            outline: none;
+            border-color: #1a73e8;
+            box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.1);
+        }
+
+        .draft-paste-row {
+            align-items: center;
+            display: flex;
+            gap: 10px;
+            margin-top: 8px;
+        }
+
+        .draft-paste-status {
+            color: #475569;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
         .draft-room-grid {
             display: grid;
             grid-template-columns: 120px 120px 1fr;
@@ -887,6 +933,14 @@
                         <button class="example-btn" onclick="draftRoomAsk('needs')">Position needs</button>
                         <button class="example-btn" onclick="draftRoomAsk('byes')">Bye check</button>
                         <button class="example-btn" onclick="draftRoomAsk('rb')">RB values</button>
+                    </div>
+                    <div class="draft-paste">
+                        <div class="draft-paste-label">📋 Paste draft board (fastest) — copy picks from your draft site and paste here</div>
+                        <textarea id="draftPasteBox" placeholder="Paste the picks list (round by round is fine). I'll parse the players, mark your own picks, and load the board automatically."></textarea>
+                        <div class="draft-paste-row">
+                            <button class="example-btn" id="draftPasteBtn" onclick="parseAndLoadBoard()" type="button">Parse &amp; load board</button>
+                            <span class="draft-paste-status" id="draftPasteStatus"></span>
+                        </div>
                     </div>
                     <div class="draft-room-grid">
                         <input type="text" id="draftLeagueId" placeholder="League ID" value="1" oninput="saveDraftRoomState()" onchange="loadDraftBoard()">
@@ -1380,6 +1434,96 @@
 
         function recordIPicked() {
             recordDraftPick(true);
+        }
+
+        function draftPasteStatus(msg, color) {
+            const el = document.getElementById('draftPasteStatus');
+            if (!el) return;
+            el.textContent = msg || '';
+            el.style.color = color || '#475569';
+        }
+
+        // Parse a pasted draft board (e.g. from a mock draft sim). Blocks look like:
+        //   <Team Name> / <round>.<pick> / Headshot of <Full Name> / <abbr> / <POS> / <TEAM> / (Bye n) / Edit
+        // We use the "Headshot of <Full Name>" line (full names resolve fastest/best),
+        // route "Your Team" picks to the roster, and skip not-yet-made picks.
+        function parseDraftBoard(text) {
+            const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            const POS_RE = /^(QB|RB|WR|TE|K|DST|DEF|D\/ST|FB)$/i;
+            let teamsPerRound = 0;
+            for (const line of lines) {
+                const m = line.match(/^(\d+)\.(\d+)$/);
+                if (m) teamsPerRound = Math.max(teamsPerRound, parseInt(m[2], 10));
+            }
+            if (!teamsPerRound) teamsPerRound = 14;
+            const picks = [];
+            for (let i = 0; i < lines.length; i++) {
+                const m = lines[i].match(/^(\d+)\.(\d+)$/);
+                if (!m) continue;
+                const round = parseInt(m[1], 10);
+                const pickInRound = parseInt(m[2], 10);
+                const teamName = i > 0 ? lines[i - 1] : 'Other';
+                let fullName = null;
+                for (let j = i + 1; j < Math.min(i + 8, lines.length); j++) {
+                    if (/^\d+\.\d+$/.test(lines[j])) break;       // next pick block
+                    if (/^your pick!?$/i.test(lines[j])) break;    // not drafted yet
+                    const h = lines[j].match(/^Headshot of (.+)$/i);
+                    if (h) { fullName = h[1].trim(); break; }
+                }
+                if (!fullName || /^undefined$/i.test(fullName)) continue;
+                picks.push({
+                    pick_number: (round - 1) * teamsPerRound + pickInRound,
+                    player_name: fullName,
+                    team_name: teamName,
+                    is_mine: /^your team$/i.test(teamName)
+                });
+            }
+            return picks;
+        }
+
+        async function parseAndLoadBoard() {
+            if (!authToken) {
+                showAuthError('loginError', 'Please sign in before loading a draft board.');
+                return;
+            }
+            const box = document.getElementById('draftPasteBox');
+            const btn = document.getElementById('draftPasteBtn');
+            const picks = parseDraftBoard(box.value || '');
+            if (!picks.length) {
+                draftPasteStatus('Could not find any picks in that text.', '#dc2626');
+                return;
+            }
+            const leagueId = draftLeagueIdValue();
+            const original = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = `⏳ Loading ${picks.length}...`;
+            draftPasteStatus(`Parsed ${picks.length} pick${picks.length === 1 ? '' : 's'}, saving...`);
+            try {
+                const response = await fetch(`/leagues/${leagueId}/draft/picks/bulk`, {
+                    method: 'POST',
+                    headers: authHeaders({'Content-Type': 'application/json'}),
+                    body: JSON.stringify({picks})
+                });
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error(error.detail || 'Could not load draft board');
+                }
+                const data = await response.json();
+                const total = (data.picks || []).length;
+                for (const name of picks.filter(p => p.is_mine).map(p => p.player_name)) {
+                    appendToRoster(name);
+                }
+                draftPick.value = String(total + 1);
+                saveDraftRoomState();
+                box.value = '';
+                await loadDraftBoard();
+                draftPasteStatus(`✅ Loaded — board now has ${total} pick${total === 1 ? '' : 's'}.`, '#15803d');
+            } catch (error) {
+                draftPasteStatus(`❌ ${error.message}`, '#dc2626');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = original;
+            }
         }
 
         async function undoDraftPick() {
