@@ -1150,15 +1150,10 @@
             <div class="header-top">
                 <div>
                     <h1>⚡ Superagent</h1>
-                    <p>Historical NFL research. Ask about stats, players, teams, and trends.</p>
+                    <p>Fantasy draft assistant — live rankings, current player context, and grounded analysis for your 2026 draft.</p>
                 </div>
                 <button id="signOutButton" class="signout-btn" onclick="logout()">Sign out</button>
             </div>
-        </div>
-
-        <div class="header-warning">
-            <span><strong>Research tool only.</strong> No current-week data, injuries, depth charts, projections, or betting advice.</span>
-            <a href="#" onclick="return toggleLimitations()">Learn more</a>
         </div>
 
         <div class="auth-area" id="authArea">
@@ -1328,24 +1323,7 @@
             </div>
 
             <div class="disclaimer">
-                Data through 2025 · Historical research only
-            </div>
-        </div>
-    </div>
-
-    <div id="limitationsModal" class="modal-overlay" onclick="closeLimitations(event)">
-        <div class="modal-card">
-            <h2>Known Limitations</h2>
-            <ul>
-                <li><strong>No current-week awareness:</strong> Schedule tools default to Week 1 unless you specify a week.</li>
-                <li><strong>No live injury data:</strong> Check NFL.com, ESPN, or fantasy platforms for current status.</li>
-                <li><strong>No depth charts:</strong> Superagent uses historical rosters and stats.</li>
-                <li><strong>No projections:</strong> This is historical data and research tooling, not forecasting.</li>
-                <li><strong>No betting:</strong> Strictly research; no gambling recommendations.</li>
-                <li><strong>Temporary sessions:</strong> Conversations reset when the server restarts.</li>
-            </ul>
-            <div class="modal-actions">
-                <button class="secondary-btn" onclick="hideLimitations()">Close</button>
+                Stats through 2025 · 2026 draft prep · current player context via Sleeper
             </div>
         </div>
     </div>
@@ -2236,21 +2214,6 @@
             welcomeMsg.appendChild(bubble);
             chatArea.appendChild(welcomeMsg);
             questionInput.focus();
-        }
-
-        function toggleLimitations() {
-            document.getElementById('limitationsModal').style.display = 'flex';
-            return false;
-        }
-
-        function hideLimitations() {
-            document.getElementById('limitationsModal').style.display = 'none';
-        }
-
-        function closeLimitations(event) {
-            if (event.target.id === 'limitationsModal') {
-                hideLimitations();
-            }
         }
 
         async function sendMessage() {
