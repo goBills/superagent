@@ -90,12 +90,18 @@ During review, Claude flagged ~27 players whose `current_team` (Sleeper) differs
 ### Row/sheet contract the frontend now depends on (please keep stable)
 The draft-sheet `rows[]` fields the UI reads: `canonical_player_id`, `player_name`, `position`, `team`, `current_team`, `current_context_available`, `current_team_differs`, `bye_week`, `tier`, `tier_level`, `effective_rank`, `rank_source`, `ecr`, `value_delta`, `age`, `years_exp`, `injury_status`, `is_drafted`, `is_mine`, `badges[]`. Summary fields read: `available_count`, `drafted_count`, `remaining_picks`, `pool_shortfall`, `draftable_rank_limit`. Renames/removals here will break the cockpit.
 
-### Open in Codex's lane
-- **Pool depth** toward 12×16 (live `pool_shortfall: 14`): deeper bench rows, K support, D/ST / team-defense mapping, unresolved-row review.
-- **Bulk-paste perf**: skip unchanged existing picks, resolve only new/changed.
-- **Deploy hardening**: the Dockerfile/runtime-bootstrap fragility above.
-- **Reset endpoint**: already exists (`DELETE /leagues/{id}/draft/picks`, returns `picks_deleted`); the new modal uses it as-is — only needs tests, not a rebuild.
-- **In-season data foundations** (rosters/usage/injuries) to light up the Roster/Waiver "Coming soon" workspaces.
+### Codex priorities (P0 / P1)
+- **P0 — Bulk-paste perf.** Re-pasting a growing board reached ~40s late in the draft. Optimize `POST /draft/picks/bulk` to **skip unchanged existing picks** and only resolve new/changed picks.
+- **P0 — Pool depth.** Sheet is improved but large leagues can still shortfall (`pool_shortfall: 14` live for 12×16). Focus on **K / D-ST / team-defense mapping, deep rows, and unresolved DraftSheets review**.
+- **P1 — Reset endpoint tests.** Frontend modal uses the existing `DELETE /leagues/{id}/draft/picks` (returns `picks_deleted`); add backend coverage that clearing board/roster/pick state **preserves league settings**. Endpoint exists — needs tests, not a rebuild.
+- **P1 — Deploy hardening.** Render bootstrap/build fragility is still real (Dockerfile runtime-bootstrap path, see Deploy status above); **document whether the DuckDB/data bootstrap should stay build-time or move to an async/runtime-safe path.**
+- **Later — In-season data foundations** (rosters/usage/injuries) to light up the Roster/Waiver "Coming soon" workspaces.
+
+### Release hygiene (we've had version confusion)
+- **Tags now exist** for the three shipped this session (created + pushed 2026-05-26): `v0.9.5` → `39e6c60`, `v0.9.6` → `d7a3312`, `v0.10.0` → `8c611d7`. Existing tags are lightweight, styled `vX.Y.Z: <subject>`.
+- **Gap to backfill (Codex):** `v0.8.x` and `v0.9.0–v0.9.3` are untagged (tags jump `v0.7.0` → `v0.9.4`). Backfill if we want a clean history.
+- **Always include exact commit hashes** for any version referenced in a handoff.
+- **After every deploy, confirm `/health` reports the expected commit before QA.** If Render shows a failed/intermediate deploy, do **not** assume failure until `/health` is checked — this session's "crash-loop" had already self-recovered and was serving the right commit.
 
 ### Naming decision (open for Codex input)
 Two concepts were colliding under "Draft Mode." Now: **Workspace** = Draft / Roster / Waivers / Trade (top-level). **"On the clock"** = the live pick-capture toggle *inside* Draft (formerly "Draft Mode"); the paste bar + reset live there. Flag if you'd prefer different labels before they harden.
