@@ -39,7 +39,8 @@
         }
 
         .container {
-            max-width: 900px;
+            width: 96%;
+            max-width: 1680px;
             margin: 0 auto;
             height: 100vh;
             display: flex;
@@ -731,6 +732,58 @@
         .cockpit-sheet {
             flex: 1;
             min-height: 0;
+        }
+
+        /* Draft Mode: prominent always-visible paste bar (hidden unless draft mode is on) */
+        .draft-mode-toggle.active {
+            background: linear-gradient(180deg, #16a34a, #15803d) !important;
+            color: #fff !important;
+            border-color: transparent !important;
+            box-shadow: 0 2px 8px rgba(22, 163, 74, 0.3) !important;
+        }
+
+        .draft-paste-bar {
+            display: none;
+            gap: 10px;
+            align-items: stretch;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            background: #f3fff7;
+        }
+        .cockpit.draft-mode .draft-paste-bar {
+            display: flex;
+        }
+
+        .draft-paste-bar-input {
+            flex: 1;
+            min-height: 46px;
+            max-height: 120px;
+            resize: vertical;
+            padding: 10px 12px;
+            border: 1px solid #bfe6cf;
+            border-radius: var(--radius-sm);
+            font-family: inherit;
+            font-size: 13px;
+            line-height: 1.3;
+            background: #fff;
+        }
+        .draft-paste-bar-input:focus {
+            outline: none;
+            border-color: #16a34a;
+            box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12);
+        }
+        .draft-paste-bar-actions {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: center;
+            gap: 6px;
+            min-width: 120px;
+        }
+        .draft-paste-bar-status {
+            font-size: 11px;
+            font-weight: 600;
+            line-height: 1.25;
         }
 
         /* Command bar (slim CLI-style input) */
@@ -1520,7 +1573,8 @@
                         <span class="cockpit-field-label">Pick</span>
                         <input type="text" id="draftPick" class="cockpit-pick" placeholder="—" oninput="saveDraftRoomState()">
                     </label>
-                    <button class="example-btn" onclick="openDraftDrawer()" type="button">📋 Paste / record</button>
+                    <button class="example-btn draft-mode-toggle" id="draftModeToggle" onclick="toggleDraftMode()" type="button">🟢 Draft Mode</button>
+                    <button class="example-btn" onclick="openDraftDrawer()" type="button">📋 Manual / reset</button>
                     <button class="example-btn" onclick="loadDraftSheet()" type="button">↻ Refresh</button>
                     <span class="draft-sheet-meta" id="draftSheetMeta"></span>
                 </div>
@@ -1529,6 +1583,13 @@
                         <option value="">Recent chats</option>
                     </select>
                     <button class="example-btn" onclick="startNewChat()" type="button">New</button>
+                </div>
+            </div>
+            <div class="draft-paste-bar" id="draftPasteBar">
+                <textarea id="draftModePaste" class="draft-paste-bar-input" placeholder="📋 On the clock? Paste the round's picks here — they load the instant you paste (or hit Load)." onpaste="autoLoadOnPaste()"></textarea>
+                <div class="draft-paste-bar-actions">
+                    <button class="command-send" id="draftModeLoadBtn" onclick="parseAndLoadBoard('draftModePaste', 'draftModeLoadBtn')" type="button">Load</button>
+                    <span class="draft-paste-status draft-paste-bar-status"></span>
                 </div>
             </div>
             <div class="draft-sheet-tabs" id="draftSheetTabs">
@@ -1661,6 +1722,7 @@
                 signOutButton.style.display = 'inline-block';
                 questionInput.focus();
                 loadSessions();
+                restoreDraftMode();
                 loadDraftSheet();   // cockpit canvas is the spreadsheet
             } else {
                 authArea.style.display = 'flex';
@@ -2247,10 +2309,39 @@
         }
 
         function draftPasteStatus(msg, color) {
-            const el = document.getElementById('draftPasteStatus');
-            if (!el) return;
-            el.textContent = msg || '';
-            el.style.color = color || '#475569';
+            document.querySelectorAll('.draft-paste-status').forEach(el => {
+                el.textContent = msg || '';
+                el.style.color = color || '#475569';
+            });
+        }
+
+        // Draft Mode: surface the paste bar on the cockpit so capturing picks is one paste away.
+        function toggleDraftMode() {
+            const on = !cockpit.classList.contains('draft-mode');
+            cockpit.classList.toggle('draft-mode', on);
+            const btn = document.getElementById('draftModeToggle');
+            if (btn) {
+                btn.classList.toggle('active', on);
+                btn.textContent = on ? '🟢 Draft Mode: ON' : '🟢 Draft Mode';
+            }
+            localStorage.setItem('superagent_draft_mode', on ? '1' : '0');
+            if (on) {
+                const box = document.getElementById('draftModePaste');
+                if (box) box.focus();
+            }
+        }
+
+        function restoreDraftMode() {
+            if (localStorage.getItem('superagent_draft_mode') === '1') {
+                cockpit.classList.add('draft-mode');
+                const btn = document.getElementById('draftModeToggle');
+                if (btn) { btn.classList.add('active'); btn.textContent = '🟢 Draft Mode: ON'; }
+            }
+        }
+
+        // The paste event fires before the textarea value updates — wait a tick, then load.
+        function autoLoadOnPaste() {
+            setTimeout(() => parseAndLoadBoard('draftModePaste', 'draftModeLoadBtn'), 60);
         }
 
         // Parse a pasted draft board (e.g. from a mock draft sim). Blocks look like:
@@ -2291,22 +2382,21 @@
             return picks;
         }
 
-        async function parseAndLoadBoard() {
+        async function parseAndLoadBoard(boxId, btnId) {
             if (!authToken) {
                 showAuthError('loginError', 'Please sign in before loading a draft board.');
                 return;
             }
-            const box = document.getElementById('draftPasteBox');
-            const btn = document.getElementById('draftPasteBtn');
-            const picks = parseDraftBoard(box.value || '');
+            const box = document.getElementById(boxId || 'draftPasteBox');
+            const btn = document.getElementById(btnId || 'draftPasteBtn');
+            const picks = parseDraftBoard((box && box.value) || '');
             if (!picks.length) {
                 draftPasteStatus('Could not find any picks in that text.', '#dc2626');
                 return;
             }
             const leagueId = draftLeagueIdValue();
-            const original = btn.textContent;
-            btn.disabled = true;
-            btn.textContent = `⏳ Loading ${picks.length}...`;
+            const original = btn ? btn.textContent : '';
+            if (btn) { btn.disabled = true; btn.textContent = `⏳ Loading ${picks.length}...`; }
             draftPasteStatus(`Parsed ${picks.length} pick${picks.length === 1 ? '' : 's'}, saving...`);
             try {
                 const response = await fetch(`/leagues/${leagueId}/draft/picks/bulk`, {
@@ -2328,7 +2418,7 @@
                 // Next pick follows the highest recorded pick number (handles non-contiguous boards).
                 draftPick.value = String(maxPick + 1);
                 saveDraftRoomState();
-                box.value = '';
+                if (box) box.value = '';
                 await loadDraftBoard();
                 const summary = data.summary || {};
                 let msg = `✅ Loaded — board now has ${total} pick${total === 1 ? '' : 's'}.`;
@@ -2342,8 +2432,7 @@
             } catch (error) {
                 draftPasteStatus(`❌ ${error.message}`, '#dc2626');
             } finally {
-                btn.disabled = false;
-                btn.textContent = original;
+                if (btn) { btn.disabled = false; btn.textContent = original; }
             }
         }
 
