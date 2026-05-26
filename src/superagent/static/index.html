@@ -476,97 +476,7 @@
             overflow: hidden;
         }
 
-        /* Draft Room launcher (sits in the input bar; opens the slide-out drawer) */
-        .draft-launcher {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px;
-            width: 100%;
-            background: #f8fbff;
-            border: 1px solid #cfe0f7;
-            border-radius: 8px;
-            padding: 11px 14px;
-            margin-bottom: 10px;
-            color: #1557b0;
-            font-size: 13px;
-            font-weight: 700;
-            cursor: pointer;
-        }
-
-        .draft-launcher:hover {
-            background: #eef4ff;
-        }
-
-        .draft-launcher-left {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .draft-launcher-hint {
-            color: #7c93b5;
-            font-size: 11px;
-            font-weight: 600;
-            white-space: nowrap;
-        }
-
-        /* Slide-out Draft Room drawer */
-        .draft-backdrop {
-            position: fixed;
-            inset: 0;
-            background: rgba(15, 23, 42, 0.30);
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.28s ease;
-            z-index: 900;
-        }
-
-        .draft-backdrop.open {
-            opacity: 1;
-            visibility: visible;
-        }
-
-        .draft-drawer {
-            position: fixed;
-            top: 0;
-            right: 0;
-            height: 100vh;
-            height: 100dvh;
-            width: min(440px, 94vw);
-            background: #ffffff;
-            box-shadow: -12px 0 34px rgba(15, 23, 42, 0.20);
-            transform: translateX(102%);
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            z-index: 950;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .draft-drawer.open {
-            transform: translateX(0);
-        }
-
-        .draft-drawer-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            padding: 16px 18px;
-            border-bottom: 1px solid #e8eef7;
-            background: #f8fbff;
-            flex-shrink: 0;
-        }
-
-        .draft-drawer-title {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: #1f2937;
-            font-size: 15px;
-            font-weight: 700;
-        }
-
+        /* Shared close button for the answer overlay (legacy Draft Room drawer removed). */
         .draft-drawer-close {
             background: transparent;
             border: none;
@@ -581,22 +491,6 @@
         .draft-drawer-close:hover {
             background: #e8eef7;
             color: #1f2937;
-        }
-
-        .draft-drawer-body {
-            flex: 1;
-            overflow-y: auto;
-            padding: 14px 18px 24px;
-        }
-
-        .draft-sheet-launcher {
-            background: #f3fff7;
-            border-color: #bfe6cf;
-            color: #15803d;
-        }
-
-        .draft-sheet-launcher:hover {
-            background: #e6fbee;
         }
 
         /* Wide draft-sheet cockpit drawer */
@@ -898,10 +792,113 @@
         /* Coming-soon placeholder for non-draft workspaces */
         .mode-placeholder { display: none; padding: 44px 24px; text-align: center; }
         .cockpit:not(.mode-draft) .mode-placeholder { display: block; }
-        .cockpit:not(.mode-draft) .draft-paste-bar,
-        .cockpit:not(.mode-draft) .draft-sheet-tabs,
         .cockpit:not(.mode-draft) .cockpit-head,
-        .cockpit:not(.mode-draft) #draftSheetBody { display: none !important; }
+        .cockpit:not(.mode-draft) .cockpit-main { display: none !important; }
+
+        /* Draft body: board (hero) + My Team dashboard rail, side by side */
+        .cockpit-main {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            align-items: stretch;
+        }
+        .cockpit-board {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        .my-team-rail {
+            flex: 0 0 288px;
+            width: 288px;
+            border-left: 1px solid var(--border);
+            background: var(--surface-2);
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+        .my-team-head {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            background: linear-gradient(180deg, #f8fbff, var(--surface-2));
+        }
+        .my-team-title {
+            font-size: 13px;
+            font-weight: 800;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+        .my-team-count {
+            font-size: 11px;
+            font-weight: 800;
+            color: #fff;
+            background: var(--brand);
+            border-radius: 999px;
+            padding: 1px 8px;
+        }
+        .my-team-needs {
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 4px;
+            line-height: 1.4;
+        }
+        .my-team-list {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 6px;
+        }
+        .my-team-empty {
+            padding: 18px 12px;
+            font-size: 12px;
+            color: var(--muted);
+            line-height: 1.5;
+            text-align: center;
+        }
+        .mt-pos-group {
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--muted);
+            padding: 8px 8px 3px;
+        }
+        .mt-player {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 8px;
+            border-radius: var(--radius-sm);
+        }
+        .mt-player:hover { background: rgba(37, 99, 235, 0.05); }
+        .mt-name {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .mt-meta {
+            margin-left: auto;
+            font-size: 11px;
+            color: var(--muted);
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        @media (max-width: 900px) {
+            .cockpit-main { flex-direction: column; }
+            .my-team-rail {
+                flex: 0 0 auto;
+                width: auto;
+                border-left: none;
+                border-top: 1px solid var(--border);
+                max-height: 240px;
+            }
+        }
         .mode-placeholder-icon { font-size: 42px; }
         .mode-placeholder h3 { font-size: 20px; margin: 12px 0 8px; color: var(--text); }
         .mode-placeholder p { color: var(--muted); font-size: 14px; max-width: 460px; margin: 0 auto; line-height: 1.55; }
@@ -1061,18 +1058,6 @@
         .answer-overlay-body {
             overflow-y: auto;
             padding: 6px 16px 16px;
-        }
-
-        .draft-roster-box {
-            width: 100%;
-            min-height: 52px;
-            resize: vertical;
-            padding: 10px 12px;
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            font-family: inherit;
-            font-size: 13px;
-            margin-bottom: 8px;
         }
 
         table.sheet-table {
@@ -1255,231 +1240,10 @@
             font-weight: 700;
         }
 
-        .draft-room-status {
-            color: #15803d;
-            font-size: 11px;
-            font-weight: 700;
-            margin-left: 8px;
-            opacity: 0;
-            transition: opacity 0.2s ease;
-        }
-
-        .draft-room-status.visible {
-            opacity: 1;
-        }
-
-        .draft-room-actions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-        }
-
-        .draft-paste {
-            background: #eef6ff;
-            border: 1px solid #cfe0f7;
-            border-radius: 8px;
-            padding: 10px;
-            margin-bottom: 10px;
-        }
-
-        .draft-paste-label {
-            color: #1557b0;
-            font-size: 12px;
-            font-weight: 700;
-            margin-bottom: 6px;
-        }
-
-        .draft-paste textarea {
-            width: 100%;
-            min-height: 70px;
-            resize: vertical;
-            padding: 10px 12px;
-            border: 1px solid #cfe0f7;
-            border-radius: 8px;
-            font-family: inherit;
-            font-size: 13px;
-            line-height: 1.35;
-        }
-
-        .draft-paste textarea:focus {
-            outline: none;
-            border-color: #1a73e8;
-            box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.1);
-        }
-
-        .draft-paste-row {
-            align-items: center;
-            display: flex;
-            gap: 10px;
-            margin-top: 8px;
-        }
-
         .draft-paste-status {
             color: #475569;
             font-size: 12px;
             font-weight: 600;
-        }
-
-        .draft-room-grid {
-            display: grid;
-            grid-template-columns: 120px 120px 1fr;
-            gap: 8px;
-            margin-bottom: 8px;
-        }
-
-        .draft-pick-grid {
-            display: grid;
-            grid-template-columns: 120px 1fr 1fr auto auto;
-            gap: 8px;
-            margin-bottom: 8px;
-        }
-
-        .draft-room textarea {
-            min-height: 58px;
-            resize: vertical;
-            width: 100%;
-            padding: 10px 12px;
-            border: 1px solid #d0d7e2;
-            border-radius: 8px;
-            font-family: inherit;
-            font-size: 13px;
-            line-height: 1.35;
-        }
-
-        .draft-room input {
-            min-width: 0;
-            padding: 12px 14px;
-            border: 1px solid #d0d7e2;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 700;
-        }
-
-        .draft-room textarea:focus,
-        .draft-room input:focus {
-            outline: none;
-            border-color: #1a73e8;
-            box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.1);
-        }
-
-        .draft-room-note {
-            color: #64748b;
-            font-size: 11px;
-            line-height: 1.35;
-        }
-
-        .draft-board-toggle {
-            align-items: center;
-            display: flex;
-            justify-content: space-between;
-            gap: 10px;
-            margin: 8px 0 0;
-        }
-
-        .draft-board-summary {
-            color: #475569;
-            font-size: 12px;
-            font-weight: 700;
-        }
-
-        .draft-board-toggle button {
-            background: transparent;
-            border: none;
-            color: #1a73e8;
-            font-size: 11px;
-            font-weight: 700;
-            padding: 3px 0;
-        }
-
-        .draft-board-toggle button:hover {
-            background: transparent;
-            text-decoration: underline;
-        }
-
-        .draft-board {
-            background: white;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            margin: 8px 0;
-            max-height: 80px;
-            overflow-y: auto;
-            padding: 8px;
-        }
-
-        .draft-board.expanded {
-            max-height: 240px;
-        }
-
-        .draft-board-empty {
-            color: #94a3b8;
-            font-size: 12px;
-        }
-
-        .draft-board-row {
-            align-items: center;
-            border-bottom: 1px solid #f1f5f9;
-            color: #334155;
-            display: grid;
-            font-size: 12px;
-            gap: 8px;
-            grid-template-columns: 48px 1fr 1fr;
-            padding: 4px 0;
-        }
-
-        .draft-board-row:last-child {
-            border-bottom: none;
-        }
-
-        .draft-board-pick {
-            color: #64748b;
-            font-weight: 700;
-        }
-
-        .draft-room-footer {
-            align-items: center;
-            display: flex;
-            gap: 10px;
-            margin-top: 4px;
-        }
-
-        .reset-mock-btn {
-            flex: 1;
-            padding: 10px 14px;
-            border: 1px solid #f0b4b4;
-            border-radius: var(--radius-sm);
-            background: linear-gradient(180deg, #fff1f1, #ffe1e1);
-            color: #b91c1c;
-            font-size: 13px;
-            font-weight: 800;
-            box-shadow: none;
-        }
-
-        .reset-mock-btn:hover {
-            filter: brightness(0.98);
-            box-shadow: 0 2px 8px rgba(185, 28, 28, 0.18);
-            transform: translateY(-1px);
-        }
-
-        .reset-mock-btn:disabled {
-            opacity: 0.6;
-            transform: none;
-            box-shadow: none;
-        }
-
-        .draft-room-clear {
-            background: transparent;
-            border: none;
-            color: #64748b;
-            font-size: 11px;
-            font-weight: 700;
-            padding: 4px 6px;
-            white-space: nowrap;
-        }
-
-        .draft-room-clear:hover {
-            background: transparent;
-            color: #1a73e8;
-            text-decoration: underline;
         }
 
         input[type="text"] {
@@ -1717,18 +1481,6 @@
             .tools-section {
                 max-width: 90%;
             }
-            .draft-room-grid {
-                grid-template-columns: 1fr 1fr;
-            }
-            .draft-pick-grid {
-                grid-template-columns: 1fr 1fr;
-            }
-            .draft-room-grid textarea {
-                grid-column: 1 / -1;
-            }
-            .draft-pick-grid button {
-                width: 100%;
-            }
             .session-bar {
                 align-items: stretch;
                 flex-direction: column;
@@ -1811,31 +1563,37 @@
                         <span class="cockpit-field-label">Pick</span>
                         <input type="text" id="draftPick" class="cockpit-pick" placeholder="—" oninput="saveDraftRoomState()">
                     </label>
-                    <button class="example-btn draft-mode-toggle" id="draftModeToggle" onclick="toggleDraftMode()" type="button">📋 Update Board</button>
+                    <button class="example-btn" onclick="openUpdateBoard()" type="button">📋 Update Board</button>
                     <button class="example-btn" onclick="undoDraftPick()" type="button">↶ Undo</button>
                     <button class="example-btn reset-mock-inline" onclick="confirmResetDraft()" type="button">🔄 New Mock</button>
                     <button class="example-btn" onclick="openLeagueSettings()" type="button">⚙️ League</button>
                     <button class="example-btn" onclick="loadDraftSheet()" type="button">↻ Refresh</button>
                 </div>
             </div>
-            <div class="draft-paste-bar" id="draftPasteBar">
-                <textarea id="draftModePaste" class="draft-paste-bar-input" placeholder="Paste the round's picks here — they load the instant you paste (or hit Update)." onpaste="autoLoadOnPaste()"></textarea>
-                <div class="draft-paste-bar-actions">
-                    <button class="command-send" id="draftModeLoadBtn" onclick="parseAndLoadBoard('draftModePaste', 'draftModeLoadBtn')" type="button">Update</button>
-                    <span class="draft-paste-status draft-paste-bar-status"></span>
+            <div class="cockpit-main" id="cockpitMain">
+                <div class="cockpit-board">
+                    <div class="draft-sheet-tabs" id="draftSheetTabs">
+                        <button class="sheet-tab active" data-pos="ALL" onclick="setSheetTab('ALL', this)" type="button">All</button>
+                        <button class="sheet-tab" data-pos="QB" onclick="setSheetTab('QB', this)" type="button">QB</button>
+                        <button class="sheet-tab" data-pos="RB" onclick="setSheetTab('RB', this)" type="button">RB</button>
+                        <button class="sheet-tab" data-pos="WR" onclick="setSheetTab('WR', this)" type="button">WR</button>
+                        <button class="sheet-tab" data-pos="TE" onclick="setSheetTab('TE', this)" type="button">TE</button>
+                        <button class="sheet-tab" data-pos="TARGETS" onclick="setSheetTab('TARGETS', this)" type="button">Targets</button>
+                    </div>
+                    <div class="draft-sheet-body cockpit-sheet" id="draftSheetBody">
+                        <div class="draft-sheet-empty">Tap <strong>📋 Update Board</strong> to paste your draft board — the best available players show up here, live.</div>
+                    </div>
                 </div>
-            </div>
-            <div class="draft-sheet-tabs" id="draftSheetTabs">
-                <button class="sheet-tab active" data-pos="ALL" onclick="setSheetTab('ALL', this)" type="button">All</button>
-                <button class="sheet-tab" data-pos="QB" onclick="setSheetTab('QB', this)" type="button">QB</button>
-                <button class="sheet-tab" data-pos="RB" onclick="setSheetTab('RB', this)" type="button">RB</button>
-                <button class="sheet-tab" data-pos="WR" onclick="setSheetTab('WR', this)" type="button">WR</button>
-                <button class="sheet-tab" data-pos="TE" onclick="setSheetTab('TE', this)" type="button">TE</button>
-                <button class="sheet-tab" data-pos="TARGETS" onclick="setSheetTab('TARGETS', this)" type="button">Targets</button>
-                <button class="sheet-tab" data-pos="MINE" onclick="setSheetTab('MINE', this)" type="button">My Roster</button>
-            </div>
-            <div class="draft-sheet-body cockpit-sheet" id="draftSheetBody">
-                <div class="draft-sheet-empty">Tap <strong>📋 Update Board</strong> to paste your draft board — the best available players show up here, live.</div>
+                <!-- My Team dashboard: sits open beside the board while you draft -->
+                <aside class="my-team-rail" id="myTeamRail">
+                    <div class="my-team-head">
+                        <div class="my-team-title">🧢 My Team <span class="my-team-count" id="myTeamCount">0</span></div>
+                        <div class="my-team-needs" id="myTeamNeeds"></div>
+                    </div>
+                    <div class="my-team-list" id="myTeamList">
+                        <div class="my-team-empty">Your roster builds here as you draft — use <strong>I picked</strong> on a player, or paste the board.</div>
+                    </div>
+                </aside>
             </div>
             <!-- Coming-soon panel for in-season workspaces (Roster / Waivers) -->
             <div class="mode-placeholder" id="modePlaceholder">
@@ -1885,53 +1643,6 @@
             <button class="draft-drawer-close" onclick="closeAnswer()" type="button" aria-label="Close">&times;</button>
         </div>
         <div class="answer-overlay-body" id="answerBody"></div>
-    </aside>
-
-    <!-- Draft Room drawer (paste board / record picks), body-level -->
-    <div class="draft-backdrop" id="draftBackdrop" onclick="closeDraftDrawer()"></div>
-    <aside class="draft-drawer" id="draftDrawer" aria-hidden="true">
-        <div class="draft-drawer-header">
-            <span class="draft-drawer-title">🏈 Draft Room <span class="draft-room-status" id="draftRoomStatus">Saved</span></span>
-            <button class="draft-drawer-close" onclick="closeDraftDrawer()" type="button" aria-label="Close draft room">&times;</button>
-        </div>
-        <div class="draft-drawer-body">
-            <div class="draft-room-actions">
-                <button class="example-btn" onclick="draftRoomAsk('next')">Next pick</button>
-                <button class="example-btn" onclick="draftRoomAsk('needs')">Position needs</button>
-                <button class="example-btn" onclick="draftRoomAsk('byes')">Bye check</button>
-                <button class="example-btn" onclick="draftRoomAsk('rb')">RB values</button>
-            </div>
-            <div class="draft-paste">
-                <div class="draft-paste-label">📋 Paste draft board (fastest) — copy picks from your draft site and paste here</div>
-                <textarea id="draftPasteBox" placeholder="Paste the picks list (round by round is fine). I'll parse the players, mark your own picks, and load the board automatically."></textarea>
-                <div class="draft-paste-row">
-                    <button class="example-btn" id="draftPasteBtn" onclick="parseAndLoadBoard()" type="button">Parse &amp; load board</button>
-                    <span class="draft-paste-status" id="draftPasteStatus"></span>
-                </div>
-            </div>
-            <textarea id="draftRoster" class="draft-roster-box" placeholder="My roster (optional): Josh Allen, James Cook, ..." oninput="saveDraftRoomState()"></textarea>
-            <div class="draft-pick-grid">
-                <input type="text" id="draftPickTeam" placeholder="Team">
-                <input type="text" id="draftPickPlayer" placeholder="Player picked">
-                <button class="example-btn" onclick="recordTheyPicked()" type="button">They picked</button>
-                <button class="example-btn" onclick="recordIPicked()" type="button">I picked</button>
-                <button class="example-btn" onclick="undoDraftPick()" type="button">Undo</button>
-            </div>
-            <div class="draft-board-toggle">
-                <span class="draft-board-summary" id="draftBoardSummary">Draft board: 0 picks</span>
-                <button onclick="toggleDraftBoard()" type="button" id="draftBoardToggle">Show full board</button>
-            </div>
-            <div class="draft-board" id="draftBoard">
-                <div class="draft-board-empty">No draft picks recorded yet.</div>
-            </div>
-            <div class="draft-room-footer">
-                <button class="reset-mock-btn" id="resetBoardBtn" onclick="confirmResetDraft()" type="button">🔄 Start new mock</button>
-                <button class="draft-room-clear" onclick="clearDraftRoom()" type="button">Clear inputs only</button>
-            </div>
-            <div class="draft-room-note">
-                Picks are saved to your league on the server. <strong>Start new mock</strong> wipes the whole board &amp; roster for a fresh draft; <strong>Clear inputs</strong> just empties these fields.
-            </div>
-        </div>
     </aside>
 
     <!-- League Settings modal -->
@@ -1986,6 +1697,20 @@
         </div>
     </div>
 
+    <!-- Update Board: paste picks (a tool, opened on demand so it doesn't eat the board's space) -->
+    <div id="updateBoardModal" class="modal-overlay" onclick="closeUpdateBoard(event)">
+        <div class="modal-card">
+            <h2>📋 Update Board</h2>
+            <p style="font-size:13px;color:var(--muted);margin-bottom:10px;">Paste the round's picks from your draft room — they load the instant you paste.</p>
+            <textarea id="draftModePaste" class="draft-paste-bar-input" style="width:100%;min-height:130px;max-height:300px;" placeholder="Paste picks here…" onpaste="autoLoadOnPaste()"></textarea>
+            <div class="modal-actions">
+                <span class="draft-paste-status draft-paste-bar-status" style="margin-right:auto;"></span>
+                <button class="secondary-btn" onclick="closeUpdateBoard()" type="button">Close</button>
+                <button class="command-send" id="draftModeLoadBtn" onclick="parseAndLoadBoard('draftModePaste', 'draftModeLoadBtn')" type="button">Update</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const REQUEST_TIMEOUT_MS = 60000;
         // Cockpit shell: answers render into the Siri-style overlay (#answerBody).
@@ -1997,22 +1722,16 @@
         const signOutButton = document.getElementById('signOutButton');
         const draftLeagueId = document.getElementById('draftLeagueId');
         const draftPick = document.getElementById('draftPick');
-        const draftRoster = document.getElementById('draftRoster');
-        const draftPickTeam = document.getElementById('draftPickTeam');
-        const draftPickPlayer = document.getElementById('draftPickPlayer');
-        const draftBoard = document.getElementById('draftBoard');
-        const draftBoardSummary = document.getElementById('draftBoardSummary');
-        const draftBoardToggle = document.getElementById('draftBoardToggle');
-        const draftRoomStatus = document.getElementById('draftRoomStatus');
         const sessionSelect = document.getElementById('sessionSelect');
         let sessionId = null;
         let authToken = null;
         let isWaiting = false;
         let requestTimeout = null;
-        let draftRoomStatusTimer = null;
         let sessionsLoaded = false;
-        let draftBoardExpanded = false;
         let draftBoardPicks = [];
+        // Roster context for agent prompts. Auto-populated from "I picked" (no visible widget
+        // since the Draft Room drawer was removed); persisted in localStorage via draft room state.
+        let draftRosterValue = '';
 
         // Initialize session ID from localStorage
         function initializeSession() {
@@ -2037,9 +1756,9 @@
                 signOutButton.style.display = 'inline-block';
                 questionInput.focus();
                 loadSessions();
-                restoreDraftMode();
                 setWorkspace('draft', document.querySelector('#workspaceSwitch .ws-tab[data-ws="draft"]'));
                 loadDraftSheet();   // cockpit canvas is the spreadsheet
+                loadMyTeam();       // My Team dashboard rail
             } else {
                 authArea.style.display = 'flex';
                 cockpit.style.display = 'none';
@@ -2184,7 +1903,7 @@
         }
 
         function rosterNames() {
-            return draftRoster.value
+            return draftRosterValue
                 .split(/[\n,]+/)
                 .map(name => name.trim())
                 .filter(Boolean);
@@ -2199,17 +1918,8 @@
             localStorage.setItem('superagent_draft_room', JSON.stringify({
                 leagueId: draftLeagueId.value.trim(),
                 pick: draftPick.value.trim(),
-                roster: draftRoster.value.trim()
+                roster: draftRosterValue.trim()
             }));
-            showDraftRoomSaved();
-        }
-
-        function showDraftRoomSaved() {
-            clearTimeout(draftRoomStatusTimer);
-            draftRoomStatus.classList.add('visible');
-            draftRoomStatusTimer = setTimeout(() => {
-                draftRoomStatus.classList.remove('visible');
-            }, 1200);
         }
 
         function loadDraftRoomState() {
@@ -2219,7 +1929,7 @@
                 const state = JSON.parse(raw);
                 draftLeagueId.value = state.leagueId || draftLeagueId.value || '1';
                 draftPick.value = state.pick || '';
-                draftRoster.value = state.roster || '';
+                draftRosterValue = state.roster || '';
             } catch (error) {
                 localStorage.removeItem('superagent_draft_room');
             }
@@ -2228,24 +1938,6 @@
         function setSectionCollapsed(el, hintEl, collapsed) {
             el.classList.toggle('collapsed', collapsed);
             if (hintEl) hintEl.textContent = collapsed ? 'tap to open' : 'tap to hide';
-        }
-
-        function openDraftDrawer() {
-            closeDraftSheet();  // only one right-side drawer open at a time
-            const drawer = document.getElementById('draftDrawer');
-            drawer.classList.add('open');
-            document.getElementById('draftBackdrop').classList.add('open');
-            drawer.setAttribute('aria-hidden', 'false');
-            document.body.style.overflow = 'hidden';
-            loadDraftBoard();
-        }
-
-        function closeDraftDrawer() {
-            const drawer = document.getElementById('draftDrawer');
-            drawer.classList.remove('open');
-            document.getElementById('draftBackdrop').classList.remove('open');
-            drawer.setAttribute('aria-hidden', 'true');
-            document.body.style.overflow = '';
         }
 
         // ---- Draft Sheet (live cockpit table) ----
@@ -2587,26 +2279,6 @@
             // Examples section was removed in the cockpit shell; nothing to restore.
         }
 
-        function updateLauncherHint(count) {
-            const hint = document.getElementById('draftLauncherHint');
-            if (!hint) return;
-            hint.textContent = count
-                ? `${count} pick${count === 1 ? '' : 's'} tracked · open ▸`
-                : 'paste your board & track picks ▸';
-        }
-
-        function clearDraftRoom() {
-            // Local-only: empty the input fields. Does NOT touch the recorded board.
-            draftPick.value = '';
-            draftRoster.value = '';
-            draftPickTeam.value = '';
-            draftPickPlayer.value = '';
-            const box = document.getElementById('draftPasteBox');
-            if (box) box.value = '';
-            saveDraftRoomState();
-            draftPick.focus();
-        }
-
         // Open the confirmation modal (the only entry point to a destructive reset).
         function confirmResetDraft() {
             if (!authToken) return;
@@ -2637,13 +2309,9 @@
                     throw new Error(error.detail || 'Could not reset the board');
                 }
                 const data = await response.json();
-                // Wipe local draft state: pick, roster inputs, paste boxes, selection, and the view.
+                // Wipe local draft state: pick, roster, paste box, selection, and the view.
                 draftPick.value = '';
-                draftRoster.value = '';
-                draftPickTeam.value = '';
-                draftPickPlayer.value = '';
-                const drawerBox = document.getElementById('draftPasteBox');
-                if (drawerBox) drawerBox.value = '';
+                draftRosterValue = '';
                 const liveBox = document.getElementById('draftModePaste');
                 if (liveBox) liveBox.value = '';
                 clearSelection();
@@ -2672,146 +2340,35 @@
             return Number.isFinite(value) && value > 0 ? value : null;
         }
 
+        // Loads the recorded picks into draftBoardPicks (agent context) and syncs the live
+        // sheet. The mini-board UI it used to render lived in the removed Draft Room drawer.
         async function loadDraftBoard() {
-            if (!authToken || !draftBoard) return;
+            if (!authToken) return;
             const leagueId = draftLeagueIdValue();
             try {
                 const response = await fetch(`/leagues/${leagueId}/draft/picks`, {
                     headers: authHeaders()
                 });
                 if (!response.ok) {
-                    draftBoard.innerHTML = '<div class="draft-board-empty">Draft board unavailable.</div>';
                     draftBoardPicks = [];
                     return;
                 }
                 const data = await response.json();
-                const allPicks = data.picks || [];
-                draftBoardPicks = allPicks;
+                draftBoardPicks = data.picks || [];
                 if (draftSheetIsOpen()) loadDraftSheet();  // keep the live sheet in sync
-                const visiblePicks = draftBoardExpanded ? allPicks : allPicks.slice(-5);
-                draftBoardSummary.textContent = `Draft board: ${allPicks.length} pick${allPicks.length === 1 ? '' : 's'}`;
-                updateLauncherHint(allPicks.length);
-                draftBoardToggle.textContent = draftBoardExpanded ? 'Hide full board' : 'Show full board';
-                draftBoard.classList.toggle('expanded', draftBoardExpanded);
-                if (!allPicks.length) {
-                    draftBoard.innerHTML = '<div class="draft-board-empty">No draft picks recorded yet.</div>';
-                    return;
-                }
-                draftBoard.innerHTML = visiblePicks.map(pick => `
-                    <div class="draft-board-row">
-                        <span class="draft-board-pick">#${pick.pick_num}</span>
-                        <span>${escapeHtml(pick.fantasy_team_name || 'Team')}</span>
-                        <span>${escapeHtml(pick.source_player_name)}</span>
-                    </div>
-                `).join('');
+                loadMyTeam();                               // keep the My Team rail in sync
             } catch (error) {
-                draftBoard.innerHTML = '<div class="draft-board-empty">Draft board unavailable.</div>';
                 draftBoardPicks = [];
             }
-        }
-
-        function toggleDraftBoard() {
-            draftBoardExpanded = !draftBoardExpanded;
-            loadDraftBoard();
         }
 
         function appendToRoster(playerName) {
             const names = rosterNames();
             if (!names.some(name => name.toLowerCase() === playerName.toLowerCase())) {
                 names.push(playerName);
-                draftRoster.value = names.join(', ');
+                draftRosterValue = names.join(', ');
                 saveDraftRoomState();
             }
-        }
-
-        async function recordDraftPick(isMine) {
-            if (!authToken) {
-                showAuthError('loginError', 'Please sign in before recording draft picks.');
-                return;
-            }
-            const pickNumber = draftPickNumber();
-            const playerName = draftPickPlayer.value.trim();
-            if (!pickNumber || !playerName) {
-                addMessage('error', 'Enter a pick number and player name first.');
-                return;
-            }
-
-            // Find and disable the button that was clicked
-            const buttonText = isMine ? 'I picked' : 'They picked';
-            const buttons = Array.from(document.querySelectorAll('button.example-btn')).filter(b => b.textContent.trim() === buttonText);
-            const button = buttons[0];
-            if (!button) return;
-
-            const originalText = button.textContent;
-            button.disabled = true;
-            button.textContent = '⏳ Recording...';
-
-            const leagueId = draftLeagueIdValue();
-            const payload = {
-                pick_number: pickNumber,
-                team_name: isMine ? (draftPickTeam.value.trim() || 'My Team') : (draftPickTeam.value.trim() || 'Other'),
-                player_name: playerName
-            };
-            try {
-                const path = isMine
-                    ? `/leagues/${leagueId}/draft/my-pick`
-                    : `/leagues/${leagueId}/draft/picks`;
-                const response = await fetch(path, {
-                    method: 'POST',
-                    headers: authHeaders({'Content-Type': 'application/json'}),
-                    body: JSON.stringify(payload)
-                });
-                if (!response.ok) {
-                    const error = await response.json().catch(() => ({}));
-                    throw new Error(error.detail || 'Could not record draft pick');
-                }
-                const pick = await response.json();
-
-                // Show success state briefly
-                button.textContent = '✅ Recorded!';
-                button.style.background = '#15803d';
-                button.style.color = 'white';
-
-                // Clear after success
-                if (isMine) appendToRoster(pick.source_player_name);
-                draftPick.value = String(pick.pick_num + 1);
-                draftPickPlayer.value = '';
-                draftPickTeam.value = '';
-                saveDraftRoomState();
-                await loadDraftBoard();
-
-                // Reset button state after 1 second
-                setTimeout(() => {
-                    button.textContent = originalText;
-                    button.disabled = false;
-                    button.style.background = '';
-                    button.style.color = '';
-                }, 1000);
-
-                if (isMine) {
-                    askQuestion(draftRoomPrompt('next'));
-                }
-            } catch (error) {
-                // Show error state and reset button
-                button.textContent = '❌ Error';
-                button.style.background = '#dc2626';
-                button.style.color = 'white';
-                addMessage('error', error.message);
-                setTimeout(() => {
-                    button.textContent = originalText;
-                    button.disabled = false;
-                    button.style.background = '';
-                    button.style.color = '';
-                }, 2000);
-            }
-        }
-
-        function recordTheyPicked() {
-            recordDraftPick(false);
-        }
-
-        function recordIPicked() {
-            recordDraftPick(true);
         }
 
         function draftPasteStatus(msg, color) {
@@ -2885,26 +2442,61 @@
             }
         }
 
-        // Update Board: reveal the paste panel as a tool (not a mode). Label stays constant;
-        // only a subtle active state marks the panel open. (`draft-mode` is just the CSS hook.)
-        function toggleDraftMode() {
-            const on = !cockpit.classList.contains('draft-mode');
-            cockpit.classList.toggle('draft-mode', on);
-            const btn = document.getElementById('draftModeToggle');
-            if (btn) btn.classList.toggle('active', on);
-            localStorage.setItem('superagent_draft_mode', on ? '1' : '0');
-            if (on) {
-                const box = document.getElementById('draftModePaste');
-                if (box) box.focus();
-            }
+        // Update Board is a tool, opened on demand (modal) so it doesn't occupy the board's space.
+        function openUpdateBoard() {
+            const modal = document.getElementById('updateBoardModal');
+            if (modal) modal.style.display = 'flex';
+            const box = document.getElementById('draftModePaste');
+            if (box) { box.value = ''; box.focus(); }
         }
 
-        function restoreDraftMode() {
-            if (localStorage.getItem('superagent_draft_mode') === '1') {
-                cockpit.classList.add('draft-mode');
-                const btn = document.getElementById('draftModeToggle');
-                if (btn) btn.classList.add('active');
-            }
+        function closeUpdateBoard(event) {
+            if (event && event.target && event.target.id !== 'updateBoardModal') return;
+            const modal = document.getElementById('updateBoardModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        // My Team dashboard rail — current roster with name, team, bye, position.
+        const MT_POS_ORDER = { QB: 0, RB: 1, WR: 2, TE: 3, K: 4, DST: 5, DEF: 5 };
+        async function loadMyTeam() {
+            const list = document.getElementById('myTeamList');
+            const countEl = document.getElementById('myTeamCount');
+            const needsEl = document.getElementById('myTeamNeeds');
+            if (!authToken || !list) return;
+            const leagueId = draftLeagueIdValue();
+            try {
+                const response = await fetch(`/leagues/${leagueId}/draft/sheet?roster=mine&limit=300`, { headers: authHeaders() });
+                if (!response.ok) { return; }
+                const data = await response.json();
+                const rows = (data.rows || []).filter(r => r.is_mine);
+                if (countEl) countEl.textContent = String(rows.length);
+                if (needsEl) {
+                    const needs = (data.summary && data.summary.position_needs) || {};
+                    const parts = Object.entries(needs).filter(([, n]) => n > 0).map(([p, n]) => `${p} ${n}`);
+                    needsEl.textContent = parts.length ? `Still need: ${parts.join(' · ')}` : (rows.length ? 'Starters set ✓' : '');
+                }
+                if (!rows.length) {
+                    list.innerHTML = '<div class="my-team-empty">Your roster builds here as you draft — use <strong>I picked</strong> on a player, or paste the board.</div>';
+                    return;
+                }
+                rows.sort((a, b) => {
+                    const pa = MT_POS_ORDER[a.position] ?? 9, pb = MT_POS_ORDER[b.position] ?? 9;
+                    if (pa !== pb) return pa - pb;
+                    return (a.effective_rank ?? 9999) - (b.effective_rank ?? 9999);
+                });
+                let html = '', lastPos = null;
+                for (const r of rows) {
+                    const pos = r.position || '—';
+                    if (pos !== lastPos) { html += `<div class="mt-pos-group">${escapeHtml(pos)}</div>`; lastPos = pos; }
+                    const team = r.current_context_available ? (r.current_team || 'FA') : (r.team || '—');
+                    html += `<div class="mt-player">
+                        <span class="sheet-pos-pill pos-${escapeHtml(pos)}">${escapeHtml(pos)}</span>
+                        <span class="mt-name">${escapeHtml(r.player_name)}</span>
+                        <span class="mt-meta">${escapeHtml(team)} · Bye ${r.bye_week ?? '—'}</span>
+                    </div>`;
+                }
+                list.innerHTML = html;
+            } catch (e) { /* leave previous state on transient error */ }
         }
 
         // The paste event fires before the textarea value updates — wait a tick, then load.
@@ -2955,8 +2547,8 @@
                 showAuthError('loginError', 'Please sign in before loading a draft board.');
                 return;
             }
-            const box = document.getElementById(boxId || 'draftPasteBox');
-            const btn = document.getElementById(btnId || 'draftPasteBtn');
+            const box = document.getElementById(boxId || 'draftModePaste');
+            const btn = document.getElementById(btnId || 'draftModeLoadBtn');
             const picks = parseDraftBoard((box && box.value) || '');
             if (!picks.length) {
                 draftPasteStatus('Could not find any picks in that text.', '#dc2626');
@@ -2995,6 +2587,8 @@
                     const unmatched = (summary.needs_review_players || []).slice(0, 6).join(', ');
                     msg += ` ⚠️ ${summary.needs_review} couldn't be matched${unmatched ? ': ' + unmatched : ''} — check spelling so they're excluded from recommendations.`;
                     color = '#b45309';
+                } else {
+                    closeUpdateBoard();  // clean load — get out of the way; board + rail already updated
                 }
                 draftPasteStatus(msg, color);
             } catch (error) {
@@ -3479,7 +3073,7 @@
 
         // Initialize on load
         document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape') { closeAnswer(); closeDraftDrawer(); closeDraftSheet(); clearSelection(); return; }
+            if (event.key === 'Escape') { closeAnswer(); closeDraftSheet(); clearSelection(); return; }
             // Draft-speed shortcuts: only with a selected player and not while typing.
             const tag = (document.activeElement && document.activeElement.tagName) || '';
             if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
