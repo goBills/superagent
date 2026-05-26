@@ -45,6 +45,10 @@ This is a **peer model**, not a strict handoff. Whoever is best positioned does 
 
 | Version | Commit | What |
 |---------|--------|------|
+| v0.9.5 | pending | Clearer pool-shortfall wording: "Ranked pool short by N — X players left for Y remaining picks" (units were ambiguous). |
+| v0.9.4 | `1c3adb2` | (Codex) Draft sheet pool metadata + depth rows; richer summary (`total_draft_picks`/`remaining_picks`/`pool_shortfall`), per-row `tier_level`/`current_team`/`age`/`years_exp`/`injury_status`. |
+| v0.9.0–0.9.3 | `09f2b5e`–`546d73a` | Guest access + per-user league auto-provision; league-settings-driven cockpit; row-selection draft UX; forward-compat pool warning. |
+| v0.8.x | `cd83239`–`e47d2cf` | Cockpit beautification (tier gradients, position pills, brand stripe), labeled fields, Draft Mode paste bar, reset-for-new-mock, full-width board. |
 | v0.5.13 | `9ede077` | Stops presenting stale market/team data as confirmed 2026 current team context. |
 | v0.5.12 | `d22829c` | Makes value/faller queries pick-aware via shared pick-window logic. |
 | v0.5.11 | `2153630` | Prompt guardrail against hallucinated player narratives, career stage, injuries, role/news speculation. |
@@ -58,6 +62,14 @@ This is a **peer model**, not a strict handoff. Whoever is best positioned does 
 | ≤ v0.5.3 | — | Render build-step DuckDB, draft tracker, compact board, 2026 bye weeks, draft tools, canonical identity (Phase 10A–10D). |
 
 **Tagging status:** Codex has tagged through v0.5.11. v0.5.12 (`d22829c`) and v0.5.13 (`9ede077`) still need tag review.
+
+### Deploy status (2026-05-26)
+
+**Live and healthy.** `https://superagent-ph31.onrender.com/health` → `200 {"commit":"1c3adb25212c"}` (= v0.9.4, latest `main`). Verified end-to-end against production: guest auth provisions a user + league, draft sheet returns 178 ranked rows with Codex's richer summary populated (`pool_shortfall:14` for a 12×16 league).
+
+**Resolved crash-loop:** an earlier deploy of this commit crash-looped — `start.sh` logged "NFL DuckDB not found… Downloading…" then "player_stats_2020.parquet — URL not accessible" → `Exited with status 1`. Render retried and the subsequent build succeeded (transient nflverse/GitHub-releases download failure). No code change was needed to recover.
+
+**Fragility flag for Codex (deploy/data owner):** the failing attempt ran the *runtime* bootstrap path (`BOOTSTRAP_NFL_DATA=true` → download at boot), not `render.yaml`'s build-step DuckDB (`buildCommand` runs `fetch_nflverse` + `database`, runtime `BOOTSTRAP_NFL_DATA=false`). That points at the **`Dockerfile` being the live runtime** — it does *not* bake the DuckDB at build time (only `COPY src/`), so any cold start where the nflverse download flakes will exit 1 and crash-loop. Two robust options: (a) make the service use `render.yaml`'s native-python path, or (b) add `RUN python -m superagent.data.fetch_nflverse && python -m superagent.database` to the `Dockerfile` builder so the DB is baked into the image. Left untouched pending Codex — deploy/data is his domain and this overlaps in-flight depth work.
 
 ---
 

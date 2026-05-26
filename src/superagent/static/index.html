@@ -2281,7 +2281,7 @@
                     ? summary.pool_shortfall
                     : (remaining != null ? Math.max(0, remaining - available) : 0);
                 if (currentSheetTab !== 'MINE' && shortfall > 0) {
-                    warn.textContent = `⚠️ Pool short by ${shortfall}: ${available} left, league needs ${remaining} more`;
+                    warn.textContent = `⚠️ Ranked pool short by ${shortfall} — ${available} players left for ${remaining} remaining picks`;
                     warn.classList.add('show');
                 } else {
                     warn.classList.remove('show');
