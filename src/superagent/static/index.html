@@ -1203,8 +1203,32 @@
         .draft-room-footer {
             align-items: center;
             display: flex;
-            justify-content: space-between;
             gap: 10px;
+            margin-top: 4px;
+        }
+
+        .reset-mock-btn {
+            flex: 1;
+            padding: 10px 14px;
+            border: 1px solid #f0b4b4;
+            border-radius: var(--radius-sm);
+            background: linear-gradient(180deg, #fff1f1, #ffe1e1);
+            color: #b91c1c;
+            font-size: 13px;
+            font-weight: 800;
+            box-shadow: none;
+        }
+
+        .reset-mock-btn:hover {
+            filter: brightness(0.98);
+            box-shadow: 0 2px 8px rgba(185, 28, 28, 0.18);
+            transform: translateY(-1px);
+        }
+
+        .reset-mock-btn:disabled {
+            opacity: 0.6;
+            transform: none;
+            box-shadow: none;
         }
 
         .draft-room-clear {
@@ -1213,7 +1237,8 @@
             color: #64748b;
             font-size: 11px;
             font-weight: 700;
-            padding: 4px 0;
+            padding: 4px 6px;
+            white-space: nowrap;
         }
 
         .draft-room-clear:hover {
@@ -1576,10 +1601,11 @@
                 <div class="draft-board-empty">No draft picks recorded yet.</div>
             </div>
             <div class="draft-room-footer">
-                <div class="draft-room-note">
-                    Saved in this browser. Record every pick so recommendations exclude drafted players.
-                </div>
-                <button class="draft-room-clear" onclick="clearDraftRoom()" type="button">Clear draft room</button>
+                <button class="reset-mock-btn" id="resetBoardBtn" onclick="resetDraftBoard()" type="button">🔄 Start new mock</button>
+                <button class="draft-room-clear" onclick="clearDraftRoom()" type="button">Clear inputs only</button>
+            </div>
+            <div class="draft-room-note">
+                Picks are saved to your league on the server. <strong>Start new mock</strong> wipes the whole board &amp; roster for a fresh draft; <strong>Clear inputs</strong> just empties these fields.
             </div>
         </div>
     </aside>
@@ -2022,14 +2048,50 @@
         }
 
         function clearDraftRoom() {
-            draftLeagueId.value = '1';
+            // Local-only: empty the input fields. Does NOT touch the recorded board.
             draftPick.value = '';
             draftRoster.value = '';
             draftPickTeam.value = '';
             draftPickPlayer.value = '';
+            const box = document.getElementById('draftPasteBox');
+            if (box) box.value = '';
             saveDraftRoomState();
             draftPick.focus();
-            loadDraftBoard();
+        }
+
+        async function resetDraftBoard() {
+            if (!authToken) return;
+            if (!confirm('Start a new mock? This permanently clears the entire recorded draft board AND your roster for this league.')) return;
+            const leagueId = draftLeagueIdValue();
+            const btn = document.getElementById('resetBoardBtn');
+            const original = btn ? btn.textContent : '';
+            if (btn) { btn.disabled = true; btn.textContent = '⏳ Resetting…'; }
+            try {
+                const response = await fetch(`/leagues/${leagueId}/draft/picks`, {
+                    method: 'DELETE',
+                    headers: authHeaders(),
+                });
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error(error.detail || 'Could not reset the board');
+                }
+                const data = await response.json();
+                // Wipe local inputs too and reset the pick counter.
+                draftPick.value = '';
+                draftRoster.value = '';
+                draftPickTeam.value = '';
+                draftPickPlayer.value = '';
+                const box = document.getElementById('draftPasteBox');
+                if (box) box.value = '';
+                saveDraftRoomState();
+                await loadDraftBoard();
+                await loadDraftSheet();
+                draftPasteStatus(`✅ Fresh mock ready — cleared ${data.picks_deleted} pick${data.picks_deleted === 1 ? '' : 's'}.`, '#15803d');
+            } catch (error) {
+                draftPasteStatus(`❌ ${error.message}`, '#dc2626');
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = original || '🔄 Start new mock'; }
+            }
         }
 
         function draftLeagueIdValue() {

@@ -1584,6 +1584,41 @@ def undo_last_draft_pick(
     return {"ok": True, "deleted": deleted}
 
 
+@app.delete("/leagues/{league_id}/draft/picks")
+def reset_draft_board(
+    league_id: int,
+    season: Optional[int] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Clear the entire recorded draft board and stored roster for a league/season.
+
+    Used to start a fresh mock draft — wipes all picks and the user's roster so the
+    sheet/recommendations no longer exclude players from the prior draft.
+    """
+    _get_owned_league(db, league_id, current_user.id)
+    season = season or _latest_draft_market_season(db)
+    if season is None:
+        raise HTTPException(status_code=400, detail="No draft market data imported")
+    picks_deleted = (
+        db.query(LeagueDraftPick)
+        .filter(LeagueDraftPick.league_id == league_id, LeagueDraftPick.season == season)
+        .delete(synchronize_session=False)
+    )
+    roster_deleted = (
+        db.query(LeagueRosterPlayer)
+        .filter(LeagueRosterPlayer.league_id == league_id, LeagueRosterPlayer.season == season)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return {
+        "ok": True,
+        "picks_deleted": int(picks_deleted or 0),
+        "roster_deleted": int(roster_deleted or 0),
+        "season": season,
+    }
+
+
 @app.post("/integrations/espn/leagues")
 def sync_espn_league(
     request: ESPNLeagueSyncRequest,

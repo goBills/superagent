@@ -161,6 +161,31 @@ def test_bulk_draft_picks_reports_needs_review():
     assert "Zzqq Unknownplayer Xyz" in summary["needs_review_players"]
 
 
+def test_reset_draft_board_clears_picks_and_roster():
+    headers, league_id, season, players = setup_draft_league_api()
+    payload = {"season": season, "picks": [
+        {"pick_number": 1, "player_name": players["other"], "team_name": "Other", "is_mine": False},
+        {"pick_number": 3, "player_name": players["mine"], "team_name": "Your Team", "is_mine": True},
+    ]}
+    rec = client.post(f"/leagues/{league_id}/draft/picks/bulk", json=payload, headers=headers)
+    assert rec.status_code == 200
+    assert len(rec.json()["picks"]) == 2
+
+    reset = client.delete(f"/leagues/{league_id}/draft/picks?season={season}", headers=headers)
+    assert reset.status_code == 200, reset.text
+    body = reset.json()
+    assert body["ok"] is True
+    assert body["picks_deleted"] == 2
+    assert body["roster_deleted"] >= 1
+
+    board = client.get(f"/leagues/{league_id}/draft/picks?season={season}", headers=headers)
+    assert board.status_code == 200
+    assert board.json()["picks"] == []
+    with SessionLocal() as db:
+        roster = db.query(LeagueRosterPlayer).filter(LeagueRosterPlayer.league_id == league_id).all()
+        assert roster == []
+
+
 def test_bulk_draft_picks_is_idempotent_on_repaste():
     headers, league_id, season, players = setup_draft_league_api()
     pick = {"pick_number": 1, "player_name": players["other"], "team_name": "Other", "is_mine": False}
