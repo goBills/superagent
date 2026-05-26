@@ -2266,15 +2266,22 @@
             const summary = (data && data.summary) || {};
             const meta = document.getElementById('draftSheetMeta');
             if (meta) meta.textContent = `${summary.available_count ?? rows.length} available · ${summary.drafted_count ?? 0} drafted`;
-            // Pool-low warning: not enough players left to fill the league's remaining picks.
+            // Pool-low warning. Prefer the backend's explicit league-size math when present
+            // (total_draft_picks / remaining_picks / pool_shortfall — Codex's richer summary);
+            // fall back to deriving it from draftable_rank_limit so it works today either way.
             const warn = document.getElementById('poolWarning');
             if (warn) {
-                const total = summary.draftable_rank_limit;
-                const drafted = summary.drafted_count ?? 0;
                 const available = summary.available_count ?? 0;
-                const remaining = (typeof total === 'number') ? (total - drafted) : null;
-                if (currentSheetTab !== 'MINE' && remaining !== null && available < remaining) {
-                    warn.textContent = `⚠️ Pool running short: ${available} left, league needs ${remaining} more picks`;
+                const remaining = (summary.remaining_picks != null)
+                    ? summary.remaining_picks
+                    : (typeof summary.draftable_rank_limit === 'number'
+                        ? summary.draftable_rank_limit - (summary.drafted_count ?? 0)
+                        : null);
+                const shortfall = (summary.pool_shortfall != null)
+                    ? summary.pool_shortfall
+                    : (remaining != null ? Math.max(0, remaining - available) : 0);
+                if (currentSheetTab !== 'MINE' && shortfall > 0) {
+                    warn.textContent = `⚠️ Pool short by ${shortfall}: ${available} left, league needs ${remaining} more`;
                     warn.classList.add('show');
                 } else {
                     warn.classList.remove('show');
