@@ -2521,15 +2521,31 @@
                 draftPasteStatus('Could not find any picks in that text.', '#dc2626');
                 return;
             }
+            // Only send picks we don't already have. Pasting the whole board each round
+            // otherwise re-resolves every name server-side (slow, and slower as it grows) —
+            // this makes a full-board paste as fast as a single-round paste. Match on pick
+            // number + normalized name so a genuine correction still goes through.
+            const norm = s => (s || '').toLowerCase().replace(/[.\s]+/g, ' ').trim();
+            const recordedByPick = new Map((draftBoardPicks || []).map(p => [p.pick_num, norm(p.source_player_name)]));
+            const newPicks = picks.filter(p => {
+                const have = recordedByPick.get(p.pick_number);
+                return have === undefined || have !== norm(p.player_name);
+            });
+            if (!newPicks.length) {
+                draftPasteStatus('✅ Board already up to date — nothing new in that paste.', '#15803d');
+                if (box) box.value = '';
+                closeUpdateBoard();
+                return;
+            }
             const leagueId = draftLeagueIdValue();
             const original = btn ? btn.textContent : '';
-            if (btn) { btn.disabled = true; btn.textContent = `⏳ Loading ${picks.length}...`; }
-            draftPasteStatus(`Parsed ${picks.length} pick${picks.length === 1 ? '' : 's'}, saving...`);
+            if (btn) { btn.disabled = true; btn.textContent = `⏳ Loading ${newPicks.length}...`; }
+            draftPasteStatus(`Sending ${newPicks.length} new pick${newPicks.length === 1 ? '' : 's'}…`);
             try {
                 const response = await fetch(`/leagues/${leagueId}/draft/picks/bulk`, {
                     method: 'POST',
                     headers: authHeaders({'Content-Type': 'application/json'}),
-                    body: JSON.stringify({picks})
+                    body: JSON.stringify({picks: newPicks})
                 });
                 if (!response.ok) {
                     const error = await response.json().catch(() => ({}));
@@ -2539,7 +2555,7 @@
                 const boardPicks = data.picks || [];
                 const total = boardPicks.length;
                 const maxPick = boardPicks.reduce((m, p) => Math.max(m, p.pick_num || 0), 0);
-                for (const name of picks.filter(p => p.is_mine).map(p => p.player_name)) {
+                for (const name of newPicks.filter(p => p.is_mine).map(p => p.player_name)) {
                     appendToRoster(name);
                 }
                 // Next pick follows the highest recorded pick number (handles non-contiguous boards).
