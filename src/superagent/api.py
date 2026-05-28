@@ -16,6 +16,7 @@ from fastapi import BackgroundTasks, Depends, FastAPI, File, Header, HTTPExcepti
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from rapidfuzz import fuzz
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -82,6 +83,7 @@ app.add_middleware(
 )
 
 MAX_HISTORY_ITEMS = 12
+BULK_DRAFT_MARKET_FUZZY_THRESHOLD = 0.88
 ADMIN_JOBS: Dict[str, Dict[str, Any]] = {}
 
 
@@ -642,8 +644,9 @@ class _BulkDraftPickResolver:
     """Batch draft-pick name resolution for pasted boards.
 
     Bulk pastes are dominated by exact player names from the draft room. Preloading
-    exact market rows and aliases lets those resolve in memory, while preserving the
-    slower fuzzy resolver for misspellings and review cases.
+    exact market rows and aliases lets those resolve in memory. Misspellings are
+    checked against the small imported market, not the full global alias table, so
+    a bad row in a late-draft chunk cannot turn into repeated whole-DB fuzzy scans.
     """
 
     def __init__(self, db: Session, season: int, source: Optional[str] = None):
@@ -653,6 +656,7 @@ class _BulkDraftPickResolver:
         self.resolved_in_batch = 0
         self.resolved_by_fallback = 0
         self._market_by_name: Dict[str, DraftPlayerMarket] = {}
+        self._market_candidates: List[tuple[str, str, DraftPlayerMarket]] = []
         self._market_name_conflicts: set[str] = set()
         self._market_by_canonical_id: Dict[str, DraftPlayerMarket] = {}
         self._canonical_id_by_alias: Dict[str, str] = {}
@@ -668,6 +672,8 @@ class _BulkDraftPickResolver:
                 self._market_by_canonical_id[market.canonical_player_id] = market
 
             normalized = normalize_player_name(market.source_player_name)
+            if normalized:
+                self._market_candidates.append((normalized, market.source_player_name, market))
             if not normalized or normalized in self._market_name_conflicts:
                 continue
             existing = self._market_by_name.get(normalized)
@@ -679,10 +685,15 @@ class _BulkDraftPickResolver:
                 self._market_name_conflicts.add(normalized)
 
     def _load_aliases(self) -> None:
+        market_canonical_ids = list(self._market_by_canonical_id)
+        if not market_canonical_ids:
+            return
+
         alias_ids: Dict[str, set[str]] = {}
         for normalized_alias, canonical_player_id in (
             self.db.query(CanonicalPlayerAlias.normalized_alias, CanonicalPlayerAlias.canonical_player_id)
             .filter(CanonicalPlayerAlias.normalized_alias.isnot(None))
+            .filter(CanonicalPlayerAlias.canonical_player_id.in_(market_canonical_ids))
             .all()
         ):
             normalized = normalize_player_name(normalized_alias)
@@ -695,6 +706,32 @@ class _BulkDraftPickResolver:
             for normalized, canonical_ids in alias_ids.items()
             if len(canonical_ids) == 1
         }
+
+    def _resolve_market_fuzzy(self, cleaned: str, normalized: str) -> Optional[Dict[str, Any]]:
+        best_market: Optional[DraftPlayerMarket] = None
+        best_score = 0.0
+        ambiguous = False
+        for candidate_normalized, candidate_name, market in self._market_candidates:
+            score = max(
+                fuzz.ratio(normalized, candidate_normalized) / 100.0,
+                fuzz.token_set_ratio(cleaned, candidate_name) / 100.0,
+            )
+            if score > best_score + 0.02:
+                best_market = market
+                best_score = score
+                ambiguous = False
+            elif (
+                best_market is not None
+                and abs(score - best_score) < 0.02
+                and market.canonical_player_id != best_market.canonical_player_id
+            ):
+                ambiguous = True
+
+        if best_market is None or ambiguous or best_score < BULK_DRAFT_MARKET_FUZZY_THRESHOLD:
+            return None
+
+        self.resolved_by_fallback += 1
+        return self._payload(cleaned, market=best_market)
 
     @staticmethod
     def _payload(
@@ -730,8 +767,11 @@ class _BulkDraftPickResolver:
                 canonical_player_id=canonical_player_id,
             )
 
-        self.resolved_by_fallback += 1
-        return _resolve_draft_pick_player(self.db, cleaned, self.season, source=self.source)
+        fuzzy_payload = self._resolve_market_fuzzy(cleaned, normalized)
+        if fuzzy_payload is not None:
+            return fuzzy_payload
+
+        return self._payload(cleaned)
 
 
 def _round_for_pick(pick_number: int, settings: Optional[LeagueSettings]) -> int:
@@ -1787,7 +1827,7 @@ def record_draft_picks_bulk(
     if season is None:
         raise HTTPException(status_code=400, detail="No draft market data imported")
 
-    resolver = _BulkDraftPickResolver(db, season, source=request.source)
+    resolver: Optional[_BulkDraftPickResolver] = None
     existing_by_pick = {
         pick.pick_num: pick
         for pick in db.query(LeagueDraftPick)
@@ -1813,6 +1853,8 @@ def record_draft_picks_bulk(
                 skipped += 1
                 unchanged += 1
                 continue
+        if resolver is None:
+            resolver = _BulkDraftPickResolver(db, season, source=request.source)
         resolved = resolver.resolve(item.player_name)
         round_num = _round_for_pick(item.pick_number, league.settings)
         pick = existing
@@ -1858,8 +1900,8 @@ def record_draft_picks_bulk(
             "needs_review": needs_review,
             "needs_review_players": needs_review_players,
             "total_on_board": len(picks),
-            "resolved_in_batch": resolver.resolved_in_batch,
-            "resolved_by_fallback": resolver.resolved_by_fallback,
+            "resolved_in_batch": resolver.resolved_in_batch if resolver else 0,
+            "resolved_by_fallback": resolver.resolved_by_fallback if resolver else 0,
         },
     )
 

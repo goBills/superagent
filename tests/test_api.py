@@ -173,6 +173,57 @@ def test_bulk_draft_picks_batch_resolves_exact_board_without_slow_resolver(monke
     assert data["summary"]["resolved_by_fallback"] == 0
 
 
+def test_bulk_draft_picks_fuzzy_matches_against_market_without_global_resolver(monkeypatch):
+    headers, league_id, season, players = setup_draft_league_api()
+
+    def fail_resolve(*args, **kwargs):
+        raise AssertionError("bulk typo resolution should stay bounded to preloaded market rows")
+
+    monkeypatch.setattr("superagent.api._resolve_draft_pick_player", fail_resolve)
+    typo = players["other"][:-1]
+    response = client.post(
+        f"/leagues/{league_id}/draft/picks/bulk",
+        json={
+            "season": season,
+            "source": players["source"],
+            "picks": [{"pick_number": 1, "player_name": typo, "team_name": "Other", "is_mine": False}],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["picks"][0]["source_player_name"] == players["other"]
+    assert data["picks"][0]["mapping_status"] == "mapped"
+    assert data["summary"]["resolved_by_fallback"] == 1
+
+
+def test_bulk_draft_picks_unknown_miss_returns_review_without_global_fuzzy(monkeypatch):
+    headers, league_id, season, players = setup_draft_league_api()
+
+    def fail_resolve(*args, **kwargs):
+        raise AssertionError("unknown bulk rows should not scan global canonical aliases")
+
+    monkeypatch.setattr("superagent.api._resolve_draft_pick_player", fail_resolve)
+    response = client.post(
+        f"/leagues/{league_id}/draft/picks/bulk",
+        json={
+            "season": season,
+            "source": players["source"],
+            "picks": [
+                {"pick_number": 1, "player_name": "Zzqq Unknownplayer Xyz", "team_name": "A", "is_mine": False}
+            ],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    summary = response.json()["summary"]
+    assert summary["needs_review"] == 1
+    assert summary["resolved_by_fallback"] == 0
+    assert "Zzqq Unknownplayer Xyz" in summary["needs_review_players"]
+
+
 def test_bulk_draft_picks_handles_non_contiguous_board_and_summary():
     headers, league_id, season, players = setup_draft_league_api()
     payload = {
@@ -244,6 +295,12 @@ def test_bulk_draft_picks_skips_unchanged_repaste_without_resolving(monkeypatch)
         raise AssertionError("unchanged bulk pick should not resolve again")
 
     monkeypatch.setattr("superagent.api._resolve_draft_pick_player", fail_resolve)
+
+    class FailResolver:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("unchanged bulk pick should not instantiate the batch resolver")
+
+    monkeypatch.setattr("superagent.api._BulkDraftPickResolver", FailResolver)
 
     # Re-paste the same pick number — should short-circuit before expensive resolution.
     second = client.post(f"/leagues/{league_id}/draft/picks/bulk", json={"season": season, "picks": [pick]}, headers=headers)
