@@ -1482,7 +1482,7 @@
             50% { opacity: 1; }
         }
 
-        /* Football "working" indicator (replaces the generic spinner while the analyst answers) */
+        /* Football "working" indicator (replaces the generic spinner while Superagent answers) */
         .loading-football {
             display: inline-block;
             font-size: 15px;
@@ -1651,10 +1651,10 @@
             </div>
         </div>
 
-        <!-- COMMAND BAR: AI analyst on tap (expands into a Siri-style answer). Chat is contextual, not the centerpiece. -->
+        <!-- COMMAND BAR: Superagent on tap (expands into a Siri-style answer). Chat is contextual, not the centerpiece. -->
         <div class="command-bar" id="commandBar">
             <span class="command-spark">⚡</span>
-            <input type="text" id="questionInput" class="command-input" placeholder="Ask the analyst — e.g. who should I draft at 31?" onkeypress="handleKeyPress(event)">
+            <input type="text" id="questionInput" class="command-input" placeholder="Ask Superagent — e.g. who should I draft at 31?" onkeypress="handleKeyPress(event)">
             <select id="sessionSelect" class="cockpit-select command-session" onchange="loadSelectedSession()">
                 <option value="">Recent chats</option>
             </select>
