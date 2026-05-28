@@ -733,11 +733,13 @@ class TestAdminQuestions:
         token = use_admin_token(monkeypatch)
         captured = {}
 
-        def fake_import(file_path, source, season, sheet_name=None):
+        def fake_import(file_path, source, season, sheet_name=None, replace=False, min_replace_rows=100):
             assert Path(file_path).exists()
             captured["source"] = source
             captured["season"] = season
             captured["sheet_name"] = sheet_name
+            captured["replace"] = replace
+            captured["min_replace_rows"] = min_replace_rows
             return {
                 "ok": True,
                 "rows_seen": 1,
@@ -766,13 +768,65 @@ class TestAdminQuestions:
             "source": "draftsheetsv6",
             "season": 2025,
             "sheet_name": "DATA",
+            "replace": False,
+            "min_replace_rows": 100,
+        }
+
+    def test_admin_draft_import_passes_replace_options(self, monkeypatch):
+        token = use_admin_token(monkeypatch)
+        captured = {}
+
+        def fake_import(file_path, source, season, sheet_name=None, replace=False, min_replace_rows=100):
+            assert Path(file_path).exists()
+            captured["source"] = source
+            captured["season"] = season
+            captured["sheet_name"] = sheet_name
+            captured["replace"] = replace
+            captured["min_replace_rows"] = min_replace_rows
+            return {
+                "ok": True,
+                "rows_seen": 500,
+                "rows_imported": 480,
+                "rows_needing_review": 20,
+            }
+
+        monkeypatch.setattr("superagent.api.ingest_draft_market_file", fake_import)
+
+        response = client.post(
+            f"/admin/draft-import?token={token}&source=draftsheetsv6&season=2025&sheet=DATA&wait=true&replace=true&min_replace_rows=400",
+            files={
+                "file": (
+                    "draft.csv",
+                    b"Player,Team,POS\nJosh Allen,BUF,QB1\n",
+                    "text/csv",
+                )
+            },
+        )
+
+        assert response.status_code == 200
+        assert captured == {
+            "source": "draftsheetsv6",
+            "season": 2025,
+            "sheet_name": "DATA",
+            "replace": True,
+            "min_replace_rows": 400,
         }
 
     def test_admin_draft_import_background_job(self, monkeypatch):
         token = use_admin_token(monkeypatch)
 
-        def fake_import(file_path, source, season, sheet_name=None, progress_callback=None):
+        def fake_import(
+            file_path,
+            source,
+            season,
+            sheet_name=None,
+            progress_callback=None,
+            replace=False,
+            min_replace_rows=100,
+        ):
             assert Path(file_path).exists()
+            assert replace is False
+            assert min_replace_rows == 100
             if progress_callback:
                 progress_callback({"stage": "test_import"})
             return {

@@ -175,6 +175,101 @@ def test_valid_csv_imports_players_and_source_ranks(db_session, tmp_path):
     assert len(ranks) == 6
 
 
+def test_replace_import_removes_stale_source_season_rows_and_reviews(db_session, tmp_path):
+    seed_players(db_session)
+    old_path = tmp_path / "old.csv"
+    write_csv(old_path, base_rows())
+    old = ingest_draft_market_file(str(old_path), "draftsheetsv6", 2025, db=db_session)
+    assert old["rows_imported"] == 2
+    db_session.add(
+        DraftImportReview(
+            source="draftsheetsv6",
+            season=2025,
+            source_player_name="Removed Player",
+            candidates="[]",
+            status="pending",
+        )
+    )
+    db_session.commit()
+
+    new_path = tmp_path / "new.csv"
+    write_csv(new_path, [base_rows()[0]])
+    result = ingest_draft_market_file(
+        str(new_path),
+        "draftsheetsv6",
+        2025,
+        db=db_session,
+        replace=True,
+        min_replace_rows=1,
+    )
+
+    markets = db_session.query(DraftPlayerMarket).all()
+    assert result["replace"] is True
+    assert result["replace_deleted"]["markets_deleted"] == 2
+    assert result["replace_deleted"]["pending_reviews_deleted"] == 1
+    assert result["rows_imported"] == 1
+    assert [market.canonical_player_id for market in markets] == ["nfl_josh_allen"]
+    assert db_session.query(DraftSourceRank).count() == 3
+    assert db_session.query(DraftImportReview).count() == 0
+    assert db_session.query(DraftMarketImport).count() == 1
+
+
+def test_replace_import_refuses_small_workbook_before_deleting_existing_rows(db_session, tmp_path):
+    seed_players(db_session)
+    old_path = tmp_path / "old.csv"
+    write_csv(old_path, base_rows())
+    ingest_draft_market_file(str(old_path), "draftsheetsv6", 2025, db=db_session)
+
+    new_path = tmp_path / "too_small.csv"
+    write_csv(new_path, [base_rows()[0]])
+    with pytest.raises(DraftIngestionError, match="workbook has 1 rows, below minimum 2"):
+        ingest_draft_market_file(
+            str(new_path),
+            "draftsheetsv6",
+            2025,
+            db=db_session,
+            replace=True,
+            min_replace_rows=2,
+        )
+
+    assert db_session.query(DraftPlayerMarket).count() == 2
+    assert {market.canonical_player_id for market in db_session.query(DraftPlayerMarket).all()} == {
+        "nfl_josh_allen",
+        "nfl_lamar_jackson",
+    }
+
+
+def test_replace_import_rolls_back_when_too_few_rows_map(db_session, tmp_path):
+    seed_players(db_session)
+    old_path = tmp_path / "old.csv"
+    write_csv(old_path, base_rows())
+    ingest_draft_market_file(str(old_path), "draftsheetsv6", 2025, db=db_session)
+
+    new_path = tmp_path / "too_few_mapped.csv"
+    write_csv(
+        new_path,
+        [
+            base_rows()[0],
+            {"Rank": 150, "Player": "Future Rookie", "Team": "BUF", "Bye": 7, "POS": "RB55", "AVG": 150},
+        ],
+    )
+    with pytest.raises(DraftIngestionError, match="only 1 rows mapped, below minimum 2"):
+        ingest_draft_market_file(
+            str(new_path),
+            "draftsheetsv6",
+            2025,
+            db=db_session,
+            replace=True,
+            min_replace_rows=2,
+        )
+
+    assert db_session.query(DraftPlayerMarket).count() == 2
+    assert {market.canonical_player_id for market in db_session.query(DraftPlayerMarket).all()} == {
+        "nfl_josh_allen",
+        "nfl_lamar_jackson",
+    }
+
+
 def test_duplicate_name_variation_resolves_to_same_player(db_session, tmp_path):
     seed_players(db_session)
     csv_path = tmp_path / "gabe.csv"

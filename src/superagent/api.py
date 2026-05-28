@@ -397,6 +397,8 @@ def _run_draft_import_job(
     source: str,
     season: int,
     sheet: Optional[str],
+    replace: bool = False,
+    min_replace_rows: int = 100,
 ) -> None:
     """Run DraftSheets import outside the request/response cycle."""
     job = ADMIN_JOBS[job_id]
@@ -416,6 +418,8 @@ def _run_draft_import_job(
             season=season,
             sheet_name=sheet,
             progress_callback=update_progress,
+            replace=replace,
+            min_replace_rows=min_replace_rows,
         )
         job["status"] = "completed"
     except Exception as exc:
@@ -1356,6 +1360,8 @@ async def admin_draft_import(
     source: str = "draftsheetsv6",
     season: int = 2025,
     sheet: Optional[str] = "DATA",
+    replace: bool = False,
+    min_replace_rows: int = 100,
     wait: bool = False,
     file: UploadFile = File(...),
 ) -> Dict[str, Any]:
@@ -1383,6 +1389,8 @@ async def admin_draft_import(
                     "source": source,
                     "season": season,
                     "sheet": sheet,
+                    "replace": replace,
+                    "min_replace_rows": min_replace_rows,
                 },
             )
             background_tasks.add_task(
@@ -1392,6 +1400,8 @@ async def admin_draft_import(
                 source,
                 season,
                 sheet,
+                replace,
+                min_replace_rows,
             )
             return {
                 "ok": True,
@@ -1406,6 +1416,8 @@ async def admin_draft_import(
                 source=source,
                 season=season,
                 sheet_name=sheet,
+                replace=replace,
+                min_replace_rows=min_replace_rows,
             )
         finally:
             try:

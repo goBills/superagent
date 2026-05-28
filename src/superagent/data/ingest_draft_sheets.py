@@ -49,6 +49,8 @@ RANK_SOURCE_COLUMNS = {
     "2qb": "2QB",
 }
 
+DEFAULT_MIN_REPLACE_ROWS = 100
+
 TEAM_DEFENSE_NAMES_BY_CODE = {
     "ARI": "Arizona Cardinals",
     "ATL": "Atlanta Falcons",
@@ -750,6 +752,46 @@ def _apply_source_ranks(
                 source_rank.rank_value = rank_value
 
 
+def _clear_source_season_import_state(db: Session, source: str, season: int) -> dict[str, int]:
+    """Delete existing draft-market state for one source+season before authoritative import."""
+    market_count = (
+        db.query(DraftPlayerMarket)
+        .filter(
+            DraftPlayerMarket.source == source,
+            DraftPlayerMarket.season == season,
+        )
+        .count()
+    )
+    import_batches = (
+        db.query(DraftMarketImport)
+        .filter(
+            DraftMarketImport.source == source,
+            DraftMarketImport.season == season,
+        )
+        .all()
+    )
+    pending_reviews = (
+        db.query(DraftImportReview)
+        .filter(
+            DraftImportReview.source == source,
+            DraftImportReview.season == season,
+            DraftImportReview.status == "pending",
+        )
+        .all()
+    )
+
+    for review in pending_reviews:
+        db.delete(review)
+    for import_batch in import_batches:
+        db.delete(import_batch)
+    db.flush()
+    return {
+        "imports_deleted": len(import_batches),
+        "markets_deleted": int(market_count),
+        "pending_reviews_deleted": len(pending_reviews),
+    }
+
+
 def ingest_draft_market_file(
     file_path: str,
     source: str,
@@ -757,6 +799,8 @@ def ingest_draft_market_file(
     sheet_name: str | None = None,
     db: Session | None = None,
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
+    replace: bool = False,
+    min_replace_rows: int = DEFAULT_MIN_REPLACE_ROWS,
 ) -> dict[str, Any]:
     """Import DraftSheets-style market data, mapping rows through canonical identity."""
     def progress(stage: str, **kwargs: Any) -> None:
@@ -776,22 +820,32 @@ def ingest_draft_market_file(
     progress("loaded_rows", rows_seen=len(rows), sheet_name=actual_sheet_name)
     if not rows:
         raise DraftIngestionError("Draft market file has no player rows")
+    min_replace_rows = max(1, int(min_replace_rows or DEFAULT_MIN_REPLACE_ROWS))
+    if replace and len(rows) < min_replace_rows:
+        raise DraftIngestionError(
+            f"Replace import refused: workbook has {len(rows)} rows, below minimum {min_replace_rows}"
+        )
 
     owns_session = db is None
     db = db or SessionLocal()
     try:
-        existing = (
-            db.query(DraftMarketImport)
-            .filter(
-                DraftMarketImport.source == source,
-                DraftMarketImport.season == season,
-                DraftMarketImport.file_name == path.name,
+        replace_deleted = {"imports_deleted": 0, "markets_deleted": 0, "pending_reviews_deleted": 0}
+        if replace:
+            replace_deleted = _clear_source_season_import_state(db, source, season)
+            progress("cleared_existing_source_season", **replace_deleted)
+        else:
+            existing = (
+                db.query(DraftMarketImport)
+                .filter(
+                    DraftMarketImport.source == source,
+                    DraftMarketImport.season == season,
+                    DraftMarketImport.file_name == path.name,
+                )
+                .first()
             )
-            .first()
-        )
-        if existing is not None:
-            db.delete(existing)
-            db.flush()
+            if existing is not None:
+                db.delete(existing)
+                db.flush()
 
         import_batch = DraftMarketImport(
             source=source,
@@ -913,6 +967,10 @@ def ingest_draft_market_file(
             rows_imported=rows_imported,
             rows_needing_review=rows_needing_review,
         )
+        if replace and rows_imported < min_replace_rows:
+            raise DraftIngestionError(
+                f"Replace import refused: only {rows_imported} rows mapped, below minimum {min_replace_rows}"
+            )
         db.flush()
         progress("applying_source_ranks", markets_with_ranks=len(market_rank_payloads))
         _apply_source_ranks(db, market_rank_payloads)
@@ -935,6 +993,9 @@ def ingest_draft_market_file(
             "season": season,
             "file_name": path.name,
             "sheet_name": actual_sheet_name,
+            "replace": replace,
+            "min_replace_rows": min_replace_rows if replace else None,
+            "replace_deleted": replace_deleted if replace else None,
             "rows_seen": len(rows),
             "rows_imported": rows_imported,
             "rows_needing_review": rows_needing_review,
@@ -955,6 +1016,13 @@ def main() -> None:
     parser.add_argument("--source", required=True, help="Source id, e.g. draftsheetsv6")
     parser.add_argument("--season", required=True, type=int, help="Draft season")
     parser.add_argument("--sheet", dest="sheet_name", help="Optional XLSX sheet name. Defaults to DATA.")
+    parser.add_argument("--replace", action="store_true", help="Replace all existing rows for source+season")
+    parser.add_argument(
+        "--min-replace-rows",
+        type=int,
+        default=DEFAULT_MIN_REPLACE_ROWS,
+        help="Minimum parsed/mapped rows required when --replace is used",
+    )
     args = parser.parse_args()
 
     summary = ingest_draft_market_file(
@@ -962,6 +1030,8 @@ def main() -> None:
         source=args.source,
         season=args.season,
         sheet_name=args.sheet_name,
+        replace=args.replace,
+        min_replace_rows=args.min_replace_rows,
     )
     print(json.dumps(summary, indent=2))
 
