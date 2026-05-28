@@ -2524,6 +2524,13 @@
                 if (needsEl) {
                     const needs = (data.summary && data.summary.position_needs) || {};
                     const parts = Object.entries(needs).filter(([, n]) => n > 0).map(([p, n]) => `${p} ${n}`);
+                    // A complete lineup also needs a K and a D/ST — the backend starter
+                    // requirements don't include them yet, so count them here. Forward-compatible:
+                    // defer to the backend once position_needs reports K/DST. (Drafted late, but
+                    // still required, so don't call the team "set" without them.)
+                    const have = (pos) => rows.some(r => (r.position || '').toUpperCase() === pos);
+                    if (!('K' in needs) && !have('K')) parts.push('K 1');
+                    if (!('DST' in needs) && !have('DST') && !have('DEF')) parts.push('DST 1');
                     needsEl.textContent = parts.length ? `Still need: ${parts.join(' · ')}` : (rows.length ? 'Starters set ✓' : '');
                 }
                 if (!rows.length) {
