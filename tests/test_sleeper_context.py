@@ -141,9 +141,44 @@ def test_refresh_sleeper_context_maps_draftable_player_from_market_row(tmp_path)
     assert market.canonical_player_id == canonical_id
 
 
+def test_refresh_sleeper_context_creates_current_sleeper_universe_player(tmp_path):
+    sleeper_id = f"slp-{uuid.uuid4().hex}"
+    player_name = f"Rookie Seed {uuid.uuid4().hex[:8]}"
+    duckdb_path = make_crosswalk_db(tmp_path, [])
+    with SessionLocal() as db:
+        summary = refresh_sleeper_context(
+            season=2026,
+            db=db,
+            duckdb_path=duckdb_path,
+            players={
+                sleeper_id: {
+                    "player_id": sleeper_id,
+                    "full_name": player_name,
+                    "position": "WR",
+                    "team": "TEN",
+                    "active": True,
+                    "status": "Active",
+                    "age": 21,
+                    "years_exp": 0,
+                }
+            },
+        )
+        context = db.query(PlayerCurrentContext).filter(PlayerCurrentContext.source_player_id == sleeper_id).one()
+        player = db.query(CanonicalPlayer).filter(CanonicalPlayer.canonical_player_id == context.canonical_player_id).one()
+        season_row = db.query(PlayerSeason).filter(PlayerSeason.canonical_player_id == player.canonical_player_id).one()
+
+    assert summary["canonical_created_for_sleeper_universe"] == 1
+    assert summary["needs_review"] == 0
+    assert player.full_name == player_name
+    assert season_row.season == 2026
+    assert season_row.team == "TEN"
+    assert season_row.position == "WR"
+
+
 def test_refresh_sleeper_context_flags_ambiguous_name_position_match(tmp_path):
     suffix = uuid.uuid4().hex
     sleeper_id = f"slp-{suffix}"
+    player_name = f"Ambiguous Receiver {suffix[:8]}"
     duckdb_path = make_crosswalk_db(tmp_path, [])
     with SessionLocal() as db:
         db.add_all(
@@ -151,14 +186,14 @@ def test_refresh_sleeper_context_flags_ambiguous_name_position_match(tmp_path):
                 CanonicalPlayer(
                     canonical_player_id=f"nfl_justin_jefferson_a_{suffix}",
                     nflverse_player_id=None,
-                    full_name="Justin Jefferson",
-                    normalized_name=normalize_player_name("Justin Jefferson"),
+                    full_name=player_name,
+                    normalized_name=normalize_player_name(player_name),
                 ),
                 CanonicalPlayer(
                     canonical_player_id=f"nfl_justin_jefferson_b_{suffix}",
                     nflverse_player_id=None,
-                    full_name="Justin Jefferson",
-                    normalized_name=normalize_player_name("Justin Jefferson"),
+                    full_name=player_name,
+                    normalized_name=normalize_player_name(player_name),
                 ),
             ]
         )
@@ -188,7 +223,7 @@ def test_refresh_sleeper_context_flags_ambiguous_name_position_match(tmp_path):
             players={
                 sleeper_id: {
                     "player_id": sleeper_id,
-                    "full_name": "Justin Jefferson",
+                    "full_name": player_name,
                     "position": "WR",
                     "team": "MIN",
                 }

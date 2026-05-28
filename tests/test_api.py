@@ -919,6 +919,58 @@ class TestAdminQuestions:
         assert job["status"] == "completed"
         assert job["result"]["contexts_created"] == 1
 
+    def test_admin_import_sleeper_adp_correct_token(self, monkeypatch):
+        token = use_admin_token(monkeypatch)
+
+        def fake_import_sleeper_adp(season, scoring, source, replace, min_import_rows, max_adp):
+            assert season == 2026
+            assert scoring == "ppr"
+            assert source == "sleeper_adp"
+            assert replace is True
+            assert min_import_rows == 150
+            assert max_adp == 350
+            return {
+                "source": source,
+                "season": season,
+                "rows_imported": 245,
+            }
+
+        monkeypatch.setattr("superagent.api.ingest_sleeper_adp", fake_import_sleeper_adp)
+
+        response = client.post(f"/admin/import-sleeper-adp?token={token}&season=2026&wait=true")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert data["summary"]["source"] == "sleeper_adp"
+        assert data["summary"]["rows_imported"] == 245
+
+    def test_admin_import_sleeper_adp_background_job(self, monkeypatch):
+        token = use_admin_token(monkeypatch)
+
+        def fake_import_sleeper_adp(season, scoring, source, replace, min_import_rows, max_adp):
+            return {
+                "source": source,
+                "season": season,
+                "rows_imported": 245,
+            }
+
+        monkeypatch.setattr("superagent.api.ingest_sleeper_adp", fake_import_sleeper_adp)
+
+        response = client.post(f"/admin/import-sleeper-adp?token={token}&season=2026")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert data["job_id"]
+
+        status = client.get(f"/admin/jobs/{data['job_id']}?token={token}")
+        assert status.status_code == 200
+        job = status.json()
+        assert job["type"] == "import_sleeper_adp"
+        assert job["status"] == "completed"
+        assert job["result"]["rows_imported"] == 245
+
     def test_admin_create_default_league_requires_token(self, monkeypatch):
         use_admin_token(monkeypatch)
 

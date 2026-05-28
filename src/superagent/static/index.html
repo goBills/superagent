@@ -2728,7 +2728,7 @@
             const rosterText = roster ? `My current roster is ${roster}. ` : '';
             const pickText = pick ? `I am at pick ${pick}. ` : '';
             const boardText = draftBoardContextText();
-            const seasonText = 'For draft purposes use 2025 market data (ADP/ECR) and 2026 bye weeks; do not ask me which season. ';
+            const seasonText = 'For draft purposes use the imported draft market data and 2026 bye weeks; do not ask me which season. ';
             return `League ID ${leagueId}. ${seasonText}${rosterText}${boardText}${pickText}Question: ${question}`;
         }
 

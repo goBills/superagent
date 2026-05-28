@@ -28,6 +28,7 @@ from superagent.canonical_resolution import (
 )
 from superagent.config import HOST, PORT, get_config
 from superagent.data.ingest_draft_sheets import DraftIngestionError, ingest_draft_market_file
+from superagent.data.ingest_sleeper_adp import SleeperAdpIngestionError, ingest_sleeper_adp
 from superagent.data.refresh_sleeper_context import refresh_sleeper_context
 from superagent.db import get_db, init_db
 from superagent.draft_tools import get_draft_sheet
@@ -440,6 +441,36 @@ def _run_sleeper_context_job(job_id: str, season: int) -> None:
     job["started_at"] = utc_now().isoformat()
     try:
         job["result"] = refresh_sleeper_context(season=season)
+        job["status"] = "completed"
+    except Exception as exc:
+        job["error"] = str(exc)
+        job["status"] = "failed"
+    finally:
+        job["completed_at"] = utc_now().isoformat()
+
+
+def _run_sleeper_adp_import_job(
+    job_id: str,
+    season: int,
+    scoring: str,
+    source: str,
+    replace: bool,
+    min_import_rows: int,
+    max_adp: float,
+) -> None:
+    """Run Sleeper ADP import outside the request/response cycle."""
+    job = ADMIN_JOBS[job_id]
+    job["status"] = "running"
+    job["started_at"] = utc_now().isoformat()
+    try:
+        job["result"] = ingest_sleeper_adp(
+            season=season,
+            scoring=scoring,
+            source=source,
+            replace=replace,
+            min_import_rows=min_import_rows,
+            max_adp=max_adp,
+        )
         job["status"] = "completed"
     except Exception as exc:
         job["error"] = str(exc)
@@ -1347,6 +1378,71 @@ def admin_refresh_sleeper_context(
         summary = refresh_sleeper_context(season=season)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Sleeper context refresh failed: {exc}") from exc
+    return {
+        "ok": True,
+        "summary": summary,
+    }
+
+
+@app.post("/admin/import-sleeper-adp")
+def admin_import_sleeper_adp(
+    background_tasks: BackgroundTasks,
+    token: Optional[str] = None,
+    season: int = 2026,
+    scoring: str = "ppr",
+    source: str = "sleeper_adp",
+    replace: bool = True,
+    min_import_rows: int = 150,
+    max_adp: float = 350,
+    wait: bool = False,
+) -> Dict[str, Any]:
+    """Import Sleeper ADP into DraftPlayerMarket for source-agnostic draft boards."""
+    _require_admin_token(token)
+    if season < 2020 or season > 2035:
+        raise HTTPException(status_code=400, detail="Invalid season")
+
+    if not wait:
+        job_id = _create_admin_job(
+            "import_sleeper_adp",
+            {
+                "season": season,
+                "scoring": scoring,
+                "source": source,
+                "replace": replace,
+                "min_import_rows": min_import_rows,
+                "max_adp": max_adp,
+            },
+        )
+        background_tasks.add_task(
+            _run_sleeper_adp_import_job,
+            job_id,
+            season,
+            scoring,
+            source,
+            replace,
+            min_import_rows,
+            max_adp,
+        )
+        return {
+            "ok": True,
+            "job_id": job_id,
+            "status": "queued",
+            "status_url": f"/admin/jobs/{job_id}?token=YOUR_ADMIN_TOKEN",
+        }
+
+    try:
+        summary = ingest_sleeper_adp(
+            season=season,
+            scoring=scoring,
+            source=source,
+            replace=replace,
+            min_import_rows=min_import_rows,
+            max_adp=max_adp,
+        )
+    except SleeperAdpIngestionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Sleeper ADP import failed: {exc}") from exc
     return {
         "ok": True,
         "summary": summary,

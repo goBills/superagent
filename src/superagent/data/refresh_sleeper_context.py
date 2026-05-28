@@ -19,6 +19,11 @@ from sqlalchemy.orm import Session
 
 from superagent.canonical_resolution import canonical_id_from_nflverse, normalize_player_name
 from superagent.config import get_config
+from superagent.data.ingest_draft_sheets import (
+    TEAM_DEFENSE_NAMES_BY_CODE,
+    _ensure_team_defense_canonical,
+    _normalize_team_code,
+)
 from superagent.db import SessionLocal
 from superagent.models import (
     CanonicalPlayer,
@@ -33,6 +38,13 @@ from superagent.models import (
 
 SLEEPER_PLAYERS_URL = "https://api.sleeper.app/v1/players/nfl"
 SOURCE = "sleeper"
+FANTASY_POSITIONS = {"QB", "RB", "WR", "TE", "K", "DST"}
+CURRENT_PLAYER_STATUSES = {
+    "Active",
+    "Injured Reserve",
+    "Physically Unable to Perform",
+    "Practice Squad",
+}
 
 
 def _safe_str(value: Any) -> str | None:
@@ -49,6 +61,26 @@ def _safe_int(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _normalize_sleeper_position(position: str | None) -> str | None:
+    if not position:
+        return None
+    normalized = position.strip().upper()
+    if normalized == "DEF":
+        return "DST"
+    return normalized
+
+
+def _is_current_fantasy_universe_player(player: dict[str, Any], position: str | None) -> bool:
+    """Return true for Sleeper rows worth seeding as current draftable identity."""
+    if _normalize_sleeper_position(position) not in FANTASY_POSITIONS:
+        return False
+    return (
+        player.get("active") is True
+        or _safe_str(player.get("team")) is not None
+        or _safe_str(player.get("status")) in CURRENT_PLAYER_STATUSES
+    )
 
 
 def _fetch_sleeper_players() -> dict[str, dict[str, Any]]:
@@ -180,6 +212,17 @@ def _ensure_sleeper_canonical(
     age: int | None,
     birth_date: str | None,
 ) -> str:
+    position = _normalize_sleeper_position(position)
+    if position == "DST":
+        team_code = _normalize_team_code(team if team else player_id)
+        if team_code in TEAM_DEFENSE_NAMES_BY_CODE:
+            return _ensure_team_defense_canonical(
+                db=db,
+                season=season,
+                team_code=team_code,
+                source_player_name=full_name,
+            )
+
     canonical_player_id = f"sleeper_{player_id}"
     player = db.query(CanonicalPlayer).filter(CanonicalPlayer.canonical_player_id == canonical_player_id).first()
     if player is None:
@@ -248,12 +291,13 @@ def _resolve_context_player(
     crosswalk: dict[str, str],
     draft_index: dict[tuple[str, str | None], list[DraftPlayerMarket]],
     name_index: dict[tuple[str, str | None], set[str]],
+    create_unmapped_draftables: bool,
 ) -> tuple[str | None, float, str, str]:
     full_name = _safe_str(player.get("full_name")) or " ".join(
         part for part in [_safe_str(player.get("first_name")), _safe_str(player.get("last_name"))] if part
     )
     normalized = normalize_player_name(full_name)
-    position = _safe_str(player.get("position"))
+    position = _normalize_sleeper_position(_safe_str(player.get("position")))
     team = _safe_str(player.get("team"))
     age = _safe_int(player.get("age"))
     birth_date = _safe_str(player.get("birth_date"))
@@ -288,6 +332,18 @@ def _resolve_context_player(
         return next(iter(candidates)), 0.8, "approved", "name_position_match"
     if len(candidates) > 1:
         return None, 0.4, "needs_review", "ambiguous_name_position"
+    if create_unmapped_draftables and _is_current_fantasy_universe_player(player, position):
+        canonical_player_id = _ensure_sleeper_canonical(
+            db,
+            player_id=player_id,
+            full_name=full_name,
+            position=position,
+            season=season,
+            team=team,
+            age=age,
+            birth_date=birth_date,
+        )
+        return canonical_player_id, 0.72, "approved", "sleeper_universe_created"
     return None, 0.0, "needs_review", "unmapped"
 
 
@@ -297,6 +353,7 @@ def refresh_sleeper_context(
     db: Session | None = None,
     players: dict[str, dict[str, Any]] | None = None,
     duckdb_path: str | None = None,
+    create_unmapped_draftables: bool = True,
 ) -> dict[str, Any]:
     """Refresh Sleeper current context into the product database."""
     owns_db = db is None
@@ -322,6 +379,7 @@ def refresh_sleeper_context(
             "mapped_by_crosswalk": 0,
             "mapped_by_draft_market": 0,
             "canonical_created_for_draftable": 0,
+            "canonical_created_for_sleeper_universe": 0,
             "mapped_by_name_position": 0,
             "needs_review": 0,
             "free_agents": 0,
@@ -346,8 +404,8 @@ def refresh_sleeper_context(
             )
             if not full_name:
                 continue
-            position = _safe_str(player.get("position"))
-            if position not in {"QB", "RB", "WR", "TE", "K", "DEF", "DST"}:
+            position = _normalize_sleeper_position(_safe_str(player.get("position")))
+            if position not in FANTASY_POSITIONS:
                 continue
 
             summary["players_seen"] += 1
@@ -359,6 +417,7 @@ def refresh_sleeper_context(
                 crosswalk=crosswalk,
                 draft_index=draft_index,
                 name_index=name_index,
+                create_unmapped_draftables=create_unmapped_draftables,
             )
             if reason == "sleeper_id_crosswalk":
                 summary["mapped_by_crosswalk"] += 1
@@ -366,6 +425,8 @@ def refresh_sleeper_context(
                 summary["mapped_by_draft_market"] += 1
             elif reason == "draftable_created":
                 summary["canonical_created_for_draftable"] += 1
+            elif reason == "sleeper_universe_created":
+                summary["canonical_created_for_sleeper_universe"] += 1
             elif reason == "name_position_match":
                 summary["mapped_by_name_position"] += 1
             if status == "needs_review":
