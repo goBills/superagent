@@ -80,11 +80,24 @@ Ran Phase-1 cheaply (Claude, read-only): projected 2025 from 2020–24 `weekly` 
 - **(A) Iterate the model** — add opportunity weighting (`wopr`/`target_share`), regression-to-mean, age curves, games/injury expectation, and re-backtest across 2022–24. *Might* beat ADP; real work, uncertain payoff (beating an efficient market is genuinely hard).
 - **(B) Pivot the IP (recommended)** — keep **ADP as the board spine** (it's the best ranking), and make our owned-data edge the **context + divergence lens + agentic reasoning**, not a replacement ranking: VOR for roster-construction/positional-scarcity decisions, confidence-gated value flags where our usage/EPA read materially diverges from ADP, and the agent's grounded "why." This plays to our actual edge (data + an agent to explain it) without needing to out-predict the market.
 
-Decision pending Rob. Until decided, board stays ADP-ordered (correct).
+## DECISION (Rob, 2026-05-28): Pivot (B) — context layer, NOT a replacement ranking
 
-## 8. Phased build order
+**ADP stays the board spine.** We do not try to out-rank an efficient market. Our owned-data IP is the layer ADP can't provide. Sections 1–6 (the VOR/projection methodology) remain valid as an *input* to the items below — not as the board ordering.
 
-1. **Pipeline proof** — established-player projection (recent production + `wopr`/shares) → VOR → rank → backtest vs 2024 actual *and* vs ADP. No rookies/age yet. **Gate: matches/beats ADP.**
-2. **Depth** — add age curves + games-played + rookie draft-capital model (fit on 2020–24 rookies). Re-backtest.
-3. **Surface** — wire `value_delta` + Value/Reach badges into the cockpit (Claude) + agent explanation. Board stays ADP-ordered; our metric drives value flags.
-4. **Later** — if backtest is strong, optionally make `superagent_rank` a selectable board spine (Market ↔ Value toggle).
+### What we build (three deliverables)
+
+1. **Roster-construction VOR / positional scarcity.** Use projected-points-over-replacement to answer roster decisions — "is this the last elite TE/QB tier?", "what does waiting cost?" — *without* reordering the board. Surfaces as tier-cliff / scarcity context, not a rank.
+2. **Confidence-gated divergence flags.** Where our usage/EPA/opportunity read (`wopr`, `target_share`, EPA trend, role) materially and *confidently* disagrees with ADP, flag **Value** (market sleeping) or **Reach** (market ahead of the tape). **Gated** — only high-confidence divergences surface, because our overall rank is noisier than ADP; we must not spray low-quality flags. (Needs its own mini-backtest: do our flagged "values" actually beat their ADP? Gate the threshold on that.)
+3. **Agentic grounded explanation.** The agent explains *why* a player is a value/reach in concrete terms (usage trend, EPA, age, role, scarcity) — within the existing narrative guard. **This is the core differentiator** — nobody with a static ranking sheet has an agent that reasons over the tape.
+
+### Division of labor (pivoted)
+- **Claude:** divergence/confidence logic (tool-logic), the gating threshold + its mini-backtest, cockpit surfacing (Value/Reach badges, scarcity/tier-cliff context in the detail panel), the agent explanation layer (tool + prompt, narrative-guarded).
+- **Codex:** the feature pipeline (per-player usage/EPA trend + VOR inputs from `weekly`/`plays`/`rosters`), exposing those features on the board row, tests.
+- **Shared:** the feature/row contract.
+
+### Phased build
+1. **Divergence sensibility check (Claude, next, read-only):** compute our usage/EPA-based value vs ADP for established players; do the top divergences point at *sensible* names, and did flagged "values" beat their ADP in 2025? Sets the confidence gate. **Gate: flags are sensible, not noise.**
+2. **Feature pipeline (Codex):** usage/EPA trend + VOR inputs on the board row.
+3. **Surface (Claude):** Value/Reach badges (gated) + scarcity context + agent "why."
+
+Board stays ADP-ordered throughout. No "Superagent rankings beat the market" claim — the pitch is *grounded context + an analyst that explains it.*
