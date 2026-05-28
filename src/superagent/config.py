@@ -23,6 +23,7 @@ class Config:
     # API Configuration
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
     ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+    SPORTSDATAIO_API_KEY = os.getenv("SPORTSDATAIO_API_KEY", "")
 
     # Database Configuration
     DB_TIMEOUT = 30  # seconds
@@ -68,6 +69,7 @@ def get_config() -> Config:
 # Module-level aliases for modules that prefer simple config imports.
 ANTHROPIC_API_KEY = Config.ANTHROPIC_API_KEY
 ANTHROPIC_MODEL = Config.ANTHROPIC_MODEL
+SPORTSDATAIO_API_KEY = Config.SPORTSDATAIO_API_KEY
 DATABASE_URL = Config.PRODUCT_DATABASE_URL
 SECRET_KEY = Config.SECRET_KEY
 ADMIN_TOKEN = Config.ADMIN_TOKEN
