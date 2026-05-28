@@ -13,6 +13,19 @@ from superagent.answer_guard import detect_unsupported_narrative
 
 config = get_config()
 
+DRAFT_MARKET_TOOL_NAMES = {
+    "find_draft_targets",
+    "get_available_targets",
+    "get_draft_sheet",
+    "get_draft_context",
+    "get_position_needs",
+    "get_roster_construction_context",
+    "recommend_next_pick_targets",
+    "compare_draft_options",
+    "get_bye_week_analysis",
+    "check_bye_week_conflicts",
+}
+
 SYSTEM_PROMPT = """You are Superagent, an NFL research assistant. Your role is to answer natural language questions about NFL statistics, team performance, and player stats using the available tools.
 
 Rules:
@@ -25,6 +38,7 @@ Rules:
 - The current calendar/NFL season is 2026. Historical player/stat data currently supports NFL seasons 2020-2025, while official 2026 bye-week data is available for draft planning. If a draft-room, draft-value, roster-construction, or bye-risk question implies current/2026, use 2026 bye weeks when the tool provides them and distinguish them from the imported draft market season. Do not call 2025 the current season.
 - Fantasy and draft questions are about preparing for the UPCOMING 2026 NFL season. Frame answers as 2026 draft prep (for example, "for your 2026 draft" or "heading into 2026"), not as a recap of last year. Anchor the user to 2026 so the guidance does not feel dated.
 - Use the imported draft market season/source returned by the tools for draft ranks. Do not hardcode a rankings year: if tools return 2026 Sleeper ADP, treat that as the current 2026 rank source; if tools return 2025 DraftSheets, describe it as a 2025 proxy. Use 2025 as the most recent completed season for performance stats and 2026 official bye weeks for scheduling.
+- For draft-market tools, do NOT pass a season or source for live/current draft questions. Omit them so the tool uses the current imported board season/source and the same season as recorded draft picks. Never pass season=2025 for a live/mock draft recommendation.
 - Do not use 2024 for current draft planning unless the user explicitly asks for historical 2024.
 - For roster bye-risk questions, prefer the draft tools such as check_bye_week_conflicts or get_roster_construction_context because they use imported draft market bye weeks.
 - For draft target answers, call the market fallback "Effective Rank" and include the rank source when available (ADP, avg rank, or overall rank).
@@ -59,6 +73,19 @@ def _content_block_to_dict(block: Any) -> Dict[str, Any]:
             "input": getattr(block, "input", {}),
         }
     return {"type": str(block_type or "unknown"), "text": str(block)}
+
+
+def _normalize_tool_input_for_agent(tool_name: str, tool_input: Any) -> Dict[str, Any]:
+    """Apply agent-only safety defaults before deterministic tool dispatch."""
+    normalized = dict(tool_input or {}) if isinstance(tool_input, dict) else {}
+    if tool_name in DRAFT_MARKET_TOOL_NAMES:
+        # Live draft chat should follow the imported board that the UI is using.
+        # Keeping a model-supplied 2025/source value can make recommendations read
+        # a stale market and miss recorded 2026 draft picks.
+        normalized.pop("season", None)
+        normalized.pop("source", None)
+        normalized.pop("bye_week_season", None)
+    return normalized
 
 
 def _prepare_history(history: Optional[List[Dict[str, str]]], limit: int = 12) -> List[Dict[str, str]]:
@@ -230,7 +257,7 @@ def run_agent(
 
             for tool_block in tool_use_blocks:
                 tool_name = tool_block.name
-                tool_input = tool_block.input
+                tool_input = _normalize_tool_input_for_agent(tool_name, tool_block.input)
                 tool_result = None
 
                 try:

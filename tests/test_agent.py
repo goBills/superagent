@@ -14,6 +14,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from superagent.agent import run_agent
+from superagent.tool_schemas import tool_schema_for_claude
 
 
 class MockMessage:
@@ -134,6 +135,60 @@ class TestAgentBasic:
         assert len(result["tools_used"]) == 1
         assert result["tools_used"][0]["name"] == "get_team_summary"
         assert result["tools_used"][0]["input"]["team"] == "BUF"
+        assert result["tools_used"][0]["input"]["season"] == 2024
+
+    def test_agent_strips_stale_season_and_source_from_live_draft_tools(self, monkeypatch):
+        """A model-supplied 2025 draft season must not force the stale board."""
+        mock_client = Mock()
+        captured = {}
+
+        tool_use_block = Mock()
+        tool_use_block.type = "tool_use"
+        tool_use_block.id = "tool_draft"
+        tool_use_block.name = "recommend_next_pick_targets"
+        tool_use_block.input = {
+            "league_id": 1,
+            "season": 2025,
+            "source": "draftsheetsv6",
+            "bye_week_season": 2025,
+            "current_pick": 59,
+        }
+
+        first_response = MockMessage(stop_reason="tool_use", content=[tool_use_block])
+        second_response = MockMessage(
+            stop_reason="end_turn",
+            content=[Mock(type="text", text="Use the current 2026 board; drafted players are excluded.")],
+        )
+        mock_client.messages.create.side_effect = [first_response, second_response]
+
+        def fake_get_tool_by_name(name):
+            assert name == "recommend_next_pick_targets"
+
+            def fake_tool(**kwargs):
+                captured.update(kwargs)
+                return {"ok": True, "data": [], "meta": {"market_season": 2026}}
+
+            return fake_tool
+
+        monkeypatch.setattr("superagent.agent.get_tool_by_name", fake_get_tool_by_name)
+
+        result = run_agent("League ID 1. Pick 59. Who do I take next?", client=mock_client)
+
+        assert result["ok"] is True
+        assert captured == {"league_id": 1, "current_pick": 59}
+        assert result["tools_used"][0]["input"] == {"league_id": 1, "current_pick": 59}
+
+    def test_draft_tool_schemas_tell_agent_to_omit_live_draft_season(self):
+        schemas = {schema["name"]: schema for schema in tool_schema_for_claude()}
+        draft_season_description = schemas["recommend_next_pick_targets"]["input_schema"]["properties"]["season"][
+            "description"
+        ]
+        stat_season_description = schemas["get_team_summary"]["input_schema"]["properties"]["season"]["description"]
+
+        assert "OMIT" in draft_season_description
+        assert "current imported board season" in draft_season_description
+        assert "2020-2025" not in draft_season_description
+        assert "2020-2025" in stat_season_description
 
     def test_agent_with_tool_use_multiple_tools(self):
         """Test agent that calls multiple tools."""

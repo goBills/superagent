@@ -438,12 +438,12 @@ TOOL_SCHEMAS = [
                     "items": {"type": "integer"},
                     "description": "Optional bye weeks to exclude"
                 },
-                "season": {"type": "integer", "description": "Draft market season"},
+                "season": {"type": "integer", "description": "Optional draft market season for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses the current imported board season and recorded picks."},
                 "bye_week_season": {
                     "type": "integer",
-                    "description": "Season to use for bye weeks. Defaults to newest official bye-week data when available."
+                    "description": "Optional bye-week season for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses newest official bye-week data."
                 },
-                "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"},
+                "source": {"type": "string", "description": "Optional market source for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses the current imported board source."},
                 "limit": {"type": "integer", "description": "Maximum rows to return"},
                 "current_pick": {"type": "number", "description": "Current/next overall pick. Pass it for 'what's falling to me' or 'value at my pick' questions so results are bounded to a realistic window near the pick (~2 rounds past it). Without it, results span the whole draftable pool and will surface deep late-round values that are NOT relevant to an early pick."}
             },
@@ -462,12 +462,12 @@ TOOL_SCHEMAS = [
                     "items": {"type": "string"},
                     "description": "Player names to compare"
                 },
-                "season": {"type": "integer", "description": "Draft market season"},
+                "season": {"type": "integer", "description": "Optional draft market season for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses the current imported board season and recorded picks."},
                 "bye_week_season": {
                     "type": "integer",
-                    "description": "Season to use for bye weeks. Defaults to newest official bye-week data when available."
+                    "description": "Optional bye-week season for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses newest official bye-week data."
                 },
-                "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"}
+                "source": {"type": "string", "description": "Optional market source for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses the current imported board source."}
             },
             "required": ["league_id", "player_names"]
         }
@@ -490,12 +490,12 @@ TOOL_SCHEMAS = [
                     "items": {"type": "integer"},
                     "description": "Optional bye weeks to exclude"
                 },
-                "season": {"type": "integer", "description": "Draft market season"},
+                "season": {"type": "integer", "description": "Optional draft market season for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses the current imported board season and recorded picks."},
                 "bye_week_season": {
                     "type": "integer",
-                    "description": "Season to use for bye weeks. Defaults to newest official bye-week data when available."
+                    "description": "Optional bye-week season for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses newest official bye-week data."
                 },
-                "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"},
+                "source": {"type": "string", "description": "Optional market source for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses the current imported board source."},
                 "limit": {"type": "integer", "description": "Maximum rows to return"},
                 "current_pick": {"type": "number", "description": "Current/next overall pick. Pass it for 'what's falling to me' or 'value at my pick' questions so results are bounded to a realistic window near the pick (~2 rounds past it) instead of surfacing deep late-round values."}
             },
@@ -514,12 +514,12 @@ TOOL_SCHEMAS = [
                     "items": {"type": "string"},
                     "description": "Optional extra canonical player ids already drafted"
                 },
-                "season": {"type": "integer", "description": "Draft market season"},
+                "season": {"type": "integer", "description": "Optional draft market season for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses the current imported board season and recorded picks."},
                 "bye_week_season": {
                     "type": "integer",
-                    "description": "Season to use for bye weeks. Defaults to newest official bye-week data when available."
+                    "description": "Optional bye-week season for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses newest official bye-week data."
                 },
-                "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"}
+                "source": {"type": "string", "description": "Optional market source for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses the current imported board source."}
             },
             "required": ["league_id"]
         }
@@ -536,12 +536,12 @@ TOOL_SCHEMAS = [
                     "items": {"type": "string"},
                     "description": "Optional canonical player ids already picked"
                 },
-                "season": {"type": "integer", "description": "Draft market season"},
+                "season": {"type": "integer", "description": "Optional draft market season for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses the current imported board season and recorded picks."},
                 "bye_week_season": {
                     "type": "integer",
-                    "description": "Season to use for bye weeks. Defaults to newest official bye-week data when available."
+                    "description": "Optional bye-week season for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses newest official bye-week data."
                 },
-                "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"}
+                "source": {"type": "string", "description": "Optional market source for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses the current imported board source."}
             },
             "required": ["league_id"]
         }
@@ -560,12 +560,12 @@ TOOL_SCHEMAS = [
                 },
                 "fantasy_team_name": {"type": "string", "description": "Optional stored fantasy team name to load roster players"},
                 "threshold": {"type": "integer", "description": "Warn when this many players share a bye week; default 3"},
-                "season": {"type": "integer", "description": "Draft market season"},
+                "season": {"type": "integer", "description": "Optional draft market season for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses the current imported board season and recorded picks."},
                 "bye_week_season": {
                     "type": "integer",
-                    "description": "Season to use for bye weeks. Defaults to newest official bye-week data when available."
+                    "description": "Optional bye-week season for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses newest official bye-week data."
                 },
-                "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"}
+                "source": {"type": "string", "description": "Optional market source for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses the current imported board source."}
             },
             "required": ["league_id"]
         }
@@ -584,12 +584,12 @@ TOOL_SCHEMAS = [
                 },
                 "fantasy_team_name": {"type": "string", "description": "Optional stored fantasy team name to load roster players"},
                 "picks_remaining": {"type": "integer", "description": "Optional number of picks remaining for this user's draft"},
-                "season": {"type": "integer", "description": "Draft market season"},
+                "season": {"type": "integer", "description": "Optional draft market season for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses the current imported board season and recorded picks."},
                 "bye_week_season": {
                     "type": "integer",
-                    "description": "Season to use for bye weeks. Defaults to newest official bye-week data when available."
+                    "description": "Optional bye-week season for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses newest official bye-week data."
                 },
-                "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"}
+                "source": {"type": "string", "description": "Optional market source for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses the current imported board source."}
             },
             "required": ["league_id"]
         }
@@ -608,12 +608,12 @@ TOOL_SCHEMAS = [
                 },
                 "fantasy_team_name": {"type": "string", "description": "Optional stored fantasy team name to load roster players"},
                 "picks_remaining": {"type": "integer", "description": "Optional number of picks remaining for this user's draft"},
-                "season": {"type": "integer", "description": "Draft market season"},
+                "season": {"type": "integer", "description": "Optional draft market season for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses the current imported board season and recorded picks."},
                 "bye_week_season": {
                     "type": "integer",
-                    "description": "Season to use for bye weeks. Defaults to newest official bye-week data when available."
+                    "description": "Optional bye-week season for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses newest official bye-week data."
                 },
-                "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"}
+                "source": {"type": "string", "description": "Optional market source for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses the current imported board source."}
             },
             "required": ["league_id"]
         }
@@ -633,12 +633,12 @@ TOOL_SCHEMAS = [
                 "fantasy_team_name": {"type": "string", "description": "Optional stored fantasy team name to load roster players"},
                 "current_pick": {"type": "number", "description": "Current or next overall pick number. Bounds the candidate pool from above (about two rounds past this pick, capped at the league draftable range) so recommendations stay realistic. It is NOT a lower bound: an elite player who falls and is still available will still surface even if ranked better than this pick."},
                 "picks_remaining": {"type": "integer", "description": "Optional number of picks remaining for this user's draft"},
-                "season": {"type": "integer", "description": "Draft market season"},
+                "season": {"type": "integer", "description": "Optional draft market season for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses the current imported board season and recorded picks."},
                 "bye_week_season": {
                     "type": "integer",
-                    "description": "Season to use for bye weeks. Defaults to newest official bye-week data when available."
+                    "description": "Optional bye-week season for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses newest official bye-week data."
                 },
-                "source": {"type": "string", "description": "Optional market source, e.g. draftsheetsv6"},
+                "source": {"type": "string", "description": "Optional market source for historical/proxy analysis. For live/current draft questions, OMIT this so the tool uses the current imported board source."},
                 "limit": {"type": "integer", "description": "Maximum recommendations to return"}
             },
             "required": ["league_id"]
