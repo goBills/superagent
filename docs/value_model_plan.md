@@ -67,6 +67,21 @@ For each player: **project 2026 fantasy points**, then **VOR = projected_points 
 
 **Shared:** calibrating curves on historical data; agreeing the board-merge contract.
 
+## 7.5 Validation spike result (2026-05-28) — READ THIS
+
+Ran Phase-1 cheaply (Claude, read-only): projected 2025 from 2020–24 `weekly` (recency-weighted PPR/game → positional VOR), scored vs **actual 2025 finish** and vs the **2025 DraftSheets ADP** (the real preseason market we have stored). Set = 144 established players both cover (48 rookies/no-history excluded).
+
+| Predictor | Spearman vs actual 2025 | Top-24 hits | Top-40 hits |
+|---|---|---|---|
+| **ADP (market)** | **0.405** | 11/24 | 19/40 |
+| Crude VOR projection | 0.268 | 11/24 | 17/40 |
+
+**Finding: a naive production projection does not beat ADP — the market is efficient.** Ties on the elite top-24; loses on broader ordering. **Do NOT ship a projection as the board spine.** Two honest paths from here:
+- **(A) Iterate the model** — add opportunity weighting (`wopr`/`target_share`), regression-to-mean, age curves, games/injury expectation, and re-backtest across 2022–24. *Might* beat ADP; real work, uncertain payoff (beating an efficient market is genuinely hard).
+- **(B) Pivot the IP (recommended)** — keep **ADP as the board spine** (it's the best ranking), and make our owned-data edge the **context + divergence lens + agentic reasoning**, not a replacement ranking: VOR for roster-construction/positional-scarcity decisions, confidence-gated value flags where our usage/EPA read materially diverges from ADP, and the agent's grounded "why." This plays to our actual edge (data + an agent to explain it) without needing to out-predict the market.
+
+Decision pending Rob. Until decided, board stays ADP-ordered (correct).
+
 ## 8. Phased build order
 
 1. **Pipeline proof** — established-player projection (recent production + `wopr`/shares) → VOR → rank → backtest vs 2024 actual *and* vs ADP. No rookies/age yet. **Gate: matches/beats ADP.**
