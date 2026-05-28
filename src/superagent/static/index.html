@@ -1761,7 +1761,7 @@
     </div>
 
     <script>
-        const REQUEST_TIMEOUT_MS = 60000;
+        const REQUEST_TIMEOUT_MS = 90000;
         // Cockpit shell: answers render into the Siri-style overlay (#answerBody).
         const chatArea = document.getElementById('answerBody');
         const cockpit = document.getElementById('cockpit');
@@ -2980,7 +2980,7 @@
 
                 let errorMsg = error.message;
                 if (error.name === 'AbortError') {
-                    errorMsg = 'Request timed out after 60 seconds. Complex draft questions (full board scans) can be slow on the free tier — try again, or ask about fewer players.';
+                    errorMsg = 'That one took too long (over 90s). Open-ended questions can run slow — try again, or narrow it (e.g. ask about one position or player).';
                 }
                 addMessage('error', `${errorMsg}`);
             } finally {
