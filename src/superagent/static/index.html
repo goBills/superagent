@@ -1145,6 +1145,21 @@
         .pos-K  { background: #ede9fe; color: #6d28d9; }
         .pos-DST, .pos-DEF { background: #e2e8f0; color: #334155; }
 
+        /* Rookie marker — amber "R" chip next to the name (first NFL season) */
+        .rookie-chip {
+            display: inline-block;
+            margin-left: 6px;
+            padding: 0 5px;
+            font-size: 9px;
+            font-weight: 800;
+            line-height: 15px;
+            border-radius: 4px;
+            background: linear-gradient(180deg, #fde68a, #f59e0b);
+            color: #7c4a03;
+            vertical-align: middle;
+            letter-spacing: 0.03em;
+        }
+
         .sheet-delta-pos { color: #15803d; font-weight: 700; }
         .sheet-delta-neg { color: #b91c1c; }
 
@@ -2104,6 +2119,11 @@
             return m ? `tier-${m[1]}` : '';
         }
 
+        // Rookie marker: years_exp === 0 = first NFL season (current 2026 class on the live board).
+        function rookieTag(r) {
+            return (r && r.years_exp === 0) ? '<span class="rookie-chip" title="Rookie — first NFL season">R</span>' : '';
+        }
+
         function fmtDelta(v) {
             if (v === null || v === undefined) return '—';
             const sign = v > 0 ? '+' : '';
@@ -2158,7 +2178,7 @@
                 const star = isWatched(r.canonical_player_id) ? '⭐ ' : '';
                 return `<tr class="sheet-row ${tierClass(r.tier)}${drafted}" data-idx="${i}" onclick="selectPlayer(${i})">
                     <td class="sheet-num">${i + 1}</td>
-                    <td class="sheet-player">${star}${escapeHtml(r.player_name)}</td>
+                    <td class="sheet-player">${star}${escapeHtml(r.player_name)}${rookieTag(r)}</td>
                     <td><span class="sheet-pos-pill pos-${escapeHtml(r.position || '')}">${escapeHtml(r.position || '')}</span></td>
                     <td>${escapeHtml(team)}</td>
                     <td class="sheet-num">${r.bye_week ?? '—'}</td>
@@ -2516,7 +2536,7 @@
                     const team = r.current_context_available ? (r.current_team || 'FA') : (r.team || '—');
                     html += `<div class="mt-player">
                         <span class="sheet-pos-pill pos-${escapeHtml(pos)}">${escapeHtml(pos)}</span>
-                        <span class="mt-name">${escapeHtml(r.player_name)}</span>
+                        <span class="mt-name">${escapeHtml(r.player_name)}${rookieTag(r)}</span>
                         <span class="mt-meta">${escapeHtml(team)} · Bye ${r.bye_week ?? '—'}</span>
                     </div>`;
                 }
