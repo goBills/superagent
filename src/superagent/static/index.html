@@ -2896,8 +2896,9 @@
             isWaiting = true;
             questionInput.disabled = true;
 
-            // Expand the Siri-style overlay with a fresh exchange (current Q&A only).
-            chatArea.innerHTML = '';
+            // Open the overlay and APPEND to the running thread so follow-ups stay visible
+            // and continuous. The agent already gets prior turns as history (via session_id),
+            // so this just surfaces the conversation it already remembers. "New" clears it.
             openAnswer();
 
             // Display the user's original text, but send draft context to the agent
