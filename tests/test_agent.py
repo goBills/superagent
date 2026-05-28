@@ -190,6 +190,51 @@ class TestAgentBasic:
         assert "2020-2025" not in draft_season_description
         assert "2020-2025" in stat_season_description
 
+    def test_bench_strategy_questions_get_small_draft_tool_menu(self):
+        mock_client = Mock()
+        mock_response = MockMessage(content=[Mock(type="text", text="Prioritize RB and WR bench upside.")])
+        mock_client.messages.create.return_value = mock_response
+
+        result = run_agent(
+            "League ID 1. For draft purposes use the imported draft market data and 2026 bye weeks; "
+            "do not ask me which season. My current roster is Josh Allen, James Cook, Travis Kelce. "
+            "Draft board: 20 picks recorded: #1 Team->Bijan Robinson. I am at pick 59. "
+            "Question: how should I stack my bench?",
+            client=mock_client,
+        )
+
+        assert result["ok"] is True
+        tool_names = {tool["name"] for tool in mock_client.messages.create.call_args.kwargs["tools"]}
+        assert tool_names == {
+            "get_roster_construction_context",
+            "recommend_next_pick_targets",
+            "get_available_targets",
+            "check_bye_week_conflicts",
+        }
+
+    def test_agent_compacts_prior_draft_board_context_from_history(self):
+        mock_client = Mock()
+        mock_response = MockMessage(content=[Mock(type="text", text="Answer.")])
+        mock_client.messages.create.return_value = mock_response
+        history = [
+            {
+                "role": "user",
+                "content": (
+                    "League ID 1. For draft purposes use the imported draft market data and 2026 bye weeks; "
+                    "Draft board: 35 picks recorded: #1 Team->Bijan Robinson; #2 Team->Jahmyr Gibbs. "
+                    "I am at pick 36. Question: who should I take next?"
+                ),
+            },
+            {"role": "assistant", "content": "Take the best available RB."},
+        ]
+
+        result = run_agent("Question: what about my bench?", client=mock_client, history=history)
+
+        assert result["ok"] is True
+        messages = mock_client.messages.create.call_args.kwargs["messages"]
+        assert messages[0]["content"] == "Prior draft question: who should I take next?"
+        assert "Draft board:" not in messages[0]["content"]
+
     def test_agent_with_tool_use_multiple_tools(self):
         """Test agent that calls multiple tools."""
         mock_client = Mock()

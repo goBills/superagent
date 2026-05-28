@@ -266,16 +266,27 @@ def _position_need_summary(settings: LeagueSettings, counts: dict[str, int], pic
     flex_eligible_count = sum(counts.get(position, 0) for position in FLEX_ELIGIBLE_POSITIONS)
     required_flex_pool = requirements["RB"] + requirements["WR"] + requirements["TE"] + requirements["FLEX"]
     flex_depth_needed = max(0, required_flex_pool - flex_eligible_count)
+    starter_needs_open = any(base_needs.get(position, 0) > 0 for position in CORE_ROSTER_POSITIONS)
+    flex_only_open = flex_depth_needed > sum(base_needs.values())
+    bench_priority_positions = ["RB", "WR"]
+    if requirements["QB"] > 1:
+        bench_priority_positions.append("QB")
+    redundant_depth_positions = [
+        position
+        for position in ["QB", "TE"]
+        if counts.get(position, 0) >= requirements.get(position, 0) and position not in bench_priority_positions
+    ]
     priority_order = []
     for position in ["RB", "WR", "QB", "TE"]:
         if base_needs.get(position, 0) > 0:
             priority_order.append(position)
-    if flex_depth_needed > sum(base_needs.values()):
+    if flex_only_open:
         for position in ["RB", "WR", "TE"]:
             if position not in priority_order:
                 priority_order.append(position)
     if not priority_order:
-        priority_order = ["RB", "WR", "QB", "TE"]
+        priority_order = bench_priority_positions
+    roster_phase = "fill_starters" if starter_needs_open else "fill_flex" if flex_only_open else "bench_upside"
     return {
         "requirements": requirements,
         "counts": counts,
@@ -284,6 +295,16 @@ def _position_need_summary(settings: LeagueSettings, counts: dict[str, int], pic
         "required_flex_pool": required_flex_pool,
         "flex_depth_needed": flex_depth_needed,
         "priority_positions": priority_order,
+        "roster_phase": roster_phase,
+        "bench_strategy": {
+            "priority_positions": bench_priority_positions,
+            "avoid_redundant_depth_positions": redundant_depth_positions,
+            "guidance": (
+                "When starter and flex needs are covered, bench picks should favor RB/WR upside "
+                "and injury insurance. Add QB bench priority only in superflex or two-QB formats; "
+                "avoid redundant TE depth unless TE is still a need or explicitly requested."
+            ),
+        },
         "picks_remaining": picks_remaining,
     }
 

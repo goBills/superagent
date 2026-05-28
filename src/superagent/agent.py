@@ -4,8 +4,9 @@ Superagent Claude agent with tool use.
 Orchestrates Claude API calls with deterministic tool dispatch.
 """
 
-from typing import Any, Dict, List, Optional
 import json
+import re
+from typing import Any, Dict, List, Optional
 from anthropic import Anthropic
 from superagent.tool_schemas import tool_schema_for_claude, get_tool_by_name
 from superagent.config import get_config
@@ -25,6 +26,30 @@ DRAFT_MARKET_TOOL_NAMES = {
     "get_bye_week_analysis",
     "check_bye_week_conflicts",
 }
+
+BENCH_STRATEGY_TOOL_NAMES = {
+    "get_roster_construction_context",
+    "recommend_next_pick_targets",
+    "get_available_targets",
+    "check_bye_week_conflicts",
+}
+
+DRAFT_ANALYSIS_TOOL_NAMES = DRAFT_MARKET_TOOL_NAMES | {
+    "get_fantasy_player_summary",
+    "compare_fantasy_players",
+    "get_player_weekly_usage",
+    "get_fantasy_schedule_context",
+    "compare_fantasy_context",
+}
+
+QUESTION_MARKER_RE = re.compile(r"\bQuestion:\s*(.+)\s*$", re.IGNORECASE | re.DOTALL)
+DRAFT_CONTEXT_MARKERS = (
+    "For draft purposes use the imported draft market data",
+    "Draft board:",
+    "recorded draft board",
+)
+BENCH_STRATEGY_RE = re.compile(r"\b(bench|depth|upside|handcuff|handcuffs|stash|stashes|flyer|fliers|stack my bench)\b", re.IGNORECASE)
+PRODUCTION_ANALYSIS_RE = re.compile(r"\b(stat|stats|production|usage|targets|carries|snaps|compare)\b", re.IGNORECASE)
 
 SYSTEM_PROMPT = """You are Superagent, an NFL research assistant. Your role is to answer natural language questions about NFL statistics, team performance, and player stats using the available tools.
 
@@ -46,6 +71,8 @@ Rules:
 - For general draft value queries, do not surface kickers unless explicitly requested. Surface D/ST only when explicitly requested or when the tool returns an elite D/ST that clears the default threshold.
 - For roster construction answers, explain the trade-off in plain language: roster need, market value, bye risk, and position scarcity. Avoid presenting any recommendation as guaranteed or predictive.
 - When a user asks for targets during a live or mock draft, prefer get_available_targets or recommend_next_pick_targets so recorded league draft picks are excluded from the available pool.
+- For broad roster or bench strategy questions, use get_roster_construction_context or recommend_next_pick_targets once, then answer from that context. Do not scan the whole board or call per-player stat tools unless the user explicitly asks for production/stats or names players to compare.
+- Once starters/flex are covered, bench guidance should prioritize upside and injury insurance: RB/WR first, QB only in superflex/two-QB formats, and TE only for a missing/weak starter or explicit TE request. Do not recommend a redundant backup TE as generic "depth value."
 - For "what's falling to me", "best value", or "who should I grab now" questions during a draft, pass current_pick to the targets tools so results are bounded to players relevant to that pick. A high value delta on a player ranked far below the current pick (for example Effective Rank ~200 when the user is in round 3) does NOT mean "grab now" — that player is a late-round value, not someone falling to this pick. Never pitch a player whose Effective Rank is far past the current pick as a must-grab for an early round; judge "falling" relative to where the user is actually picking.
 
 PLAYER ANSWER CONTRACT (read this carefully — it overrides any instinct to write engaging analysis):
@@ -88,13 +115,34 @@ def _normalize_tool_input_for_agent(tool_name: str, tool_input: Any) -> Dict[str
     return normalized
 
 
+def _is_draft_context_question(text: str) -> bool:
+    return any(marker in text for marker in DRAFT_CONTEXT_MARKERS)
+
+
+def _is_bench_strategy_question(text: str) -> bool:
+    return bool(BENCH_STRATEGY_RE.search(text))
+
+
+def _compact_history_content(content: str) -> str:
+    """Drop stale live-board context from prior turns while preserving the ask."""
+    if not any(marker in content for marker in DRAFT_CONTEXT_MARKERS):
+        return content
+
+    match = QUESTION_MARKER_RE.search(content)
+    if match:
+        question = " ".join(match.group(1).split())
+        return f"Prior draft question: {question[:500]}"
+
+    return "Prior draft question with live board context omitted."
+
+
 def _prepare_history(history: Optional[List[Dict[str, str]]], limit: int = 12) -> List[Dict[str, str]]:
     """Return a capped, API-safe history that starts with a user turn."""
     if not history:
         return []
 
     prepared = [
-        {"role": item["role"], "content": item["content"]}
+        {"role": item["role"], "content": _compact_history_content(item["content"])}
         for item in history
         if item.get("role") in {"user", "assistant"} and isinstance(item.get("content"), str)
     ][-limit:]
@@ -103,6 +151,20 @@ def _prepare_history(history: Optional[List[Dict[str, str]]], limit: int = 12) -
         prepared.pop(0)
 
     return prepared
+
+
+def _tool_schemas_for_question(question: str) -> List[Dict[str, Any]]:
+    """Offer a smaller tool menu for live draft strategy to reduce over-work."""
+    all_tools = tool_schema_for_claude()
+    if not _is_draft_context_question(question):
+        return all_tools
+
+    if _is_bench_strategy_question(question) and not PRODUCTION_ANALYSIS_RE.search(question):
+        allowed = BENCH_STRATEGY_TOOL_NAMES
+    else:
+        allowed = DRAFT_ANALYSIS_TOOL_NAMES
+
+    return [schema for schema in all_tools if schema.get("name") in allowed]
 
 
 def _narrative_correction(flagged: List[str]) -> str:
@@ -179,9 +241,10 @@ def run_agent(
         model = config.ANTHROPIC_MODEL
 
     tools_used = []
-    max_tool_rounds = 6
+    max_tool_rounds = 4 if _is_draft_context_question(question) else 6
     tool_round = 0
     narrative_retry_used = False
+    tools_for_question = _tool_schemas_for_question(question)
 
     try:
         # Initialize messages with prior conversation history (capped at last 12 items = 6 turns)
@@ -199,7 +262,7 @@ def run_agent(
                 model=model,
                 max_tokens=4096,
                 system=SYSTEM_PROMPT,
-                tools=tool_schema_for_claude(),
+                tools=tools_for_question,
                 messages=messages
             )
 

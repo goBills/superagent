@@ -144,6 +144,25 @@ def setup_draft_fixture(season=2029):
         return league.id, season, source
 
 
+def add_market_player(db, import_batch, season, source, player_id, name, position, team, adp, ecr=None, value=20, bye=9):
+    add_player(db, player_id, name, team, position, season)
+    db.add(
+        DraftPlayerMarket(
+            import_id=import_batch.id,
+            source=source,
+            season=season,
+            canonical_player_id=player_id,
+            source_player_name=name,
+            position=position,
+            team=team,
+            bye_week=bye,
+            adp=adp,
+            ecr=ecr if ecr is not None else adp,
+            value=value,
+        )
+    )
+
+
 def test_find_draft_targets_excludes_drafted_and_sorts_value():
     league_id, season, source = setup_draft_fixture()
 
@@ -789,6 +808,85 @@ def test_get_roster_construction_context_returns_targets_by_needed_position():
     assert "bye_week_analysis" in result["data"]
     assert "targets_by_position" in result["data"]
     assert "WR" in result["data"]["targets_by_position"]
+
+
+def test_position_needs_switches_to_bench_upside_after_starters_and_flex_are_set():
+    league_id, season, source = setup_draft_fixture()
+    with SessionLocal() as db:
+        league = db.query(League).filter(League.id == league_id).first()
+        league.settings.superflex_slots = 0
+        import_batch = db.query(DraftMarketImport).filter(DraftMarketImport.source == source).first()
+        add_market_player(db, import_batch, season, source, "nfl_bench_phase_qb1", "Bench Phase QB1", "QB", "DAL", 50)
+        add_market_player(db, import_batch, season, source, "nfl_bench_phase_rb1", "Bench Phase RB1", "RB", "BUF", 55)
+        add_market_player(db, import_batch, season, source, "nfl_bench_phase_rb2", "Bench Phase RB2", "RB", "SEA", 60)
+        add_market_player(db, import_batch, season, source, "nfl_bench_phase_wr1", "Bench Phase WR1", "WR", "CHI", 62)
+        add_market_player(db, import_batch, season, source, "nfl_bench_phase_wr2", "Bench Phase WR2", "WR", "LAC", 65)
+        add_market_player(db, import_batch, season, source, "nfl_bench_phase_te1", "Bench Phase TE1", "TE", "KC", 70)
+        add_market_player(db, import_batch, season, source, "nfl_bench_phase_flex", "Bench Phase Flex", "WR", "GB", 75)
+        db.commit()
+
+    result = get_position_needs(
+        league_id=league_id,
+        season=season,
+        source=source,
+        current_roster=[
+            "Bench Phase QB1",
+            "Bench Phase RB1",
+            "Bench Phase RB2",
+            "Bench Phase WR1",
+            "Bench Phase WR2",
+            "Bench Phase TE1",
+            "Bench Phase Flex",
+        ],
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["roster_phase"] == "bench_upside"
+    assert result["data"]["priority_positions"] == ["RB", "WR"]
+    assert result["data"]["bench_strategy"]["priority_positions"] == ["RB", "WR"]
+    assert "TE" in result["data"]["bench_strategy"]["avoid_redundant_depth_positions"]
+
+
+def test_recommend_next_pick_targets_avoids_redundant_backup_te_when_bench_phase():
+    league_id, season, source = setup_draft_fixture()
+    with SessionLocal() as db:
+        league = db.query(League).filter(League.id == league_id).first()
+        league.settings.superflex_slots = 0
+        import_batch = db.query(DraftMarketImport).filter(DraftMarketImport.source == source).first()
+        add_market_player(db, import_batch, season, source, "nfl_no_te_qb1", "No TE QB1", "QB", "DAL", 50)
+        add_market_player(db, import_batch, season, source, "nfl_no_te_rb1", "No TE RB1", "RB", "BUF", 55)
+        add_market_player(db, import_batch, season, source, "nfl_no_te_rb2", "No TE RB2", "RB", "SEA", 60)
+        add_market_player(db, import_batch, season, source, "nfl_no_te_wr1", "No TE WR1", "WR", "CHI", 62)
+        add_market_player(db, import_batch, season, source, "nfl_no_te_wr2", "No TE WR2", "WR", "LAC", 65)
+        add_market_player(db, import_batch, season, source, "nfl_no_te_te1", "No TE Starter", "TE", "KC", 70)
+        add_market_player(db, import_batch, season, source, "nfl_no_te_flex", "No TE Flex", "WR", "GB", 75)
+        add_market_player(db, import_batch, season, source, "nfl_no_te_backup", "No TE Backup", "TE", "NE", 30)
+        add_market_player(db, import_batch, season, source, "nfl_no_te_upside_rb", "No TE Upside RB", "RB", "MIA", 90)
+        add_market_player(db, import_batch, season, source, "nfl_no_te_upside_wr", "No TE Upside WR", "WR", "DET", 95)
+        db.commit()
+
+    result = recommend_next_pick_targets(
+        league_id=league_id,
+        season=season,
+        source=source,
+        current_roster=[
+            "No TE QB1",
+            "No TE RB1",
+            "No TE RB2",
+            "No TE WR1",
+            "No TE WR2",
+            "No TE Starter",
+            "No TE Flex",
+        ],
+        current_pick=80,
+        limit=8,
+    )
+
+    assert result["ok"] is True
+    names = [row["player_name"] for row in result["data"]["recommendations"]]
+    assert "No TE Backup" not in names
+    assert {"No TE Upside RB", "No TE Upside WR"} & set(names)
+    assert {row["position"] for row in result["data"]["recommendations"]} <= {"RB", "WR"}
 
 
 def test_recommend_next_pick_targets_scores_roster_fit():

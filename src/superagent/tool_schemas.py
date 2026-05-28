@@ -596,7 +596,7 @@ TOOL_SCHEMAS = [
     },
     {
         "name": "get_roster_construction_context",
-        "description": "Get roster construction context: current position counts, needs, bye conflicts, and top target pools by needed position.",
+        "description": "Get roster construction context: current position counts, needs, bye conflicts, bench phase/upside guidance, and top target pools by needed position. Prefer this single tool for broad roster or bench-strategy questions.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -620,7 +620,7 @@ TOOL_SCHEMAS = [
     },
     {
         "name": "recommend_next_pick_targets",
-        "description": "Recommend next-pick target pools based on current roster, league settings, bye conflicts, and imported draft market value.",
+        "description": "Recommend next-pick target pools based on current roster, league settings, bye conflicts, bench phase/upside guidance, and imported draft market value. Prefer this single tool for 'who next' and bench-strategy questions.",
         "input_schema": {
             "type": "object",
             "properties": {
