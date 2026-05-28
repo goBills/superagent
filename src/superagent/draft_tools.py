@@ -357,8 +357,10 @@ def _fill_draftable_rank_gaps(
         else:
             overflow.append(row)
 
-    if position or remaining_picks <= 0 or len(in_window) >= remaining_picks:
+    if position or remaining_picks <= 0:
         return in_window
+    if len(in_window) >= remaining_picks:
+        return in_window[:remaining_picks]
     return in_window + overflow[: remaining_picks - len(in_window)]
 
 

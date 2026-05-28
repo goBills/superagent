@@ -8,7 +8,17 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from superagent.data.ingest_sleeper_adp import ingest_sleeper_adp
 from superagent.db import SessionLocal, init_db
-from superagent.models import CanonicalPlayer, DraftPlayerMarket, DraftSourceRank, ExternalPlayerMapping
+from superagent.draft_tools import get_draft_sheet
+from superagent.models import (
+    CanonicalPlayer,
+    DraftMarketImport,
+    DraftPlayerMarket,
+    DraftSourceRank,
+    ExternalPlayerMapping,
+    League,
+    LeagueSettings,
+    User,
+)
 
 
 init_db()
@@ -60,6 +70,7 @@ def test_ingest_sleeper_adp_creates_2026_market_rows_for_current_class():
             db=db,
             min_import_rows=3,
             max_adp=200,
+            carryover_special_teams=False,
         )
         markets = (
             db.query(DraftPlayerMarket)
@@ -119,8 +130,114 @@ def test_ingest_sleeper_adp_reuses_existing_sleeper_mapping():
             projections=[sleeper_projection(player_id, "Mapped Back", "RB", "BUF", 88.0)],
             db=db,
             min_import_rows=1,
+            carryover_special_teams=False,
         )
         market = db.query(DraftPlayerMarket).filter(DraftPlayerMarket.source == source).one()
 
     assert summary["mapped_from_existing_sleeper_mapping"] == 1
     assert market.canonical_player_id == canonical_id
+
+
+def test_ingest_sleeper_adp_carries_over_late_k_and_dst_rows():
+    suffix = uuid.uuid4().hex[:8]
+    target_source = f"sleeper-adp-carry-{suffix}"
+    carryover_source = f"draftsheets-carry-{suffix}"
+    with SessionLocal() as db:
+        carry_import = DraftMarketImport(
+            source=carryover_source,
+            season=2025,
+            file_name=f"{carryover_source}.csv",
+            rows_seen=4,
+            rows_imported=4,
+        )
+        db.add(carry_import)
+        db.flush()
+        carryover_rows = [
+            (f"k1-{suffix}", "Brandon Aubrey", "K", "DAL", 106.0, 1),
+            (f"k2-{suffix}", "Jake Bates", "K", "DET", 131.2, 2),
+            (f"dst1-{suffix}", "San Francisco 49ers", "DST", "SF", 170.7, 1),
+            (f"dst2-{suffix}", "Dallas Cowboys", "DST", "DAL", 209.0, 2),
+        ]
+        for canonical_id, name, position, team, avg_rank, position_rank in carryover_rows:
+            db.add(
+                CanonicalPlayer(
+                    canonical_player_id=canonical_id,
+                    nflverse_player_id=canonical_id,
+                    full_name=name,
+                    normalized_name=name.lower(),
+                )
+            )
+            db.add(
+                DraftPlayerMarket(
+                    import_id=carry_import.id,
+                    source=carryover_source,
+                    season=2025,
+                    canonical_player_id=canonical_id,
+                    source_player_name=name,
+                    team=team,
+                    position=position,
+                    position_rank=position_rank,
+                    avg_rank=avg_rank,
+                    overall_rank=avg_rank,
+                )
+            )
+        db.commit()
+
+        projections = [
+            sleeper_projection(f"skill-{idx}-{suffix}", f"Skill Player {idx}", "WR", "BUF", float(idx))
+            for idx in range(1, 7)
+        ]
+        summary = ingest_sleeper_adp(
+            season=2026,
+            source=target_source,
+            projections=projections,
+            db=db,
+            min_import_rows=6,
+            max_adp=100,
+            carryover_special_teams=True,
+            carryover_source=carryover_source,
+            carryover_season=2025,
+            carryover_target_pick_limit=8,
+            carryover_limit_per_position=1,
+        )
+        markets = (
+            db.query(DraftPlayerMarket)
+            .filter(DraftPlayerMarket.source == target_source, DraftPlayerMarket.season == 2026)
+            .order_by(DraftPlayerMarket.adp.asc())
+            .all()
+        )
+        carried = [market for market in markets if market.position in {"K", "DST"}]
+        carried_market_ids = [market.id for market in carried]
+        carried_rows = [(market.source_player_name, market.position, market.adp) for market in carried]
+        rank_sources = {
+            rank.rank_source
+            for rank in db.query(DraftSourceRank).filter(DraftSourceRank.market_id.in_(carried_market_ids)).all()
+        }
+        user = User(email=f"carry-{suffix}@example.com", password_hash="hash")
+        db.add(user)
+        db.flush()
+        league = League(user_id=user.id, league_name="Carry League", league_type="snake")
+        db.add(league)
+        db.flush()
+        db.add(LeagueSettings(league_id=league.id, num_teams=4, roster_spots=2))
+        db.commit()
+        league_id = league.id
+
+    assert summary["sleeper_rows_imported"] == 6
+    assert summary["rows_imported"] == 8
+    assert summary["carryover_special_teams"]["rows_imported"] == 2
+    assert summary["carryover_special_teams"]["by_position"] == {"K": 1, "DST": 1}
+    assert carried_rows == [
+        ("Brandon Aubrey", "K", 7.0),
+        ("San Francisco 49ers", "DST", 8.0),
+    ]
+    assert rank_sources >= {
+        "2025 DraftSheets carryover rank",
+        "Special teams carryover slot",
+    }
+
+    sheet = get_draft_sheet(league_id=league_id, season=2026, source=target_source, limit=20)
+    names = [row["player_name"] for row in sheet["data"]["rows"]]
+    assert sheet["data"]["summary"]["available_count"] == 8
+    assert "Brandon Aubrey" in names
+    assert "San Francisco 49ers" in names

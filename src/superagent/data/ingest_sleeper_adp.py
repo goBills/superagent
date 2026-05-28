@@ -46,6 +46,10 @@ SOURCE_RANK_LABELS = {
     "adp_dynasty_2qb": "Sleeper Dynasty 2QB ADP",
 }
 FANTASY_MARKET_POSITIONS = {"QB", "RB", "WR", "TE", "K", "DST"}
+SPECIAL_TEAMS_POSITIONS = ("K", "DST")
+DEFAULT_CARRYOVER_SOURCE = "draftsheetsv6"
+DEFAULT_CARRYOVER_TARGET_PICK_LIMIT = 192
+DEFAULT_CARRYOVER_LIMIT_PER_POSITION = 12
 
 
 class SleeperAdpIngestionError(ValueError):
@@ -157,6 +161,152 @@ def _upsert_source_rank(db: Session, market: DraftPlayerMarket, rank_source: str
         source_rank.rank_value = rank_value
 
 
+def _market_rank(market: DraftPlayerMarket) -> float | None:
+    for value in (market.adp, market.avg_rank, market.overall_rank):
+        if value is not None:
+            return float(value)
+    return None
+
+
+def _market_sort_rank(market: DraftPlayerMarket) -> float:
+    rank = _market_rank(market)
+    return rank if rank is not None else float("inf")
+
+
+def _special_team_carryover_rows(
+    db: Session,
+    *,
+    source: str,
+    season: int,
+    limit_per_position: int,
+) -> list[DraftPlayerMarket]:
+    selected: list[DraftPlayerMarket] = []
+    limit_per_position = max(0, int(limit_per_position or 0))
+    if limit_per_position <= 0:
+        return selected
+
+    for position in SPECIAL_TEAMS_POSITIONS:
+        rows = (
+            db.query(DraftPlayerMarket)
+            .filter(
+                DraftPlayerMarket.source == source,
+                DraftPlayerMarket.season == season,
+                DraftPlayerMarket.position == position,
+            )
+            .all()
+        )
+        rows.sort(
+            key=lambda market: (
+                _market_sort_rank(market),
+                market.position_rank if market.position_rank is not None else 999,
+                market.source_player_name,
+            )
+        )
+        selected.extend(rows[:limit_per_position])
+
+    selected.sort(
+        key=lambda market: (
+            _market_sort_rank(market),
+            market.position or "",
+            market.source_player_name,
+        )
+    )
+    return selected
+
+
+def _carryover_special_teams(
+    db: Session,
+    *,
+    import_batch: DraftMarketImport,
+    target_source: str,
+    target_season: int,
+    carryover_source: str,
+    carryover_season: int,
+    carryover_target_pick_limit: int,
+    carryover_limit_per_position: int,
+    market_cache: dict[str, DraftPlayerMarket],
+    position_counts: dict[str, int],
+) -> dict[str, Any]:
+    source_rows = _special_team_carryover_rows(
+        db,
+        source=carryover_source,
+        season=carryover_season,
+        limit_per_position=carryover_limit_per_position,
+    )
+    if not source_rows:
+        return {
+            "enabled": True,
+            "source": carryover_source,
+            "season": carryover_season,
+            "rows_imported": 0,
+            "by_position": {},
+        }
+
+    target_pick_limit = max(1, int(carryover_target_pick_limit or DEFAULT_CARRYOVER_TARGET_PICK_LIMIT))
+    slot_start = max(1, target_pick_limit - len(source_rows) + 1)
+    by_position: dict[str, int] = defaultdict(int)
+    imported = 0
+    for offset, source_market in enumerate(source_rows):
+        if source_market.canonical_player_id in market_cache:
+            continue
+        position = (source_market.position or "").upper()
+        if position not in SPECIAL_TEAMS_POSITIONS:
+            continue
+        carryover_rank = float(slot_start + offset)
+        original_rank = _market_rank(source_market)
+        position_counts[position] += 1
+        by_position[position] += 1
+        raw_data = {
+            "carryover": True,
+            "from_source": carryover_source,
+            "from_season": carryover_season,
+            "from_market_id": source_market.id,
+            "original_rank": original_rank,
+            "target_rank": carryover_rank,
+            "source_player_name": source_market.source_player_name,
+            "source_position": source_market.position,
+            "source_team": source_market.team,
+        }
+        market = DraftPlayerMarket(
+            import_id=import_batch.id,
+            source=target_source,
+            season=target_season,
+            canonical_player_id=source_market.canonical_player_id,
+            source_player_name=source_market.source_player_name,
+            team=source_market.team,
+            position=position,
+            position_rank=position_counts[position],
+            bye_week=source_market.bye_week,
+            overall_rank=carryover_rank,
+            adp=carryover_rank,
+            avg_rank=carryover_rank,
+            ecr=None,
+            raw_data=json.dumps(raw_data, sort_keys=True),
+        )
+        db.add(market)
+        db.flush()
+        market_cache[market.canonical_player_id] = market
+        _upsert_source_rank(
+            db,
+            market,
+            f"{carryover_season} DraftSheets carryover rank",
+            original_rank or carryover_rank,
+        )
+        _upsert_source_rank(db, market, "Special teams carryover slot", carryover_rank)
+        imported += 1
+
+    return {
+        "enabled": True,
+        "source": carryover_source,
+        "season": carryover_season,
+        "target_pick_limit": target_pick_limit,
+        "limit_per_position": carryover_limit_per_position,
+        "rows_seen": len(source_rows),
+        "rows_imported": imported,
+        "by_position": dict(by_position),
+    }
+
+
 def ingest_sleeper_adp(
     *,
     season: int,
@@ -167,6 +317,11 @@ def ingest_sleeper_adp(
     replace: bool = True,
     min_import_rows: int = 150,
     max_adp: float = 350,
+    carryover_special_teams: bool = True,
+    carryover_source: str = DEFAULT_CARRYOVER_SOURCE,
+    carryover_season: int | None = None,
+    carryover_target_pick_limit: int = DEFAULT_CARRYOVER_TARGET_PICK_LIMIT,
+    carryover_limit_per_position: int = DEFAULT_CARRYOVER_LIMIT_PER_POSITION,
 ) -> dict[str, Any]:
     """Import Sleeper ADP rows into DraftPlayerMarket."""
     if season < 2020 or season > 2035:
@@ -178,6 +333,10 @@ def ingest_sleeper_adp(
         raise SleeperAdpIngestionError("Source is required")
     min_import_rows = max(1, int(min_import_rows or 1))
     max_adp = max(1, float(max_adp or 350))
+    carryover_source = carryover_source.strip() if carryover_source else ""
+    if carryover_special_teams and not carryover_source:
+        raise SleeperAdpIngestionError("Carryover source is required when special-team carryover is enabled")
+    carryover_season = carryover_season if carryover_season is not None else season - 1
 
     rows = projections if projections is not None else _fetch_sleeper_projections(season)
     adp_stat = ADP_STAT_BY_SCORING[scoring]
@@ -319,7 +478,31 @@ def ingest_sleeper_adp(
             for rank_source, rank_value in item["source_ranks"].items():
                 _upsert_source_rank(db, market, rank_source, rank_value)
 
-        import_batch.rows_imported = len(prepared)
+        carryover_summary: dict[str, Any] | None = {"enabled": False}
+        if carryover_special_teams:
+            target_has_special_teams = any(position_counts.get(position, 0) > 0 for position in SPECIAL_TEAMS_POSITIONS)
+            if target_has_special_teams:
+                carryover_summary = {
+                    "enabled": True,
+                    "skipped": "target_source_already_has_special_teams",
+                    "rows_imported": 0,
+                }
+            else:
+                carryover_summary = _carryover_special_teams(
+                    db,
+                    import_batch=import_batch,
+                    target_source=source,
+                    target_season=season,
+                    carryover_source=carryover_source,
+                    carryover_season=carryover_season,
+                    carryover_target_pick_limit=carryover_target_pick_limit,
+                    carryover_limit_per_position=carryover_limit_per_position,
+                    market_cache=market_cache,
+                    position_counts=position_counts,
+                )
+
+        carryover_rows_imported = int((carryover_summary or {}).get("rows_imported") or 0)
+        import_batch.rows_imported = len(prepared) + carryover_rows_imported
         import_batch.rows_needing_review = 0
         db.commit()
         return {
@@ -331,12 +514,14 @@ def ingest_sleeper_adp(
             "replace": replace,
             "replace_deleted": cleared if replace else None,
             "rows_seen": len(rows),
-            "rows_imported": len(prepared),
+            "rows_imported": len(prepared) + carryover_rows_imported,
+            "sleeper_rows_imported": len(prepared),
             "skipped_no_adp": skipped_no_adp,
             "skipped_position": skipped_position,
             "canonical_created": canonical_created,
             "mapped_from_existing_sleeper_mapping": mapped_from_existing_sleeper_mapping,
             "max_adp": max_adp,
+            "carryover_special_teams": carryover_summary,
         }
     except Exception:
         db.rollback()
@@ -354,6 +539,11 @@ def main() -> None:
     parser.add_argument("--max-adp", type=float, default=350)
     parser.add_argument("--min-import-rows", type=int, default=150)
     parser.add_argument("--no-replace", action="store_true")
+    parser.add_argument("--no-special-team-carryover", action="store_true")
+    parser.add_argument("--carryover-source", default=DEFAULT_CARRYOVER_SOURCE)
+    parser.add_argument("--carryover-season", type=int)
+    parser.add_argument("--carryover-target-pick-limit", type=int, default=DEFAULT_CARRYOVER_TARGET_PICK_LIMIT)
+    parser.add_argument("--carryover-limit-per-position", type=int, default=DEFAULT_CARRYOVER_LIMIT_PER_POSITION)
     args = parser.parse_args()
     summary = ingest_sleeper_adp(
         season=args.season,
@@ -362,6 +552,11 @@ def main() -> None:
         max_adp=args.max_adp,
         min_import_rows=args.min_import_rows,
         replace=not args.no_replace,
+        carryover_special_teams=not args.no_special_team_carryover,
+        carryover_source=args.carryover_source,
+        carryover_season=args.carryover_season,
+        carryover_target_pick_limit=args.carryover_target_pick_limit,
+        carryover_limit_per_position=args.carryover_limit_per_position,
     )
     print(json.dumps(summary, indent=2, sort_keys=True))
 
