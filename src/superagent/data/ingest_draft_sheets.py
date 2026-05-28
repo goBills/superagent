@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from superagent.canonical_resolution import normalize_player_name
 from superagent.db import SessionLocal
 from superagent.models import (
+    CanonicalPlayer,
     CanonicalPlayerAlias,
     DraftImportReview,
     DraftMarketImport,
@@ -26,7 +27,9 @@ from superagent.models import (
     DraftSourceRank,
     ExternalPlayerMapping,
     PlayerSeason,
+    utc_now,
 )
+from superagent.name_resolution import resolve_team
 
 
 class DraftIngestionError(ValueError):
@@ -44,6 +47,65 @@ RANK_SOURCE_COLUMNS = {
     "fpros ecr": "Fpros ECR",
     "fantasypros": "FantasyPros",
     "2qb": "2QB",
+}
+
+TEAM_DEFENSE_NAMES_BY_CODE = {
+    "ARI": "Arizona Cardinals",
+    "ATL": "Atlanta Falcons",
+    "BAL": "Baltimore Ravens",
+    "BUF": "Buffalo Bills",
+    "CAR": "Carolina Panthers",
+    "CHI": "Chicago Bears",
+    "CIN": "Cincinnati Bengals",
+    "CLE": "Cleveland Browns",
+    "DAL": "Dallas Cowboys",
+    "DEN": "Denver Broncos",
+    "DET": "Detroit Lions",
+    "GB": "Green Bay Packers",
+    "HOU": "Houston Texans",
+    "IND": "Indianapolis Colts",
+    "JAX": "Jacksonville Jaguars",
+    "KC": "Kansas City Chiefs",
+    "LV": "Las Vegas Raiders",
+    "LAC": "Los Angeles Chargers",
+    "LAR": "Los Angeles Rams",
+    "MIA": "Miami Dolphins",
+    "MIN": "Minnesota Vikings",
+    "NE": "New England Patriots",
+    "NO": "New Orleans Saints",
+    "NYG": "New York Giants",
+    "NYJ": "New York Jets",
+    "PHI": "Philadelphia Eagles",
+    "PIT": "Pittsburgh Steelers",
+    "SEA": "Seattle Seahawks",
+    "SF": "San Francisco 49ers",
+    "TB": "Tampa Bay Buccaneers",
+    "TEN": "Tennessee Titans",
+    "WAS": "Washington Commanders",
+}
+
+TEAM_CODE_ALIASES = {
+    "ARZ": "ARI",
+    "JAC": "JAX",
+    "LA": "LAR",
+    "STL": "LAR",
+    "OAK": "LV",
+    "LVR": "LV",
+    "SD": "LAC",
+    "WSH": "WAS",
+    "WFT": "WAS",
+}
+
+TEAM_DEFENSE_ALIASES_BY_NORMALIZED = {
+    normalize_player_name(alias): code
+    for code, full_name in TEAM_DEFENSE_NAMES_BY_CODE.items()
+    for alias in (
+        code,
+        full_name,
+        f"{full_name} DST",
+        f"{full_name} D/ST",
+        f"{full_name} Defense",
+    )
 }
 
 
@@ -111,12 +173,54 @@ def _split_position_rank(pos_value: Any) -> tuple[str | None, int | None]:
     text = _safe_text(pos_value)
     if not text:
         return None, None
-    match = re.match(r"^([A-Za-z]+)\s*(\d+)?$", text)
+    match = re.match(r"^([A-Za-z/]+)\s*(\d+)?$", text)
     if not match:
-        return text.upper(), None
-    position = match.group(1).upper()
+        return _normalize_position(text), None
+    position = _normalize_position(match.group(1))
     rank = int(match.group(2)) if match.group(2) else None
     return position, rank
+
+
+def _normalize_position(position: str | None) -> str | None:
+    if not position:
+        return None
+    normalized = position.strip().upper()
+    compact = normalized.replace("/", "")
+    if compact in {"DST", "DEF"}:
+        return "DST"
+    if compact == "PK":
+        return "K"
+    return normalized
+
+
+def _is_team_defense_position(position: str | None) -> bool:
+    return _normalize_position(position) == "DST"
+
+
+def _normalize_team_code(code: str | None) -> str | None:
+    if not code:
+        return None
+    normalized = code.strip().upper()
+    return TEAM_CODE_ALIASES.get(normalized, normalized)
+
+
+def _team_code_from_defense_row(source_player_name: str, team: str | None) -> str | None:
+    candidates = []
+    if team and team.upper() not in {"DST", "D/ST", "DEF"}:
+        candidates.append(team)
+    candidates.append(source_player_name)
+
+    for candidate in candidates:
+        normalized = normalize_player_name(candidate)
+        if normalized in TEAM_DEFENSE_ALIASES_BY_NORMALIZED:
+            return TEAM_DEFENSE_ALIASES_BY_NORMALIZED[normalized]
+
+        resolved = resolve_team(candidate)
+        if resolved.get("ok") and resolved.get("team"):
+            team_code = _normalize_team_code(resolved["team"])
+            if team_code in TEAM_DEFENSE_NAMES_BY_CODE:
+                return team_code
+    return None
 
 
 def _row_to_dict(headers: list[str], values: tuple[Any, ...]) -> dict[str, Any]:
@@ -208,6 +312,11 @@ def _draft_row_payload(row: dict[str, Any], row_number: int) -> dict[str, Any]:
     position, position_rank = _split_position_rank(_lookup(row, "POS", "Position"))
     if not player_name:
         raise DraftIngestionError(f"Row {row_number}: missing player name")
+    if _is_team_defense_position(position):
+        team_code = _team_code_from_defense_row(player_name, team)
+        if team_code:
+            team = team_code
+        position = "DST"
     if not position:
         return {
             "source_player_name": player_name,
@@ -396,6 +505,113 @@ def _upsert_external_mapping(
     mapping.canonical_player_id = canonical_player_id
     mapping.confidence = confidence
     mapping.status = "auto"
+    _resolve_existing_reviews(db, source, season, source_player_name)
+
+
+def _resolve_existing_reviews(db: Session, source: str, season: int, source_player_name: str) -> None:
+    """Mark old pending review rows resolved once the same source row maps cleanly."""
+    for review in (
+        db.query(DraftImportReview)
+        .filter(
+            DraftImportReview.source == source,
+            DraftImportReview.season == season,
+            DraftImportReview.source_player_name == source_player_name,
+            DraftImportReview.status == "pending",
+        )
+        .all()
+    ):
+        review.status = "resolved"
+        review.resolved_at = utc_now()
+
+
+def _ensure_alias(db: Session, canonical_player_id: str, alias: str, source: str) -> None:
+    normalized_alias = normalize_player_name(alias)
+    if not normalized_alias:
+        return
+    existing = (
+        db.query(CanonicalPlayerAlias)
+        .filter(
+            CanonicalPlayerAlias.canonical_player_id == canonical_player_id,
+            CanonicalPlayerAlias.normalized_alias == normalized_alias,
+            CanonicalPlayerAlias.source == source,
+        )
+        .first()
+    )
+    if existing is None:
+        db.add(
+            CanonicalPlayerAlias(
+                canonical_player_id=canonical_player_id,
+                alias=alias,
+                normalized_alias=normalized_alias,
+                source=source,
+            )
+        )
+
+
+def _ensure_team_defense_canonical(
+    db: Session,
+    season: int,
+    team_code: str,
+    source_player_name: str,
+) -> str:
+    canonical_player_id = f"team_dst_{team_code.lower()}"
+    full_name = TEAM_DEFENSE_NAMES_BY_CODE.get(team_code, source_player_name)
+    player = (
+        db.query(CanonicalPlayer)
+        .filter(CanonicalPlayer.canonical_player_id == canonical_player_id)
+        .first()
+    )
+    if player is None:
+        player = CanonicalPlayer(
+            canonical_player_id=canonical_player_id,
+            nflverse_player_id=None,
+            full_name=full_name,
+            normalized_name=normalize_player_name(full_name),
+        )
+        db.add(player)
+        db.flush()
+    else:
+        player.full_name = full_name
+        player.normalized_name = normalize_player_name(full_name)
+
+    season_context = (
+        db.query(PlayerSeason)
+        .filter(
+            PlayerSeason.canonical_player_id == canonical_player_id,
+            PlayerSeason.season == season,
+            PlayerSeason.team == team_code,
+            PlayerSeason.position == "DST",
+        )
+        .first()
+    )
+    if season_context is None:
+        db.add(
+            PlayerSeason(
+                canonical_player_id=canonical_player_id,
+                season=season,
+                team=team_code,
+                position="DST",
+            )
+        )
+
+    aliases_by_normalized = {}
+    for alias in {
+        full_name,
+        source_player_name,
+        f"{full_name} DST",
+        f"{full_name} D/ST",
+        f"{full_name} Defense",
+        f"{team_code} DST",
+        f"{team_code} D/ST",
+    }:
+        normalized_alias = normalize_player_name(alias)
+        if normalized_alias:
+            aliases_by_normalized.setdefault(normalized_alias, alias)
+
+    for alias in aliases_by_normalized.values():
+        _ensure_alias(db, canonical_player_id, alias, "team_defense")
+
+    return canonical_player_id
 
 
 def _queue_draft_review(
@@ -618,15 +834,45 @@ def ingest_draft_market_file(
         market_rank_payloads = []
         for index, row in enumerate(rows, start=2):
             payload = _draft_row_payload(row, index)
-            mapping = _map_draft_player_exact(
-                db=db,
-                source=source,
-                season=season,
-                source_player_name=payload["source_player_name"],
-                position=payload["position"],
-                alias_index=alias_index,
-                mapping_cache=mapping_cache,
+            team_defense_code = (
+                _team_code_from_defense_row(payload["source_player_name"], payload["team"])
+                if _is_team_defense_position(payload["position"])
+                else None
             )
+            if team_defense_code:
+                payload["team"] = team_defense_code
+                payload["position"] = "DST"
+                canonical_player_id = _ensure_team_defense_canonical(
+                    db=db,
+                    season=season,
+                    team_code=team_defense_code,
+                    source_player_name=payload["source_player_name"],
+                )
+                _upsert_external_mapping(
+                    db=db,
+                    source=source,
+                    season=season,
+                    source_player_name=payload["source_player_name"],
+                    canonical_player_id=canonical_player_id,
+                    confidence=1.0,
+                    mapping_cache=mapping_cache,
+                )
+                mapping = {
+                    "ok": True,
+                    "canonical_player_id": canonical_player_id,
+                    "confidence": 1.0,
+                    "status": "auto",
+                }
+            else:
+                mapping = _map_draft_player_exact(
+                    db=db,
+                    source=source,
+                    season=season,
+                    source_player_name=payload["source_player_name"],
+                    position=payload["position"],
+                    alias_index=alias_index,
+                    mapping_cache=mapping_cache,
+                )
             if not mapping["ok"]:
                 rows_needing_review += 1
                 review_rows.append(

@@ -281,6 +281,107 @@ def test_new_rookie_not_in_canonical_identity_goes_to_review(db_session, tmp_pat
     assert db_session.query(DraftImportReview).first().source_player_name == "Future Rookie"
 
 
+def test_team_defense_row_creates_dst_market_without_player_collision(db_session, tmp_path):
+    seed_players(db_session)
+    add_player(db_session, "nfl_dallas_turner", "Dallas Turner", "MIN", "LB", aliases=["Dallas Cowboys"])
+    csv_path = tmp_path / "dst.csv"
+    write_csv(
+        csv_path,
+        [
+            {
+                "Rank": 198,
+                "Player": "Dallas Cowboys",
+                "Team": "DST",
+                "Bye": 14,
+                "POS": "DST15",
+                "AVG": 209,
+                "Fpros ECR": 255,
+            }
+        ],
+    )
+
+    result = ingest_draft_market_file(str(csv_path), "draftsheetsv6", 2025, db=db_session)
+
+    market = db_session.query(DraftPlayerMarket).first()
+    assert result["rows_imported"] == 1
+    assert result["rows_needing_review"] == 0
+    assert db_session.query(DraftImportReview).count() == 0
+    assert market.canonical_player_id == "team_dst_dal"
+    assert market.source_player_name == "Dallas Cowboys"
+    assert market.position == "DST"
+    assert market.position_rank == 15
+    assert market.team == "DAL"
+
+
+def test_d_slash_st_position_normalizes_to_dst(db_session, tmp_path):
+    seed_players(db_session)
+    csv_path = tmp_path / "dslashst.csv"
+    write_csv(
+        csv_path,
+        [
+            {
+                "Rank": 140,
+                "Player": "Philadelphia Eagles",
+                "Team": "DST",
+                "Bye": 10,
+                "POS": "D/ST4",
+                "AVG": 145,
+                "Fpros ECR": 150,
+            }
+        ],
+    )
+
+    result = ingest_draft_market_file(str(csv_path), "draftsheetsv6", 2025, db=db_session)
+
+    market = db_session.query(DraftPlayerMarket).first()
+    assert result["rows_imported"] == 1
+    assert market.canonical_player_id == "team_dst_phi"
+    assert market.position == "DST"
+    assert market.position_rank == 4
+    assert market.team == "PHI"
+
+
+def test_clean_import_resolves_old_pending_team_defense_review(db_session, tmp_path):
+    seed_players(db_session)
+    db_session.add(
+        DraftImportReview(
+            source="draftsheetsv6",
+            season=2025,
+            source_player_name="Baltimore Ravens",
+            candidates="[]",
+            status="pending",
+        )
+    )
+    db_session.commit()
+    csv_path = tmp_path / "old_review.csv"
+    write_csv(
+        csv_path,
+        [
+            {
+                "Rank": 120,
+                "Player": "Baltimore Ravens",
+                "Team": "DST",
+                "Bye": 13,
+                "POS": "DEF2",
+                "AVG": 130,
+                "Fpros ECR": 125,
+            }
+        ],
+    )
+
+    result = ingest_draft_market_file(str(csv_path), "draftsheetsv6", 2025, db=db_session)
+
+    review = db_session.query(DraftImportReview).first()
+    market = db_session.query(DraftPlayerMarket).first()
+    assert result["rows_imported"] == 1
+    assert result["rows_needing_review"] == 0
+    assert review.status == "resolved"
+    assert review.resolved_at is not None
+    assert market.canonical_player_id == "team_dst_bal"
+    assert market.position == "DST"
+    assert market.team == "BAL"
+
+
 def test_position_change_uses_season_context(db_session, tmp_path):
     seed_players(db_session)
     csv_path = tmp_path / "position_change.csv"
