@@ -2637,11 +2637,22 @@
                 for (const chunk of chunks) {
                     if (btn) btn.textContent = `⏳ ${done}/${newPicks.length}`;
                     draftPasteStatus(`Resolving picks… ${done}/${newPicks.length} done`);
-                    const response = await fetch(`/leagues/${leagueId}/draft/picks/bulk`, {
-                        method: 'POST',
-                        headers: authHeaders({'Content-Type': 'application/json'}),
-                        body: JSON.stringify({picks: chunk})
-                    });
+                    // Per-chunk timeout so a slow/hung request can't freeze the UI forever
+                    // (e.g. stuck at "10/22"). On timeout the chunk aborts and the catch below
+                    // recovers — already-loaded chunks are saved; re-paste sends the rest via delta.
+                    const chunkController = new AbortController();
+                    const chunkTimer = setTimeout(() => chunkController.abort(), 45000);
+                    let response;
+                    try {
+                        response = await fetch(`/leagues/${leagueId}/draft/picks/bulk`, {
+                            method: 'POST',
+                            headers: authHeaders({'Content-Type': 'application/json'}),
+                            body: JSON.stringify({picks: chunk}),
+                            signal: chunkController.signal
+                        });
+                    } finally {
+                        clearTimeout(chunkTimer);
+                    }
                     if (!response.ok) {
                         const error = await response.json().catch(() => ({}));
                         throw new Error(error.detail || 'Could not load draft board');
@@ -2673,7 +2684,10 @@
                 }
                 draftPasteStatus(msg, color);
             } catch (error) {
-                draftPasteStatus(`❌ ${error.message} (any picks that loaded are saved — re-paste to send the rest)`, '#dc2626');
+                const msg = error.name === 'AbortError'
+                    ? '⚠️ That round stalled loading — the picks that already loaded are saved. Click Update again to send the rest.'
+                    : `❌ ${error.message} (any picks that loaded are saved — re-paste to send the rest)`;
+                draftPasteStatus(msg, '#b45309');
                 await loadDraftBoard();  // reflect whatever chunks did land
             } finally {
                 if (btn) { btn.disabled = false; btn.textContent = original; }
