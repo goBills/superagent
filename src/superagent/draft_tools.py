@@ -331,6 +331,37 @@ def _passes_sheet_position_filter(
     return (market.position or "").upper() in {"K", "DST", "D/ST", "DEF"}
 
 
+def _fill_draftable_rank_gaps(
+    rows: list[dict[str, Any]],
+    draftable_rank_limit: int,
+    remaining_picks: int,
+    position: str | None,
+) -> list[dict[str, Any]]:
+    """Keep the sheet deep enough when source ranks are sparse or gapped.
+
+    ADP/rank values are not guaranteed to be dense integers. A 12x16 league needs
+    192 available rows, but a workbook can have fewer than 192 players with
+    rank <= 192 because some ranked rows are unresolved or ranks skip values.
+    For the all-position live sheet, backfill with the next best ranked players
+    beyond the nominal rank window until the remaining draft slots are covered.
+    Explicit position views remain literal filtered views.
+    """
+    in_window: list[dict[str, Any]] = []
+    overflow: list[dict[str, Any]] = []
+    for row in rows:
+        effective_rank = row.get("effective_rank")
+        if effective_rank is None:
+            continue
+        if effective_rank <= draftable_rank_limit:
+            in_window.append(row)
+        else:
+            overflow.append(row)
+
+    if position or remaining_picks <= 0 or len(in_window) >= remaining_picks:
+        return in_window
+    return in_window + overflow[: remaining_picks - len(in_window)]
+
+
 def _market_payload(
     market: DraftPlayerMarket,
     settings: LeagueSettings,
@@ -700,6 +731,12 @@ def get_draft_sheet(
         drafted_names = _drafted_names(db, league_id, season)
         draftable_rank_limit = _draftable_rank_limit(settings)
         total_draft_picks = draftable_rank_limit
+        drafted_count = (
+            db.query(LeagueDraftPick)
+            .filter(LeagueDraftPick.league_id == league_id, LeagueDraftPick.season == season)
+            .count()
+        )
+        remaining_picks = max(0, total_draft_picks - drafted_count)
 
         roster_names = _stored_roster_names(db, league_id, season)
         roster_markets, _ = _roster_markets(db, roster_names, season, source=source)
@@ -724,7 +761,7 @@ def get_draft_sheet(
                     continue
             payload = _market_payload(market, settings, bye_week_season=bye_week_season)
             effective_rank = payload["effective_rank"]
-            if mode == "available" and (effective_rank is None or effective_rank > draftable_rank_limit):
+            if mode == "available" and effective_rank is None:
                 continue
             if mode == "available" and not _passes_sheet_position_filter(
                 market,
@@ -748,6 +785,13 @@ def get_draft_sheet(
                 -(row["value_delta"] or 0),
             )
         )
+        if mode == "available":
+            rows = _fill_draftable_rank_gaps(
+                rows=rows,
+                draftable_rank_limit=draftable_rank_limit,
+                remaining_picks=remaining_picks,
+                position=position,
+            )
 
         best_available_id = rows[0]["canonical_player_id"] if rows else None
         fit_candidates = [
@@ -774,13 +818,8 @@ def get_draft_sheet(
             rows = [row for row in rows if target_badges.intersection(row.get("badges", []))]
 
         limit = max(1, min(limit, 300))
-        drafted_count = (
-            db.query(LeagueDraftPick)
-            .filter(LeagueDraftPick.league_id == league_id, LeagueDraftPick.season == season)
-            .count()
-        )
-        remaining_picks = max(0, total_draft_picks - drafted_count)
-        pool_shortfall = max(0, remaining_picks - len(rows)) if mode == "available" else 0
+        show_pool_shortfall = mode == "available" and not position and not targets
+        pool_shortfall = max(0, remaining_picks - len(rows)) if show_pool_shortfall else 0
         visible_rows = rows[:limit]
         return _response(
             True,

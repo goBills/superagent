@@ -334,6 +334,66 @@ def test_get_draft_sheet_summary_exposes_league_size_math():
     assert summary["pool_shortfall"] == 188
 
 
+def test_get_draft_sheet_backfills_sparse_rank_window_to_remaining_picks():
+    season = 2030
+    source = f"draft-gap-{uuid.uuid4().hex}"
+    with SessionLocal() as db:
+        user = User(email=f"gap-{uuid.uuid4().hex}@example.com", password_hash="hash")
+        db.add(user)
+        db.flush()
+        league = League(user_id=user.id, league_name="Rank Gap League", league_type="snake")
+        db.add(league)
+        db.flush()
+        db.add(LeagueSettings(league_id=league.id, num_teams=2, roster_spots=2, qb_slots=1))
+        import_batch = DraftMarketImport(
+            source=source,
+            season=season,
+            file_name=f"{source}.csv",
+            rows_seen=4,
+            rows_imported=4,
+        )
+        db.add(import_batch)
+        db.flush()
+        rows = [
+            ("nfl_gap_one", "Gap One", "RB", "BUF", 1),
+            ("nfl_gap_two", "Gap Two", "WR", "BUF", 2),
+            ("nfl_gap_three", "Gap Three", "RB", "BUF", 7),
+            ("nfl_gap_four", "Gap Four", "WR", "BUF", 8),
+        ]
+        for canonical_id, name, position, team, adp in rows:
+            add_player(db, canonical_id, name, team, position, season)
+            db.add(
+                DraftPlayerMarket(
+                    import_id=import_batch.id,
+                    source=source,
+                    season=season,
+                    canonical_player_id=canonical_id,
+                    source_player_name=name,
+                    position=position,
+                    team=team,
+                    adp=adp,
+                    ecr=adp,
+                    value=10,
+                )
+            )
+        db.commit()
+        league_id = league.id
+
+    result = get_draft_sheet(league_id=league_id, season=season, source=source, limit=10)
+
+    assert result["ok"] is True
+    assert [row["player_name"] for row in result["data"]["rows"]] == [
+        "Gap One",
+        "Gap Two",
+        "Gap Three",
+        "Gap Four",
+    ]
+    summary = result["data"]["summary"]
+    assert summary["total_draft_picks"] == 4
+    assert summary["available_count"] == 4
+    assert summary["pool_shortfall"] == 0
+
+
 def test_get_draft_sheet_includes_depth_k_and_dst_for_large_league_pool():
     league_id, season, source = setup_draft_fixture()
     with SessionLocal() as db:
