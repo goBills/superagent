@@ -148,6 +148,31 @@ def test_bulk_draft_picks_records_board_and_roster():
     assert players["other"] not in roster_names
 
 
+def test_bulk_draft_picks_batch_resolves_exact_board_without_slow_resolver(monkeypatch):
+    headers, league_id, season, players = setup_draft_league_api()
+
+    def fail_resolve(*args, **kwargs):
+        raise AssertionError("exact bulk names should resolve from preloaded market/alias data")
+
+    monkeypatch.setattr("superagent.api._resolve_draft_pick_player", fail_resolve)
+
+    payload = {
+        "season": season,
+        "source": players["source"],
+        "picks": [
+            {"pick_number": 1, "player_name": players["other"], "team_name": "Other", "is_mine": False},
+            {"pick_number": 2, "player_name": players["mine"], "team_name": "Your Team", "is_mine": True},
+        ],
+    }
+    response = client.post(f"/leagues/{league_id}/draft/picks/bulk", json=payload, headers=headers)
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert all(p["mapping_status"] == "mapped" for p in data["picks"]), data["picks"]
+    assert data["summary"]["resolved_in_batch"] == 2
+    assert data["summary"]["resolved_by_fallback"] == 0
+
+
 def test_bulk_draft_picks_handles_non_contiguous_board_and_summary():
     headers, league_id, season, players = setup_draft_league_api()
     payload = {

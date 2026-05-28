@@ -33,6 +33,7 @@ from superagent.db import get_db, init_db
 from superagent.draft_tools import get_draft_sheet
 from superagent.espn_integration import ingest_espn_league
 from superagent.models import (
+    CanonicalPlayerAlias,
     ConversationSession,
     DraftImportReview,
     DraftPlayerMarket,
@@ -602,6 +603,102 @@ def _resolve_draft_pick_player(
     }
 
 
+class _BulkDraftPickResolver:
+    """Batch draft-pick name resolution for pasted boards.
+
+    Bulk pastes are dominated by exact player names from the draft room. Preloading
+    exact market rows and aliases lets those resolve in memory, while preserving the
+    slower fuzzy resolver for misspellings and review cases.
+    """
+
+    def __init__(self, db: Session, season: int, source: Optional[str] = None):
+        self.db = db
+        self.season = season
+        self.source = source
+        self.resolved_in_batch = 0
+        self.resolved_by_fallback = 0
+        self._market_by_name: Dict[str, DraftPlayerMarket] = {}
+        self._market_name_conflicts: set[str] = set()
+        self._market_by_canonical_id: Dict[str, DraftPlayerMarket] = {}
+        self._canonical_id_by_alias: Dict[str, str] = {}
+        self._load_markets()
+        self._load_aliases()
+
+    def _load_markets(self) -> None:
+        query = self.db.query(DraftPlayerMarket).filter(DraftPlayerMarket.season == self.season)
+        if self.source:
+            query = query.filter(DraftPlayerMarket.source == self.source)
+        for market in query.order_by(DraftPlayerMarket.id.asc()).all():
+            if market.canonical_player_id and market.canonical_player_id not in self._market_by_canonical_id:
+                self._market_by_canonical_id[market.canonical_player_id] = market
+
+            normalized = normalize_player_name(market.source_player_name)
+            if not normalized or normalized in self._market_name_conflicts:
+                continue
+            existing = self._market_by_name.get(normalized)
+            if existing is None:
+                self._market_by_name[normalized] = market
+                continue
+            if existing.canonical_player_id != market.canonical_player_id:
+                self._market_by_name.pop(normalized, None)
+                self._market_name_conflicts.add(normalized)
+
+    def _load_aliases(self) -> None:
+        alias_ids: Dict[str, set[str]] = {}
+        for normalized_alias, canonical_player_id in (
+            self.db.query(CanonicalPlayerAlias.normalized_alias, CanonicalPlayerAlias.canonical_player_id)
+            .filter(CanonicalPlayerAlias.normalized_alias.isnot(None))
+            .all()
+        ):
+            normalized = normalize_player_name(normalized_alias)
+            if not normalized:
+                continue
+            alias_ids.setdefault(normalized, set()).add(canonical_player_id)
+
+        self._canonical_id_by_alias = {
+            normalized: next(iter(canonical_ids))
+            for normalized, canonical_ids in alias_ids.items()
+            if len(canonical_ids) == 1
+        }
+
+    @staticmethod
+    def _payload(
+        cleaned: str,
+        market: Optional[DraftPlayerMarket] = None,
+        canonical_player_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        resolved_canonical_id = market.canonical_player_id if market else canonical_player_id
+        return {
+            "source_player_name": market.source_player_name if market else cleaned,
+            "position": market.position if market else None,
+            "canonical_player_id": resolved_canonical_id,
+            "mapping_status": "mapped" if market is not None or resolved_canonical_id else "needs_review",
+        }
+
+    def resolve(self, player_name: str) -> Dict[str, Any]:
+        cleaned = player_name.strip()
+        if not cleaned:
+            raise HTTPException(status_code=400, detail="player_name is required")
+
+        normalized = normalize_player_name(cleaned)
+        market = self._market_by_name.get(normalized)
+        if market is not None:
+            self.resolved_in_batch += 1
+            return self._payload(cleaned, market=market)
+
+        canonical_player_id = self._canonical_id_by_alias.get(normalized)
+        if canonical_player_id:
+            self.resolved_in_batch += 1
+            return self._payload(
+                cleaned,
+                market=self._market_by_canonical_id.get(canonical_player_id),
+                canonical_player_id=canonical_player_id,
+            )
+
+        self.resolved_by_fallback += 1
+        return _resolve_draft_pick_player(self.db, cleaned, self.season, source=self.source)
+
+
 def _round_for_pick(pick_number: int, settings: Optional[LeagueSettings]) -> int:
     num_teams = settings.num_teams if settings else 12
     return ((pick_number - 1) // max(1, int(num_teams or 12))) + 1
@@ -623,11 +720,26 @@ def _draft_pick_to_response(pick: LeagueDraftPick) -> DraftPickResponse:
     )
 
 
+def _assign_draft_pick_fields(
+    pick: LeagueDraftPick,
+    resolved: Dict[str, Any],
+    round_num: int,
+    team_name: str,
+) -> None:
+    pick.round_num = round_num
+    pick.fantasy_team_name = team_name
+    pick.source_player_name = resolved["source_player_name"]
+    pick.position = resolved["position"]
+    pick.canonical_player_id = resolved["canonical_player_id"]
+    pick.mapping_status = resolved["mapping_status"]
+
+
 def _upsert_draft_pick(
     db: Session,
     league: League,
     request: DraftPickRequest,
     default_team_name: str,
+    resolved: Optional[Dict[str, Any]] = None,
 ) -> LeagueDraftPick:
     if request.pick_number < 1:
         raise HTTPException(status_code=400, detail="pick_number must be positive")
@@ -635,7 +747,7 @@ def _upsert_draft_pick(
     if season is None:
         raise HTTPException(status_code=400, detail="No draft market data imported")
 
-    resolved = _resolve_draft_pick_player(db, request.player_name, season, source=request.source)
+    resolved = resolved or _resolve_draft_pick_player(db, request.player_name, season, source=request.source)
     round_num = _round_for_pick(request.pick_number, league.settings)
     team_name = (request.team_name or default_team_name).strip() or default_team_name
 
@@ -657,12 +769,7 @@ def _upsert_draft_pick(
         )
         db.add(pick)
 
-    pick.round_num = round_num
-    pick.fantasy_team_name = team_name
-    pick.source_player_name = resolved["source_player_name"]
-    pick.position = resolved["position"]
-    pick.canonical_player_id = resolved["canonical_player_id"]
-    pick.mapping_status = resolved["mapping_status"]
+    _assign_draft_pick_fields(pick, resolved, round_num, team_name)
     return pick
 
 
@@ -1572,6 +1679,14 @@ def record_draft_picks_bulk(
     if season is None:
         raise HTTPException(status_code=400, detail="No draft market data imported")
 
+    resolver = _BulkDraftPickResolver(db, season, source=request.source)
+    existing_by_pick = {
+        pick.pick_num: pick
+        for pick in db.query(LeagueDraftPick)
+        .filter(LeagueDraftPick.league_id == league.id, LeagueDraftPick.season == season)
+        .all()
+    }
+
     recorded = 0
     updated = 0
     skipped = 0
@@ -1582,15 +1697,7 @@ def record_draft_picks_bulk(
         if not item.player_name or not item.player_name.strip() or item.pick_number < 1:
             skipped += 1
             continue
-        existing = (
-            db.query(LeagueDraftPick)
-            .filter(
-                LeagueDraftPick.league_id == league.id,
-                LeagueDraftPick.season == season,
-                LeagueDraftPick.pick_num == item.pick_number,
-            )
-            .first()
-        )
+        existing = existing_by_pick.get(item.pick_number)
         default_team = "My Team" if item.is_mine else "Other"
         team_name = (item.team_name or default_team).strip() or default_team
         if _draft_pick_is_unchanged(existing, item.player_name, team_name):
@@ -1598,14 +1705,20 @@ def record_draft_picks_bulk(
                 skipped += 1
                 unchanged += 1
                 continue
-        pick_request = DraftPickRequest(
-            pick_number=item.pick_number,
-            player_name=item.player_name,
-            team_name=item.team_name,
-            season=season,
-            source=request.source,
-        )
-        pick = _upsert_draft_pick(db, league, pick_request, default_team_name=default_team)
+        resolved = resolver.resolve(item.player_name)
+        round_num = _round_for_pick(item.pick_number, league.settings)
+        pick = existing
+        if pick is None:
+            pick = LeagueDraftPick(
+                league_id=league.id,
+                season=season,
+                pick_num=item.pick_number,
+                round_num=round_num,
+            )
+            db.add(pick)
+            existing_by_pick[item.pick_number] = pick
+
+        _assign_draft_pick_fields(pick, resolved, round_num, team_name)
         if item.is_mine:
             pick.fantasy_team_name = team_name
             _upsert_my_roster_player(db, league, pick, team_name)
@@ -1637,6 +1750,8 @@ def record_draft_picks_bulk(
             "needs_review": needs_review,
             "needs_review_players": needs_review_players,
             "total_on_board": len(picks),
+            "resolved_in_batch": resolver.resolved_in_batch,
+            "resolved_by_fallback": resolver.resolved_by_fallback,
         },
     )
 
