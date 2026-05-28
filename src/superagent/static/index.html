@@ -2743,7 +2743,12 @@
         // Prepend league/season/roster/board context to a free-text draft question.
         // Returns the question unchanged if it isn't draft-related.
         function augmentDraftQuestion(question) {
-            if (!looksLikeDraftQuestion(question)) return question;
+            // In the Draft workspace every question is draft-relevant — including terse
+            // follow-ups ("next for me", "what about RB?") that the keyword heuristic misses.
+            // Always attach live league/roster/pick/board context there so the agent KNOWS
+            // the current state instead of asking. Outside Draft, gate on detected intent.
+            const inDraft = cockpit && cockpit.classList.contains('mode-draft');
+            if (!inDraft && !looksLikeDraftQuestion(question)) return question;
             const leagueId = draftLeagueIdValue();
             const pick = draftPick.value.trim();
             const roster = rosterPhrase();
