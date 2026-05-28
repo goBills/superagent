@@ -943,6 +943,10 @@
             border: 1px solid var(--border);
             border-radius: 999px;
             box-shadow: var(--shadow);
+            /* Stay above the answer backdrop (z-index 980) so you can type a follow-up
+               while the conversation overlay is open — clicking the input must not dismiss it. */
+            position: relative;
+            z-index: 990;
         }
 
         .command-bar:focus-within {
