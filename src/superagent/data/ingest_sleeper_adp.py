@@ -243,7 +243,9 @@ def _carryover_special_teams(
         }
 
     target_pick_limit = max(1, int(carryover_target_pick_limit or DEFAULT_CARRYOVER_TARGET_PICK_LIMIT))
-    slot_start = max(1, target_pick_limit - len(source_rows) + 1)
+    # Put carried K/DST ahead of the final fringe-skill band so a 12x16 board
+    # reserves late slots for them instead of appending them beyond the cut line.
+    slot_start = max(1, target_pick_limit - (2 * len(source_rows)) + 1)
     by_position: dict[str, int] = defaultdict(int)
     imported = 0
     for offset, source_market in enumerate(source_rows):

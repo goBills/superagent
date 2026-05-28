@@ -184,8 +184,12 @@ def test_ingest_sleeper_adp_carries_over_late_k_and_dst_rows():
         db.commit()
 
         projections = [
-            sleeper_projection(f"skill-{idx}-{suffix}", f"Skill Player {idx}", "WR", "BUF", float(idx))
-            for idx in range(1, 7)
+            sleeper_projection(f"skill-1-{suffix}", "Skill Player 1", "WR", "BUF", 1.0),
+            sleeper_projection(f"skill-2-{suffix}", "Skill Player 2", "WR", "BUF", 2.0),
+            sleeper_projection(f"skill-3-{suffix}", "Skill Player 3", "WR", "BUF", 3.0),
+            sleeper_projection(f"skill-4-{suffix}", "Skill Player 4", "WR", "BUF", 4.0),
+            sleeper_projection(f"skill-5-{suffix}", "Skill Player 5", "WR", "BUF", 20.0),
+            sleeper_projection(f"skill-6-{suffix}", "Skill Player 6", "WR", "BUF", 30.0),
         ]
         summary = ingest_sleeper_adp(
             season=2026,
@@ -219,7 +223,7 @@ def test_ingest_sleeper_adp_carries_over_late_k_and_dst_rows():
         league = League(user_id=user.id, league_name="Carry League", league_type="snake")
         db.add(league)
         db.flush()
-        db.add(LeagueSettings(league_id=league.id, num_teams=4, roster_spots=2))
+        db.add(LeagueSettings(league_id=league.id, num_teams=3, roster_spots=2))
         db.commit()
         league_id = league.id
 
@@ -228,8 +232,8 @@ def test_ingest_sleeper_adp_carries_over_late_k_and_dst_rows():
     assert summary["carryover_special_teams"]["rows_imported"] == 2
     assert summary["carryover_special_teams"]["by_position"] == {"K": 1, "DST": 1}
     assert carried_rows == [
-        ("Brandon Aubrey", "K", 7.0),
-        ("San Francisco 49ers", "DST", 8.0),
+        ("Brandon Aubrey", "K", 5.0),
+        ("San Francisco 49ers", "DST", 6.0),
     ]
     assert rank_sources >= {
         "2025 DraftSheets carryover rank",
@@ -238,6 +242,8 @@ def test_ingest_sleeper_adp_carries_over_late_k_and_dst_rows():
 
     sheet = get_draft_sheet(league_id=league_id, season=2026, source=target_source, limit=20)
     names = [row["player_name"] for row in sheet["data"]["rows"]]
-    assert sheet["data"]["summary"]["available_count"] == 8
+    assert sheet["data"]["summary"]["available_count"] == 6
     assert "Brandon Aubrey" in names
     assert "San Francisco 49ers" in names
+    assert "Skill Player 5" not in names
+    assert "Skill Player 6" not in names
