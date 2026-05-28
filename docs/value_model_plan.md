@@ -1,0 +1,75 @@
+# Superagent Value Model — design plan
+
+**Owner of design/validation/UX:** Claude · **Owner of data pipeline/compute/tests:** Codex · **Status:** Planning (2026-05-28)
+
+The proprietary "expected value" signal that replaces a licensed ECR (we parked FantasyPros for commercial-licensing reasons). It is the second signal that, compared against **Sleeper ADP (the market)**, produces the value/faller signal — and it's IP we own, built from data we own.
+
+> **Guiding principle:** a crude metric is *worse* than trusting ADP. This does not drive the board until it **beats or matches ADP in backtest**. Until then it's a secondary "value lens," not the ranking.
+
+---
+
+## 1. The metric: Value Over Replacement (VOR), projection-based
+
+For each player: **project 2026 fantasy points**, then **VOR = projected_points − replacement_baseline(position, league settings)**. Rank all players by VOR → `superagent_rank`.
+
+- **Why VOR, not raw points or raw rank:** it normalizes cross-position scarcity (why an elite TE/QB can outrank a mid RB). Replacement baseline = expected points of the last startable player at that position for the league (12-team 1-QB → QB ~12–15, RB ~30, etc.). We already have `num_teams` / `roster_spots` / `superflex`, so the baseline is league-settings-aware. VOR is the established value-based-drafting foundation — grounded, explainable, ours to compute.
+
+## 2. Inputs (all already in our DuckDB — grounded)
+
+| Need | Source (table.cols) |
+|---|---|
+| Production basis | `weekly.fantasy_points_ppr`, passing/rushing/receiving lines, `*_epa` (2020–24; 2025 pbp-derived via `plays`/`player_season_stats`) |
+| Opportunity (sticky) | `weekly.target_share`, `air_yards_share`, `wopr`, `carries`, `targets` |
+| Age curve | `rosters.birth_date` → age, `rosters.years_exp` |
+| Rookie draft capital | `rosters.draft_number`, `draft_club`, `rookie_year`, `entry_year` |
+| Role / landing spot | `rosters.depth_chart_position` (+ Sleeper current context) |
+| Team environment | `team_week_epa`, `game_team_summary` (offensive/defensive EPA) |
+| Market (compare against) | Sleeper ADP — `DraftPlayerMarket(source="sleeper_adp", season=2026)` |
+
+## 3. Projection model
+
+**Established players (have NFL history):**
+- **Opportunity-weighted production** — fantasy points follow volume more than efficiency. Blend recency-weighted `fantasy_points_ppr`/game (last 1–2 seasons) regressed toward a position/role mean, anchored by sticky opportunity (`wopr`, `target_share` for pass-catchers; carry share + routes for RB; dropbacks/attempts for QB).
+- **Adjustments (modest, evidence-based only):**
+  - **Age curve** by position (RB decline ~27+, WR peak ~25–29, QB/TE longer) — a multiplier.
+  - **Role/team change** from current context (`current_team_differs`, `depth_chart_position`) — only conservative, evidence-based role shifts (starter vs backup). **No speculative "new scheme will boost him"** — reuse the narrative guard.
+  - **Games-played expectation** from `injury_status` + durability history.
+
+**Rookies (cold-start — no NFL history):**
+- **Draft capital is the #1 rookie predictor.** Fit a `draft_number → rookie fantasy points` curve **per position, on our own 2020–24 rookie classes** (`rosters.draft_number` joined to that player's rookie-season `weekly` output). This is self-calibrated from data we own.
+- Adjust by **landing spot/role** (`depth_chart_position`). MVP rookie projection = f(draft_number, position, role). Honest: rookies are market-anchored where our basis is thin.
+
+## 4. Board integration
+
+- Compute `projected_points_ppr`, `vor`, `superagent_rank` per player for 2026.
+- **Storage:** write a market-style row `DraftPlayerMarket(source="superagent_value", season=2026)` carrying our rank/projection, so the existing board-merge picks it up (or add `projected_points`/`vor`/`superagent_rank` to the merged row — Codex's call).
+- **Value signal:** `value_delta = sleeper_adp − superagent_rank`. Positive = market drafting them later than our value → **Value/sleeper**; negative = market reaching → **Reach/fade**. This replaces today's placeholder `value_delta`.
+- **Default board ordering stays ADP** (market-trusted) until the metric is backtested-strong; `superagent_rank` drives `value_delta` + Value/Reach badges. Later: optional "Market ADP ↔ Superagent Value" toggle.
+
+## 5. Validation — the quality bar (gates everything)
+
+- **Backtest harness:** compute the metric for season N using only data ≤ N−1; score `superagent_rank` against actual season-N fantasy finish. Run 2022, 2023, 2024.
+- **Metrics:** rank correlation (Spearman) vs actual; top-N hit rate (e.g., our top-24 RB vs actual top-24); and **value-pick precision** — did our positive-`value_delta` players actually beat their ADP cost?
+- **Bar:** must correlate with actual finish **at least as well as ADP did** (the market is efficient — ADP is a strong baseline). If it can't match ADP overall → keep ADP as the spine, surface ours only as a value lens. **Ship the backtest numbers; don't hand-wave.**
+
+## 6. Risks & guards
+
+- Crude metric worse than ADP → **backtest gate before it drives anything.**
+- Over-speculation on situations → evidence-based adjustments only; narrative guard on the agent's explanations.
+- 2025 is pbp-derived (weekly stops at 2024) → derive 2025 features from `plays`/`player_season_stats` consistently.
+- Don't override market ordering until proven.
+
+## 7. Division of labor
+
+**Claude:** this design; VOR/replacement math + league-settings awareness; age-curve + draft-capital curve definitions; validation criteria + reviewing backtest results; cockpit UX for value (`value_delta` display, Value/Reach badges); the agent's grounded, narrative-guarded explanation of *why* a player is value.
+
+**Codex:** feature pipeline (extract per-player features from `weekly`/`plays`/`rosters`); implement projection→VOR→rank as a deterministic job; write results to the board (market row/columns); the backtest harness mechanics; tests.
+
+**Shared:** calibrating curves on historical data; agreeing the board-merge contract.
+
+## 8. Phased build order
+
+1. **Pipeline proof** — established-player projection (recent production + `wopr`/shares) → VOR → rank → backtest vs 2024 actual *and* vs ADP. No rookies/age yet. **Gate: matches/beats ADP.**
+2. **Depth** — add age curves + games-played + rookie draft-capital model (fit on 2020–24 rookies). Re-backtest.
+3. **Surface** — wire `value_delta` + Value/Reach badges into the cockpit (Claude) + agent explanation. Board stays ADP-ordered; our metric drives value flags.
+4. **Later** — if backtest is strong, optionally make `superagent_rank` a selectable board spine (Market ↔ Value toggle).
