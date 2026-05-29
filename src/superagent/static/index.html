@@ -816,6 +816,9 @@
             border-radius: 999px;
             padding: 2px 6px;
         }
+        /* Beta = live but new (Trade). Distinct from grey "Soon" (not built yet). */
+        .ws-beta { background: #dcfce7; color: #15803d; }
+        .ws-tab.active .ws-soon { background: rgba(255,255,255,0.25); color: #fff; }
 
         /* Coming-soon placeholder for non-draft workspaces */
         .mode-placeholder { display: none; padding: 44px 24px; text-align: center; }
@@ -1661,7 +1664,7 @@
                 <button class="ws-tab active" data-ws="draft" onclick="setWorkspace('draft', this)" type="button">🏈 Draft</button>
                 <button class="ws-tab" data-ws="roster" onclick="setWorkspace('roster', this)" type="button">📋 Roster <span class="ws-soon">Soon</span></button>
                 <button class="ws-tab" data-ws="waivers" onclick="setWorkspace('waivers', this)" type="button">🔄 Waivers <span class="ws-soon">Soon</span></button>
-                <button class="ws-tab" data-ws="trade" disabled type="button">🤝 Trade <span class="ws-soon">Soon</span></button>
+                <button class="ws-tab" data-ws="trade" onclick="setWorkspace('trade', this)" type="button">🤝 Trade <span class="ws-soon ws-beta">Beta</span></button>
             </div>
             <div class="cockpit-head" id="cockpitHead">
                 <div class="cockpit-head-titles">
