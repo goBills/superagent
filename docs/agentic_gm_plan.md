@@ -1,6 +1,6 @@
-# Agentic GM — design plan & labor split (PROPOSAL for Codex review)
+# Agentic GM — design plan & labor split
 
-**Authors:** Claude (draft) → Codex (review/agree) → Rob (greenlight) · **Status:** Codex-reviewed proposal, awaiting Rob greenlight, 2026-05-29
+**Authors:** Claude (draft) → Codex (review/agree) → Rob (greenlight) · **Status:** ✅ AGREED — ready to build v1 (Rob greenlit 2026-05-29). See §9 for the locked contract and §10 for the v1 build slice. §§1–8 are the design rationale that got us here.
 **Origin:** First outside user (Salam) + Rob: post-draft engagement is dead; an agentic co-manager "two weeks ahead," with **trades as the hero feature**, is the wedge vs Yahoo/ESPN/Sleeper (which just repackage generic blurbs).
 
 > This is a proposal. Codex: please react inline — agree, push back, or re-scope the split. Goal we both sign up to: **make this the best fantasy tool, not just a draft toy.** Nothing here ships until we agree the split and Rob greenlights.
@@ -167,3 +167,45 @@ The first numerical pass can use `trade_value_score` plus roster-fit deltas. If 
 - **Scope of v1** — is preseason trade-finder compelling enough to demo to friends now, or do we wait for live-season signal? (Claude's view: v1 proves the engine + UX and is a strong demo; build it.)
 - **"Make it fun"** — is the win a slick finder UI, a weekly "trade block" digest, gamified pitch suggestions? Worth a product riff with Rob.
 - Does this become the product's center of gravity (in-season co-manager) with draft as the on-ramp? Likely yes — worth naming explicitly.
+
+---
+
+## 9. AGREED contract & seam (Claude + Codex + Rob, 2026-05-29) — LOCKED
+
+The design converged across the Claude↔Codex review. These are decisions, not proposals:
+
+**A. Product shape — companion now, system-of-record-ready underneath.** The **league data layer is our canonical model** (rosters, transactions, waivers, schedules, trades, lineups). Sleeper/Yahoo/ESPN/paste are **sync adapters that write into it** — same source-agnostic pattern as `DraftPlayerMarket`. No full league hosting now, but the internal model is designed so it *can* become the system of record later (graduate if APIs become the bottleneck). Companion is go-to-market; replacement is not foreclosed.
+
+**B. `trade_value_score` — 0–100, deterministic, explainable, NO prediction claim.** Composed from exposed components so it's never a black box: `effective_rank`/ADP + positional scarcity/VOR + `roster_role` + `data_quality`. The agent can always decompose it ("78 = top-15 ADP, RB-scarce, your RB3 → surplus"). Predictive "stock up/down" is a **v2** field, gated on live weekly data + a validation backtest. v1 explains itself as *"market value + roster leverage,"* never *"our model knows his stock."*
+
+**C. Fairness objective = mutual lineup improvement, NOT projected points.** A candidate trade is good iff **`lineup_value_delta` > 0 for BOTH teams**, where lineup value = sum of `trade_value_score` over each team's optimal starting lineup. Market value-gap tolerance is demoted to an **anti-fleece guardrail**, not the objective. **Naming (Codex correction, important):** call it `starter_utility_delta` / `lineup_value_delta` — *never* `projected_points_delta` — because we have no validated projection engine. The product line is **"both rosters get more useful," not "our points model knows the future."** (v2: once projections earn it via backtest, this can become true projected points.)
+
+**D. The seam (who computes what):**
+- **Codex supplies** the canonical league/trade context: `trade_value_score` + its components, `data_quality`, position eligibility, league settings, and roster state (per the `TradeContext` / `PlayerTradeValue` shapes in §6.5).
+- **Claude owns** the matching layer: optimal starting-lineup fill, `lineup_value_delta`, candidate-deal generation, the fairness gate, trade rationale + pitch.
+- **Critical nuance (Codex):** `roster_role` from Codex is the **pre-trade snapshot only** — *not* the source of truth after a swap. Claude's lineup optimizer **recomputes** role/utility post-trade from each team's full roster (who starts changes after the deal).
+
+**E. Sequencing.** Sleeper read-API first (may need *no* OAuth for the first read-only slice, depending on fields); **paste stays the fallback**; Yahoo later (heavier OAuth). **Clerk/auth moves near-term** once real league sync starts (companion = real users connecting real leagues).
+
+## 10. v1 build slice — Trade Finder on a drafted league
+
+The first proof. One wow moment, demoable on any league already drafted in Superagent (uses the data we have *today* — no live-season data, no league sync required). We learn from this before building the rest.
+
+**The flow (7 steps):**
+1. **Reconstruct all teams** from `LeagueDraftPick` (every pick carries `fantasy_team_name`). — *Codex*
+2. **Compute `trade_value_score` + components** per rostered player (ADP/effective_rank + positional scarcity/VOR + roster_role + data_quality). — *Codex*
+3. **Find surplus/need matches** — per team, detect positional surplus vs need; find complementary team pairs (my surplus = your need, and vice versa). — *Claude*
+4. **Generate candidate deals** across matched pairs (1-for-1 first, multi-player to balance). — *Claude*
+5. **Require mutual `lineup_value_delta` > 0** — both teams' optimal starting-lineup value rises (recomputed post-trade). — *Claude*
+6. **Value-gap = anti-fleece guardrail only** (reject lopsided deals even if one lineup improves a lot). — *Claude*
+7. **Show the deal + pitch** — "give X / get Y," *why it helps me*, *why they'd say yes*, agent-written and narrative-guarded, in a Trade Mode card. — *Claude*
+
+**Explicitly OUT of v1 slice** (important, not blockers — we ship the slice without them):
+- Weekly GM Briefing / engagement loop (the retention mechanic — next, after the finder proves out).
+- Pricing / GTM / first-10-users plan.
+- Live-season "stock up/down," `two_week_outlook` (v2, needs in-season data).
+- League sync / OAuth (v1 runs on the drafted board; sync is what makes it *in-season real* later).
+
+**Definition of done for the slice:** on a real drafted league, the Trade tab surfaces 2–3 mutually-beneficial, non-fleece deals with a human-sane "why it helps both sides" pitch — and Claude's human-sanity check ("would a real manager actually propose this?") passes.
+
+**First dependency:** Codex's `TradeContext` payload (steps 1–2). Claude builds steps 3–7 against it. Lock the payload shape (§6.5 + §9) before parallel work starts.
