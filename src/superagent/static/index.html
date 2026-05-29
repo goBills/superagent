@@ -976,6 +976,19 @@
         .league-role.starter { background: #e0e7ff; color: #4338ca; }
         .league-prov { font-size: 10px; color: var(--muted); margin-top: 8px; }
         .trade-empty, .trade-warming { padding: 40px 20px; text-align: center; color: var(--muted); font-size: 14px; line-height: 1.6; }
+        /* No-deal-still-useful panel: where your leverage is (teams to call + targets) */
+        .no-deal { max-width: 680px; width: 100%; padding: 6px 2px; }
+        .no-deal-head { font-size: 15px; font-weight: 800; color: var(--text); }
+        .no-deal-sub { font-size: 13px; color: var(--muted); margin: 4px 0 14px; }
+        .call-list { display: flex; flex-direction: column; gap: 10px; }
+        .call-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm); padding: 12px 14px; }
+        .call-team { font-size: 14px; font-weight: 800; color: var(--text); }
+        .call-why { font-size: 12.5px; color: #334155; line-height: 1.5; margin-top: 4px; }
+        .call-targets { font-size: 12.5px; font-weight: 700; color: var(--brand); margin-top: 6px; }
+        .call-empty { font-size: 13px; color: var(--muted); line-height: 1.5; }
+        /* League "trade fit" partner badge + subtle highlight */
+        .league-team.is-fit { border-color: #fcd9a8; box-shadow: 0 0 0 2px rgba(245,158,11,0.12); }
+        .league-team-name .fit { font-size: 10px; font-weight: 800; color: #92400e; background: #fef3c7; border-radius: 999px; padding: 1px 7px; margin-left: 6px; }
         .trade-card {
             border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
             box-shadow: var(--shadow-sm); padding: 14px 16px;
@@ -2704,16 +2717,20 @@
                 return;
             }
             const prov = (ctx.roster_freshness && ctx.roster_freshness.label) || 'Based on draft board';
-            // My team first, then the rest alphabetically.
+            // Teams that complement my roster → "trade fit" badge (the leverage map).
+            const fitTeams = new Set(computeTradePartners(ctx, myTeamName).map(p => p.team));
+            // My team first, then trade-fit partners, then the rest alphabetically.
             const ordered = [...teams].sort((a, b) => {
                 if (a.fantasy_team_name === myTeamName) return -1;
                 if (b.fantasy_team_name === myTeamName) return 1;
+                const af = fitTeams.has(a.fantasy_team_name), bf = fitTeams.has(b.fantasy_team_name);
+                if (af !== bf) return af ? -1 : 1;
                 return a.fantasy_team_name.localeCompare(b.fantasy_team_name);
             });
-            el.innerHTML = `<div class="league-grid">${ordered.map(t => leagueTeamCard(t, myTeamName, prov)).join('')}</div>`;
+            el.innerHTML = `<div class="league-grid">${ordered.map(t => leagueTeamCard(t, myTeamName, prov, fitTeams.has(t.fantasy_team_name))).join('')}</div>`;
         }
 
-        function leagueTeamCard(team, myTeamName, prov) {
+        function leagueTeamCard(team, myTeamName, prov, isFit) {
             const isMine = team.fantasy_team_name === myTeamName;
             const surplus = team.surplus_by_position || {};
             const needs = team.needs_by_position || {};
@@ -2737,8 +2754,8 @@
                 }).join('');
                 return `<div class="league-pos-group"><div class="league-pos-label">${escapeHtml(pos)}</div>${rows}</div>`;
             }).join('');
-            return `<div class="league-team${isMine ? ' is-mine' : ''}">
-                <div class="league-team-head"><span class="league-team-name">${escapeHtml(team.fantasy_team_name)}${isMine ? '<span class="you">YOU</span>' : ''}</span></div>
+            return `<div class="league-team${isMine ? ' is-mine' : ''}${isFit ? ' is-fit' : ''}">
+                <div class="league-team-head"><span class="league-team-name">${escapeHtml(team.fantasy_team_name)}${isMine ? '<span class="you">YOU</span>' : (isFit ? '<span class="fit">🎯 trade fit</span>' : '')}</span></div>
                 <div class="league-tags">${stackedTags}${needTags || (stackedTags ? '' : '<span class="league-tag">balanced</span>')}</div>
                 ${groups}
                 <div class="league-prov">📋 ${escapeHtml(prov)}</div>
@@ -2763,7 +2780,13 @@
                     dealsEl.innerHTML = `<div class="trade-empty">${escapeHtml(err.detail || 'Trade Finder unavailable. Load a drafted board first.')}</div>`;
                     return;
                 }
-                renderTradeDeals(await res.json());
+                const data = await res.json();
+                if ((data.deals || []).length) {
+                    renderTradeDeals(data);
+                } else {
+                    // No clean deal — still be useful: show where the leverage is (teams to call + targets).
+                    await renderNoDeal(dealsEl, leagueId, myTeam, (data.provenance && data.provenance.label) || 'Based on draft board');
+                }
             } catch (e) {
                 renderTradeWarming(dealsEl);
             }
@@ -2803,6 +2826,61 @@
                 return;
             }
             dealsEl.innerHTML = tradeDealsData.map((d, i) => tradeDealCard(d, i, prov)).join('');
+        }
+
+        // Complementary-partner finder (client-side, over TradeContext). A team is a "call" when
+        // it's stacked where I'm thin AND thin where I'm stacked — the leverage even without a
+        // clean 1-for-1 today. Powers both the no-deal panel and the League "trade fit" badge.
+        function computeTradePartners(ctx, myTeamName) {
+            const teams = ctx.teams || [];
+            const mine = teams.find(t => t.fantasy_team_name === myTeamName);
+            if (!mine) return [];
+            const myNeed = new Set(Object.entries(mine.needs_by_position || {}).filter(([p, n]) => n > 0 && p !== 'FLEX').map(([p]) => p));
+            if ((mine.needs_by_position || {}).FLEX > 0) ['RB', 'WR', 'TE'].forEach(p => myNeed.add(p));
+            const mySurplus = new Set(Object.keys(mine.surplus_by_position || {}).filter(p => mine.surplus_by_position[p] > 0));
+            const out = [];
+            for (const t of teams) {
+                if (t.fantasy_team_name === myTeamName) continue;
+                const theirSurplus = Object.keys(t.surplus_by_position || {}).filter(p => t.surplus_by_position[p] > 0);
+                const theirNeed = new Set(Object.entries(t.needs_by_position || {}).filter(([p, n]) => n > 0 && p !== 'FLEX').map(([p]) => p));
+                if ((t.needs_by_position || {}).FLEX > 0) ['RB', 'WR', 'TE'].forEach(p => theirNeed.add(p));
+                const theyHelpMe = theirSurplus.filter(p => myNeed.has(p));            // they're deep where I'm thin
+                const iHelpThem = [...mySurplus].filter(p => theirNeed.has(p));         // I'm deep where they're thin
+                if (!theyHelpMe.length || !iHelpThem.length) continue;
+                // Target the best players they have at my need positions.
+                const targets = (t.players || [])
+                    .filter(pl => theyHelpMe.includes(pl.position))
+                    .sort((a, b) => (b.trade_value_score || 0) - (a.trade_value_score || 0))
+                    .slice(0, 3).map(pl => pl.player_name);
+                out.push({ team: t.fantasy_team_name, theyHave: theyHelpMe, theyNeed: iHelpThem, targets,
+                           score: theyHelpMe.length + iHelpThem.length });
+            }
+            return out.sort((a, b) => b.score - a.score);
+        }
+
+        async function renderNoDeal(dealsEl, leagueId, myTeam, prov) {
+            dealsEl.innerHTML = '<div class="trade-empty"><span class="loading-football">🏈</span> Reading the league…</div>';
+            let ctx = null;
+            try {
+                const res = await fetch(`/leagues/${leagueId}/trade/context`, { headers: authHeaders() });
+                if (res.ok) ctx = await res.json();
+            } catch (e) { /* fall through to plain message */ }
+            const partners = ctx ? computeTradePartners(ctx, myTeam) : [];
+            let html = `<div class="no-deal">
+                <div class="no-deal-head">No clean 1-for-1 win-win right now for <strong>${escapeHtml(myTeam)}</strong>.</div>
+                <div class="no-deal-sub">That's normal on a balanced roster — but here's where your leverage is:</div>`;
+            if (partners.length) {
+                html += '<div class="call-list">' + partners.slice(0, 3).map(p => `
+                    <div class="call-card">
+                        <div class="call-team">📞 Call ${escapeHtml(p.team)}</div>
+                        <div class="call-why">They're deep at <strong>${p.theyHave.map(escapeHtml).join(' / ')}</strong> (where you're thin) and need <strong>${p.theyNeed.map(escapeHtml).join(' / ')}</strong> (where you're loaded) — you match up.</div>
+                        ${p.targets.length ? `<div class="call-targets">🎯 Target: ${p.targets.map(escapeHtml).join(', ')}</div>` : ''}
+                    </div>`).join('') + '</div>';
+            } else {
+                html += '<div class="call-empty">No obvious complementary partners yet — the league looks balanced. Re-check as rosters shift (waivers, byes, injuries).</div>';
+            }
+            html += `<div class="league-prov">📋 ${escapeHtml(prov)}</div></div>`;
+            dealsEl.innerHTML = html;
         }
 
         function tradeDealCard(d, idx, prov) {
