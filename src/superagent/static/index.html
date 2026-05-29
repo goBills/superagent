@@ -2828,32 +2828,57 @@
             dealsEl.innerHTML = tradeDealsData.map((d, i) => tradeDealCard(d, i, prov)).join('');
         }
 
+        // LOCKED need-or-upgrade definition (shared with Codex's engine gates, plan §12.A0.1):
+        // a position helps a team if (a) they have a count need there, OR (b) the incoming
+        // trade_value_score is >= 8 above their current WORST starter at that position. For
+        // RB/WR/TE the FLEX occupant counts in the starter pool (roster_role 'flex').
+        const UPGRADE_THRESHOLD = 8;
+        function _worstStarterValue(team, position) {
+            const vals = (team.players || [])
+                .filter(p => p.position === position && (p.roster_role === 'starter' || p.roster_role === 'flex'))
+                .map(p => p.trade_value_score || 0);
+            return vals.length ? Math.min(...vals) : null;
+        }
+        function _positionWanted(team, position, incomingValue) {
+            const needs = team.needs_by_position || {};
+            if ((needs[position] || 0) > 0) return true;
+            if (['RB', 'WR', 'TE'].includes(position) && (needs.FLEX || 0) > 0) return true;
+            const worst = _worstStarterValue(team, position);
+            if (worst === null) return false;                       // no starter slot to upgrade (and no count need)
+            return (incomingValue || 0) >= worst + UPGRADE_THRESHOLD; // real starter upgrade, not noise
+        }
+
         // Complementary-partner finder (client-side, over TradeContext). A team is a "call" when
-        // it's stacked where I'm thin AND thin where I'm stacked — the leverage even without a
-        // clean 1-for-1 today. Powers both the no-deal panel and the League "trade fit" badge.
+        // they can UPGRADE my lineup (need-or-upgrade) AND my tradeable depth (bench/surplus only)
+        // can upgrade theirs. Same definition the engine uses, so finder + panel agree. Powers the
+        // no-deal panel and the League "trade fit" badge. Works for deep rosters with no count-needs.
         function computeTradePartners(ctx, myTeamName) {
             const teams = ctx.teams || [];
             const mine = teams.find(t => t.fantasy_team_name === myTeamName);
             if (!mine) return [];
-            const myNeed = new Set(Object.entries(mine.needs_by_position || {}).filter(([p, n]) => n > 0 && p !== 'FLEX').map(([p]) => p));
-            if ((mine.needs_by_position || {}).FLEX > 0) ['RB', 'WR', 'TE'].forEach(p => myNeed.add(p));
-            const mySurplus = new Set(Object.keys(mine.surplus_by_position || {}).filter(p => mine.surplus_by_position[p] > 0));
+            const myDepth = (mine.players || []).filter(p => p.roster_role === 'bench' || p.roster_role === 'surplus');
             const out = [];
             for (const t of teams) {
                 if (t.fantasy_team_name === myTeamName) continue;
-                const theirSurplus = Object.keys(t.surplus_by_position || {}).filter(p => t.surplus_by_position[p] > 0);
-                const theirNeed = new Set(Object.entries(t.needs_by_position || {}).filter(([p, n]) => n > 0 && p !== 'FLEX').map(([p]) => p));
-                if ((t.needs_by_position || {}).FLEX > 0) ['RB', 'WR', 'TE'].forEach(p => theirNeed.add(p));
-                const theyHelpMe = theirSurplus.filter(p => myNeed.has(p));            // they're deep where I'm thin
-                const iHelpThem = [...mySurplus].filter(p => theirNeed.has(p));         // I'm deep where they're thin
-                if (!theyHelpMe.length || !iHelpThem.length) continue;
-                // Target the best players they have at my need positions.
-                const targets = (t.players || [])
-                    .filter(pl => theyHelpMe.includes(pl.position))
+                // They can upgrade me: any of their players that I'd want (need-or-upgrade for MY roster).
+                const upgradeMe = {};
+                for (const pl of (t.players || [])) {
+                    if (_positionWanted(mine, pl.position, pl.trade_value_score)) {
+                        (upgradeMe[pl.position] = upgradeMe[pl.position] || []).push(pl);
+                    }
+                }
+                // I can upgrade them: my tradeable DEPTH that they'd want (need-or-upgrade for THEIR roster).
+                const iHelpThem = new Set();
+                for (const pl of myDepth) {
+                    if (_positionWanted(t, pl.position, pl.trade_value_score)) iHelpThem.add(pl.position);
+                }
+                const theyHave = Object.keys(upgradeMe);
+                if (!theyHave.length || !iHelpThem.size) continue;
+                const targets = theyHave.flatMap(p => upgradeMe[p])
                     .sort((a, b) => (b.trade_value_score || 0) - (a.trade_value_score || 0))
                     .slice(0, 3).map(pl => pl.player_name);
-                out.push({ team: t.fantasy_team_name, theyHave: theyHelpMe, theyNeed: iHelpThem, targets,
-                           score: theyHelpMe.length + iHelpThem.length });
+                out.push({ team: t.fantasy_team_name, theyHave, theyNeed: [...iHelpThem], targets,
+                           score: theyHave.length + iHelpThem.size });
             }
             return out.sort((a, b) => b.score - a.score);
         }
@@ -2873,7 +2898,7 @@
                 html += '<div class="call-list">' + partners.slice(0, 3).map(p => `
                     <div class="call-card">
                         <div class="call-team">📞 Call ${escapeHtml(p.team)}</div>
-                        <div class="call-why">They're deep at <strong>${p.theyHave.map(escapeHtml).join(' / ')}</strong> (where you're thin) and need <strong>${p.theyNeed.map(escapeHtml).join(' / ')}</strong> (where you're loaded) — you match up.</div>
+                        <div class="call-why">They've got <strong>${p.theyHave.map(escapeHtml).join(' / ')}</strong> that upgrades you, and need <strong>${p.theyNeed.map(escapeHtml).join(' / ')}</strong> where you're deep — you match up.</div>
                         ${p.targets.length ? `<div class="call-targets">🎯 Target: ${p.targets.map(escapeHtml).join(', ')}</div>` : ''}
                     </div>`).join('') + '</div>';
             } else {

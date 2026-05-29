@@ -262,6 +262,15 @@ Agreed north star (Rob + Codex + Claude, 2026-05-29): the product is **"your GM 
 
 Turning the Salam-demo lesson into direction. Three threads.
 
+### A0.1 LOCKED v1 gate numbers (Rob, 2026-05-29) — build against these
+1. **Balance ratio:** `min(Δmine, Δpartner) / max(...) >= 0.5`.
+2. **Upgrade threshold X = 8.0** `trade_value_score` points (not 10 — 10 over-restricts mid-roster).
+3. **Depth-only give:** `roster_role in {"bench","surplus"}` only — exclude `starter` AND `flex` (Bucky-as-flex is exactly the bad top card).
+4. **Need-or-upgrade (shared definition, used by BOTH the engine and `computeTradePartners`):** a position helps a team if **(a)** they have a count need there, **OR (b)** incoming `trade_value_score` ≥ 8 above their current *worst starter* at that position. For RB/WR/TE, the FLEX occupant counts in the starter pool if eligible.
+5. **No deal clears all gates → return zero deals.** Then Claude's no-deal / teams-to-call panel is the product, not a fallback apology.
+
+**Ownership:** Codex owns the backend gate pass; Claude aligns `computeTradePartners` to the same need-or-upgrade helper so finder + panel agree.
+
 ### A0. CALIBRATED gate spec (from the realistic 12-team demo, league 50 "Salam Realistic Trade Demo", 2026-05-29)
 
 Evaluated the finder on the reseeded realistic league. My Team = RB-deep, WR-mediocre, **needs `{}`** (complete roster). All 5 surfaced deals were RB→WR, and the data nails the root cause:
