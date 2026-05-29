@@ -216,13 +216,20 @@ def find_trades_for_league(
     *,
     max_deals: int = 3,
     season: int | None = None,
+    bye_week_season: int | None = None,
     source: str | None = None,
     db: Any = None,
 ) -> dict[str, Any]:
     """Convenience wrapper: fetch the TradeContext then run the matcher."""
     from superagent.trade_context import get_trade_context
 
-    ctx = get_trade_context(league_id=league_id, season=season, source=source, db=db)
+    ctx = get_trade_context(
+        league_id=league_id,
+        season=season,
+        bye_week_season=bye_week_season,
+        source=source,
+        db=db,
+    )
     if not ctx.get("ok"):
         return {"ok": False, "error": ctx.get("error", "Trade context unavailable"), "deals": []}
     return find_trades(ctx["data"], my_team_name, max_deals=max_deals)

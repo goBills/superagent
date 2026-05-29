@@ -148,6 +148,71 @@ def test_bulk_draft_picks_records_board_and_roster():
     assert players["other"] not in roster_names
 
 
+def test_trade_finder_endpoint_wraps_engine_with_auth(monkeypatch):
+    headers, league_id, season, players = setup_draft_league_api()
+    captured = {}
+
+    def fake_find_trades_for_league(**kwargs):
+        captured.update(kwargs)
+        return {
+            "ok": True,
+            "my_team": kwargs["my_team_name"],
+            "deals": [
+                {
+                    "partner_team": "Other",
+                    "give": {"player_name": "A RB", "position": "RB"},
+                    "get": {"player_name": "A WR", "position": "WR"},
+                    "lineup_value_delta_mine": 5.0,
+                    "lineup_value_delta_partner": 3.0,
+                }
+            ],
+            "provenance": {"label": "Based on draft board"},
+        }
+
+    monkeypatch.setattr("superagent.api.find_trades_for_league", fake_find_trades_for_league)
+
+    response = client.get(
+        (
+            f"/leagues/{league_id}/trade/finder?season={season}&source={players['source']}"
+            "&bye_week_season=2026&my_team=Your%20Team&max_deals=25"
+        ),
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["my_team"] == "Your Team"
+    assert data["deals"][0]["partner_team"] == "Other"
+    assert captured["league_id"] == league_id
+    assert captured["my_team_name"] == "Your Team"
+    assert captured["season"] == season
+    assert captured["source"] == players["source"]
+    assert captured["bye_week_season"] == 2026
+    assert captured["max_deals"] == 10
+    assert captured["db"] is not None
+
+
+def test_trade_finder_endpoint_is_league_scoped(monkeypatch):
+    headers, league_id, season, players = setup_draft_league_api()
+
+    def fail_if_called(**kwargs):
+        raise AssertionError("finder must not run for a league owned by another user")
+
+    monkeypatch.setattr("superagent.api.find_trades_for_league", fail_if_called)
+    other = client.post(
+        "/auth/register",
+        json={"email": f"trade-finder-other-{uuid.uuid4().hex}@example.com", "password": "password123"},
+    )
+    other_headers = {"Authorization": f"Bearer {other.json()['token']}"}
+
+    response = client.get(
+        f"/leagues/{league_id}/trade/finder?season={season}&source={players['source']}",
+        headers=other_headers,
+    )
+
+    assert response.status_code == 404
+
+
 def test_bulk_draft_picks_batch_resolves_exact_board_without_slow_resolver(monkeypatch):
     headers, league_id, season, players = setup_draft_league_api()
 

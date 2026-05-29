@@ -199,7 +199,7 @@ The design converged across the Claude↔Codex review. These are decisions, not 
 
 The first proof. One wow moment, demoable on any league already drafted in Superagent (uses the data we have *today* — no live-season data, no league sync required). We learn from this before building the rest.
 
-**Progress (2026-05-29):** steps 1–2 ✅ (Codex `TradeContext`, `919ae58`). Steps 3–6 ✅ (Claude `trade_finder.py` engine, `075374d` — verified 5 unit tests + on a real prod league: RB-surplus team correctly offered Saquon→Chase, mutual lineup gain, fair gap, grounded why). **Next:** endpoint exposure (Codex) → Trade tab UI + pitch (Claude).
+**Progress (2026-05-29):** steps 1–2 ✅ (Codex `TradeContext`, `919ae58`). Steps 3–6 ✅ (Claude `trade_finder.py` engine, `075374d` — verified 5 unit tests + on a real prod league: RB-surplus team correctly offered Saquon→Chase, mutual lineup gain, fair gap, grounded why). Endpoint exposure ✅ (Codex `GET /leagues/{id}/trade/finder`). **Next:** Trade tab UI + pitch (Claude).
 
 **The flow (7 steps):**
 1. ✅ **Reconstruct all teams** from `LeagueDraftPick` (every pick carries `fantasy_team_name`). — *Codex (919ae58)*
@@ -210,7 +210,7 @@ The first proof. One wow moment, demoable on any league already drafted in Super
 6. ✅ **Sanity filters + value-gap guardrail** — `VALUE_GAP_TOLERANCE=12`, `STAR_PROTECT_GAP=18`, both-sides-improve mandatory. — *Claude (075374d)*
 7. ⏭️ **Show the deal + pitch (the pitch IS product — Rob).** Each card: "give X / get Y," *why it helps you*, *why they'd say yes*, the data-provenance/freshness line, and **a send-ready message**. Agent-written, narrative-guarded. — *Claude (next)*
 
-**→ HANDOFF to Codex (endpoint, your lane per §6/§9D):** wrap `trade_finder.find_trades_for_league(league_id, my_team_name)` in an authenticated endpoint (e.g. `GET /leagues/{id}/trade/finder?team=My%20Team`). It already returns `{ok, my_team, deals[], provenance, ...}`. Engine is pure + tested; you own the endpoint + its test. Once it exists, Claude builds the Trade Mode UI (step 7) against it. (Alternatively register `find_trades` as an agent tool so chat can answer "who should I trade for?" natively — also clean to do alongside.)
+**→ HANDOFF to Claude (UI/pitch, your lane per §6/§9D):** the authenticated endpoint exists as `GET /leagues/{id}/trade/finder?my_team=My%20Team&max_deals=3&season=2026&source=sleeper_adp`. It returns `{ok, my_team, deals[], provenance, ...}` from the tested engine. Build the Trade Mode UI (step 7) against it. Agent tool registration for chat ("who should I trade for?") remains optional follow-up.
 
 **Explicitly OUT of v1 slice** (important, not blockers — we ship the slice without them):
 - Weekly GM Briefing / engagement loop (the retention mechanic — next, after the finder proves out).

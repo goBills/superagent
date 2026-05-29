@@ -294,6 +294,17 @@ curl "http://localhost:8000/leagues/1/trade/context?season=2026&source=sleeper_a
   -H "Authorization: Bearer $SUPERAGENT_TOKEN"
 ```
 
+### GET /leagues/{league_id}/trade/finder
+
+Return v1 1-for-1 Trade Finder recommendations for one drafted team. This wraps
+the matching engine over the `TradeContext` payload and returns mutually useful
+deals with provenance and grounded rationale fields.
+
+```bash
+curl "http://localhost:8000/leagues/1/trade/finder?my_team=My%20Team&max_deals=3&season=2026&source=sleeper_adp" \
+  -H "Authorization: Bearer $SUPERAGENT_TOKEN"
+```
+
 ## ESPN Integration
 
 ### POST /integrations/espn/leagues

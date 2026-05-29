@@ -49,6 +49,7 @@ from superagent.models import (
 )
 from superagent.rate_limit import check_rate_limit
 from superagent.trade_context import get_trade_context
+from superagent.trade_finder import find_trades_for_league
 
 
 @asynccontextmanager
@@ -1798,6 +1799,34 @@ def get_league_trade_context(
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result.get("error", "Trade context unavailable"))
     return result["data"]
+
+
+@app.get("/leagues/{league_id}/trade/finder")
+def get_league_trade_finder(
+    league_id: int,
+    my_team: str = "My Team",
+    max_deals: int = 3,
+    season: Optional[int] = None,
+    bye_week_season: Optional[int] = None,
+    source: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Return v1 Trade Finder deals for one team in the drafted league."""
+    _get_owned_league(db, league_id, current_user.id)
+    bounded_max_deals = max(1, min(int(max_deals or 3), 10))
+    result = find_trades_for_league(
+        league_id=league_id,
+        my_team_name=my_team,
+        max_deals=bounded_max_deals,
+        season=season,
+        bye_week_season=bye_week_season,
+        source=source,
+        db=db,
+    )
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Trade Finder unavailable"))
+    return result
 
 
 @app.post("/leagues/{league_id}/draft/picks", response_model=DraftPickResponse)
