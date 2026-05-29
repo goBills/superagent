@@ -180,6 +180,14 @@ The design converged across the Claude↔Codex review. These are decisions, not 
 
 **C. Fairness objective = mutual lineup improvement, NOT projected points.** A candidate trade is good iff **`lineup_value_delta` > 0 for BOTH teams**, where lineup value = sum of `trade_value_score` over each team's optimal starting lineup. Market value-gap tolerance is demoted to an **anti-fleece guardrail**, not the objective. **Naming (Codex correction, important):** call it `starter_utility_delta` / `lineup_value_delta` — *never* `projected_points_delta` — because we have no validated projection engine. The product line is **"both rosters get more useful," not "our points model knows the future."** (v2: once projections earn it via backtest, this can become true projected points.)
 
+  **`lineup_value_delta > 0` is necessary but NOT sufficient (Rob).** A deal must also pass human-sanity filters before it's ever shown, or we look dumb fast:
+  - No lopsided counts (v1: 1-for-1; 2-for-1 only if the 2-side is clearly fringe depth). Never weird 4-for-1s.
+  - Don't trade away an obvious star for a tiny utility gain (cap on `trade_value_score` given up vs delta earned).
+  - Don't propose deals that would read as **insulting** to the other manager (the pitch must be honestly defensible from *their* side — ties back to the "if the explanation sounds dishonest, the deal fails" gate).
+  This is Claude's human-sanity layer on top of the numeric gate — the "would a real manager actually send this?" check, made concrete.
+
+**F. Data freshness is trust (Rob).** Every trade suggestion must carry and display its provenance + recency — "based on draft board," "synced from Sleeper 2h ago," etc. Stale roster data kills confidence instantly. `roster_source` + `roster_freshness` are already in `TradeContext`; v1 surfaces them on every card (in v1 that's "draft board" state). Never show a confident deal on silently-stale data.
+
 **D. The seam (who computes what):**
 - **Codex supplies** the canonical league/trade context: `trade_value_score` + its components, `data_quality`, position eligibility, league settings, and roster state (per the `TradeContext` / `PlayerTradeValue` shapes in §6.5).
 - **Claude owns** the matching layer: optimal starting-lineup fill, `lineup_value_delta`, candidate-deal generation, the fairness gate, trade rationale + pitch.
@@ -195,10 +203,10 @@ The first proof. One wow moment, demoable on any league already drafted in Super
 1. **Reconstruct all teams** from `LeagueDraftPick` (every pick carries `fantasy_team_name`). — *Codex*
 2. **Compute `trade_value_score` + components** per rostered player (ADP/effective_rank + positional scarcity/VOR + roster_role + data_quality). — *Codex*
 3. **Find surplus/need matches** — per team, detect positional surplus vs need; find complementary team pairs (my surplus = your need, and vice versa). — *Claude*
-4. **Generate candidate deals** across matched pairs (1-for-1 first, multi-player to balance). — *Claude*
+4. **Generate candidate deals** — **v1 is brutally scoped: 1-for-1 only** (2-for-1 only if it falls out trivially and the 2-side is clear fringe depth). Multi-player balancing is later. — *Claude*
 5. **Require mutual `lineup_value_delta` > 0** — both teams' optimal starting-lineup value rises (recomputed post-trade). — *Claude*
-6. **Value-gap = anti-fleece guardrail only** (reject lopsided deals even if one lineup improves a lot). — *Claude*
-7. **Show the deal + pitch** — "give X / get Y," *why it helps me*, *why they'd say yes*, agent-written and narrative-guarded, in a Trade Mode card. — *Claude*
+6. **Apply sanity filters + value-gap guardrail** — necessary-not-sufficient (§9C): reject lopsided counts, star-for-scraps, and insulting deals, even when a delta is technically positive. — *Claude*
+7. **Show the deal + pitch (the pitch IS product, not decoration — Rob).** Each card: "give X / get Y," *why it helps you*, *why they'd say yes*, the data-provenance/freshness line, and **the actual draft-ready message you could send the other manager**. Agent-written, narrative-guarded. — *Claude*
 
 **Explicitly OUT of v1 slice** (important, not blockers — we ship the slice without them):
 - Weekly GM Briefing / engagement loop (the retention mechanic — next, after the finder proves out).
@@ -206,6 +214,6 @@ The first proof. One wow moment, demoable on any league already drafted in Super
 - Live-season "stock up/down," `two_week_outlook` (v2, needs in-season data).
 - League sync / OAuth (v1 runs on the drafted board; sync is what makes it *in-season real* later).
 
-**Definition of done for the slice:** on a real drafted league, the Trade tab surfaces 2–3 mutually-beneficial, non-fleece deals with a human-sane "why it helps both sides" pitch — and Claude's human-sanity check ("would a real manager actually propose this?") passes.
+**Definition of done for the slice (Rob's bar):** the win is **"this thing found a plausible trade I wouldn't have seen,"** NOT solving all of trade theory. On a real drafted league, the Trade tab surfaces 1–3 mutually-beneficial, non-fleece **1-for-1** deals, each with provenance and a defensible "why it helps both sides" pitch + a send-ready message — and Claude's human-sanity check ("would a real manager actually propose this without looking foolish?") passes. If it surfaces *one* genuinely non-obvious good trade, the slice succeeded.
 
 **First dependency:** Codex's `TradeContext` payload (steps 1–2). Claude builds steps 3–7 against it. Lock the payload shape (§6.5 + §9) before parallel work starts.
