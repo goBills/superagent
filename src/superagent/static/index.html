@@ -2621,7 +2621,7 @@
             const myTeam = (teamSel && teamSel.value) || 'My Team';
             dealsEl.innerHTML = '<div class="trade-empty"><span class="loading-football">🏈</span> Scanning the league for deals…</div>';
             try {
-                const params = new URLSearchParams({ team: myTeam });
+                const params = new URLSearchParams({ my_team: myTeam });
                 const res = await fetch(`/leagues/${leagueId}/trade/finder?${params.toString()}`, { headers: authHeaders() });
                 if (res.status === 404) { renderTradeWarming(dealsEl); return; }   // endpoint not wired yet
                 if (!res.ok) {
