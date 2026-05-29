@@ -255,3 +255,37 @@ Agreed north star (Rob + Codex + Claude, 2026-05-29): the product is **"your GM 
 - **Reversibility where possible** — undo / confirm windows; never silent irreversible moves in money leagues.
 
 **Why this matters:** stakes jump when the agent *acts* (a bad autonomous trade in a money league = real harm + instant trust death). The dial lets trust be *earned incrementally* — users graduate up as confidence builds, which is itself the engagement engine that's dead in incumbents. Same discipline as the narrative guard, higher stakes.
+
+---
+
+## 12. Sharper product taste — credibility gates, forward-looking value, engagement (2026-05-29)
+
+Turning the Salam-demo lesson into direction. Three threads.
+
+### A. Credibility gates the engine still needs (Codex lane) — grounded in LIVE demo data
+Logged into Salam's demo (league 50, 2 teams) post-redesign. The finder offered **Bijan Robinson (value 100, #1 overall) as the GIVE** for ARSB/JJ/CeeDee — me **+33** / them **+6.88**. Even after Codex's `83a1d9b` floor, this is non-sendable. Root causes + gates:
+1. **Never deal a stud as "surplus."** Bijan is "surplus" only because RB count > slots, but you never trade your RB1. Gate: a player flagged tradeable-surplus must be **genuinely below your starting line (true bench)** — not a top-tier/elite asset. Cap: don't offer a give whose `trade_value_score` is in the team's top-N startable at its position.
+2. **Balance ratio, not just a floor.** `min(Δ) ≥ ~50–60% of max(Δ)` (a +33/+6.88 deal fails; +11/+9 passes). Lopsided-in-my-favor = the other manager says no = not sendable.
+3. **Complementary need = hard gate** (already agreed): partner must *need* the position I send; I must *need* the position I get.
+4. **Sendable or nothing:** if no deal clears all gates → return none + "teams to watch / players to target."
+*(Note: a 2-team demo league is degenerate — no real trade market. Showcasing Trade Mode needs a realistic 10–12-team drafted league; flag for demo setup.)*
+
+### B. Forward-looking value (Rob requirement) — architect now, stay honest
+Current v1 is **market value + scarcity + current roster fit** — good for "does this trade fit both rosters?", NOT "does this help me over the next few weeks." Make forward-looking a **first-class, source-labeled** part of the contract (Codex), separate fields so we never conflate them:
+- `current_trade_value_score` — market/scarcity/current roster utility (what we have).
+- `rest_of_season_projection_value` — projection-backed, **source-labeled**, gated on a validated projection (v2; never faked — we learned ADP is hard to beat).
+- `near_term_lineup_utility` — next 2–4 weeks from schedule/byes/injury/projections when available.
+- `confidence` / `provenance` — which source, last updated, data quality.
+
+The card eventually answers: helps now · helps over next few weeks · why they accept · **what risk you take**. Product language: *"Good now, better by Weeks 3–5," "Solves your Week 6 bye problem," "Don't send if you need RB during Week 7."*
+
+**Honest forward-looking lever we can ship NOW (no projection model): BYES.** We already have 2026 official byes. So today, honestly: **bye-gap-fix trades** ("this fixes your Week 7 RB hole") and **bye-risk guards** ("don't ship RB depth — it leaves you thin during your starters' Week 7 bye"). That's real "two weeks ahead" value computable from data we own. Rest-of-season/usage projections = v2. Until then, label deals **"based on draft board + market value."**
+
+### C. Engagement ideas (brainstorm — Codex + Claude), prioritized
+The north feeling: **"oh damn, I could actually send this"** + **"here's the move before your league sees it."** Not a spreadsheet — a GM with moves queued.
+1. **Trade ticket, not table** — ✅ shipped (agent take leads, math supports).
+2. **No deal is still useful** — "No clean win-win right now → here are 2 teams to call / 3 players to target." *(Cheap, high-value, next.)*
+3. **Teams to call** — League view annotated with leverage: "Call Team Rival: WR-rich, RB-thin." Teaches where leverage is. *(Extends the League view we built.)*
+4. **Pitch styles** — Friendly / Bold / Casual / Negotiator buttons → same deal, different text. *(Cheap, makes it fun immediately.)*
+5. **Counteroffer ladder** — "If they say no, offer X; don't include Y." *(Feels like a real co-GM; later.)*
+6. **Weekly moves queue** — "3 moves this week: 1 trade, 1 waiver, 1 lineup tweak." *(The long-term retention loop = the Co-pilot tier from §11.)*
