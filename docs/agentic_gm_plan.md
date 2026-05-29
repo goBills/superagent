@@ -199,7 +199,8 @@ The design converged across the Claude↔Codex review. These are decisions, not 
 
 The first proof. One wow moment, demoable on any league already drafted in Superagent (uses the data we have *today* — no live-season data, no league sync required). We learn from this before building the rest.
 
-**Progress (2026-05-29):** steps 1–2 ✅ (Codex `TradeContext`, `919ae58`). Steps 3–6 ✅ (Claude `trade_finder.py` engine, `075374d` — verified 5 unit tests + on a real prod league: RB-surplus team correctly offered Saquon→Chase, mutual lineup gain, fair gap, grounded why). Endpoint exposure ✅ (Codex `GET /leagues/{id}/trade/finder`). **Next:** Trade tab UI + pitch (Claude).
+**Progress (2026-05-29): v1 slice FUNCTIONALLY COMPLETE — pending only the team go-live flip.** Steps 1–2 ✅ Codex `TradeContext` (`919ae58`). Steps 3–6 ✅ Claude `trade_finder.py` engine (`075374d`, 5 tests + real-prod). Endpoint ✅ Codex `GET /leagues/{id}/trade/finder` (`3b31bac`). Step 7 ✅ Claude Trade Mode UI (`3634384`, param-aligned `0340cba`) — deal cards + agent pitch. **Verified live end-to-end** on a real drafted prod league: 3 mutually-beneficial deals (Saquon → Chase/Puka/Lamb, both lineups up, fair gaps) in the exact shape the UI renders.
+  **REMAINING — team decisions (not code):** (1) **Go-live flip** — the Trade tab is still gated (`disabled "Soon"`); going live = change it to `onclick="setWorkspace('trade', this)"`. (2) **Pitch a/b** — v1 uses `/chat` (option b); confirm or switch to endpoint-returned pitch. (3) Surface to friends now, or after a polish pass.
 
 **The flow (7 steps):**
 1. ✅ **Reconstruct all teams** from `LeagueDraftPick` (every pick carries `fantasy_team_name`). — *Codex (919ae58)*
