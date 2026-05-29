@@ -213,6 +213,16 @@ The first proof. One wow moment, demoable on any league already drafted in Super
 
 **Current refinement loop:** demo users should react to the actual trade cards. If a suggestion feels non-sendable, tune the material-gain threshold, guardrails, ranking, and card/pitch language before expanding scope. Agent tool registration for chat ("who should I trade for?") remains optional follow-up.
 
+### ⚠️ Credibility bar — AGREED (Rob + Codex + Claude, 2026-05-29) after the first real look
+
+Salam-demo cards exposed non-credible suggestions (e.g. *give Jonathan Taylor, get JSN → you +39.6 / them +0.4* — no one accepts that). Codex pushed a first pass (`83a1d9b`: `MIN_LINEUP_DELTA=2.0`, `mutual_benefit_score`, rank by mutual acceptability) — necessary, not sufficient. Adopted bar:
+
+1. **Sendable or don't show it.** A deal surfaces only if it's genuinely sendable: **partner has a need at the position I send, I have a need at the position I get, both lineups materially improve, and the benefit is not comically lopsided.** If no balanced/complementary win-win exists → show **"No clean trade right now"** + useful targets/teams to watch. *Better zero deals than one dumb deal.*
+2. **Complementarity is a HARD GATE, not explanation text.** The engine must *prove the shape* (I deal from surplus into their need; they deal from surplus into my need), not merely note "they improve a little."
+3. **Agent-led ticket is the feel.** Math supports, never headlines. Card leads with a compact trade ticket + agent narrative ("You're loaded at RB and thin at WR; Team Rival is the mirror — send this"), then why-you / why-they-say-yes, then the send-ready pitch.
+4. **Ownership:** **Codex** keeps tightening engine constraints/ranking so the backend returns *only* credible candidates (the hard complementary + balance gates). **Claude** owns the pitch-forward trade-ticket UI + agent language. Coordinate on the exact gate definitions before either touches the engine, so we don't stomp each other.
+5. **v2 stays honest.** No fake "stock up / two weeks ahead" until in-season data exists. v1 cool factor = *"I found a trade you might actually send, and I wrote the text."*
+
 **Explicitly OUT of v1 slice** (important, not blockers — we ship the slice without them):
 - Weekly GM Briefing / engagement loop (the retention mechanic — next, after the finder proves out).
 - Pricing / GTM / first-10-users plan.
