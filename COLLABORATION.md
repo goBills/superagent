@@ -176,6 +176,28 @@ Two concepts were colliding under "Draft Mode." Now: **Workspace** = Draft / Ros
 
 ---
 
+## User feedback — first outside tester (Salam, 2026-05-29)
+
+First non-Rob user ran the draft cockpit. Verdict: "super cool." Signal, sorted:
+
+**Concrete UX bug (Claude's lane — actionable now):**
+- **The answer overlay reads as a dismissable modal, not a conversation.** Salam "kept x-ing out to initiate a new chat" — the X felt like "close/reset," so he never realized follow-ups continue the thread. He explicitly asked for a **sidebar chat history** (we only have a low-discoverability "Recent chats" dropdown). Fix: make the chat surface read as a persistent conversation — clearer "continue vs new," visible history, the X shouldn't imply reset. **Top near-term UX item.**
+
+**Validated (working as designed):**
+- Narrative guard held — "which QB has the largest cup size?" → politely refused + redirected to draft help. (He razzed it "you got soft," but that's the grounding doing its job; maybe loosen tone, keep the guard.)
+
+**Feature requests:**
+- **News/analysis** — "scrape news sources… analysis that isn't fluff." Recurring pain: fantasy news is samey filler. An agent that *summarizes signal, not fluff* is differentiated. (Source TBD — APIs/web; mind licensing as with FantasyPros.)
+- **Yahoo/Sleeper league API integration** — pull a real league instead of paste. (Paste is the deliberate interim; Sleeper read API is viable, Yahoo is heavier OAuth.)
+
+**STRATEGIC — the big one (Rob flagged as a possible wedge/differentiator):**
+- **Post-draft engagement is dead and that's the opening.** Salam: "so little engagement and fun after the draft," Yahoo is "legacy/trash" that just repackages the same player blurbs. The wedge = an **agentic GM / co-manager** that's *"always two weeks ahead"*:
+  - **Trades as the hero feature** — "nobody has time to study everyone's roster." Surface whose stock is up to **trade away/for**, who's **stacked at a position** and can give a player up, and **how to construct the deal**. "Make trades fun."
+  - Rest-of-season outlook (future bye/schedule weeks), waivers, roster optimization.
+- This points the in-season roadmap squarely at **Trade Mode first** (not generic Roster/Waivers) as the differentiator. Major build; needs league-roster data (all teams) + the value layer. Rob's call on whether/when — logged here as the leading strategic direction from real-user signal.
+
+---
+
 ## Roadmap & Open Items
 
 **Logged (captured as task chips, not yet built):**
