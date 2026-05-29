@@ -222,3 +222,26 @@ The first proof. One wow moment, demoable on any league already drafted in Super
 **Definition of done for the slice (Rob's bar):** the win is **"this thing found a plausible trade I wouldn't have seen,"** NOT solving all of trade theory. On a real drafted league, the Trade tab surfaces 1–3 mutually-beneficial, non-fleece **1-for-1** deals, each with provenance and a defensible "why it helps both sides" pitch + a send-ready message — and Claude's human-sanity check ("would a real manager actually propose this without looking foolish?") passes. If it surfaces *one* genuinely non-obvious good trade, the slice succeeded.
 
 **First dependency:** Codex's `TradeContext` payload (steps 1–2). Claude builds steps 3–7 against it. Lock the payload shape (§6.5 + §9) before parallel work starts.
+
+---
+
+## 11. Autonomy roadmap — the co-GM dial (DIRECTION, not current scope)
+
+Agreed north star (Rob + Codex + Claude, 2026-05-29): the product is **"your GM work queue,"** not "chat about fantasy." Trades are the first proof; the bigger arc is escalating *delegation* — the agent does more of the GM job as the user grants more trust. This is a **roadmap/direction**, explicitly **not** scope creep on the current Trade Finder beta. The beta's next job is feedback (are the trades sendable or dumb?); this tells us where it goes after the learning loop starts.
+
+**The dial (three tiers of autonomy):**
+1. **Scout — advise.** Agent suggests; human does everything. *(Where we are: Trade Finder, draft cockpit.)*
+2. **Co-pilot — queue actions for approval.** Agent proposes *specific* actions (set this lineup, claim this waiver, send this trade) and the human approves with one tap. **This is the agreed next tier** — "3 moves queued for your approval" is the weekly retention loop, and it sidesteps the write-access/ToS/risk mess because the human still commits each action. Most of an AI GM's value lives here (90% rubber-stamp work).
+3. **Co-GM — act autonomously inside guardrails.** Agent executes within bounds the user sets ("auto-set my optimal lineup; ask before any trade"; "waiver claims under $15 FAAB; never drop my top 5") and reports back. The literal co-ownership tier.
+
+**Strong preference (Codex + Claude): Co-pilot next, NOT full autonomy.** Highest value-to-risk ratio, and buildable on the companion architecture without write access (agent prepares the action; human executes or one-taps).
+
+**Hard gates before Co-GM (all required, non-negotiable):**
+- **Platform write access / OAuth scopes** (set lineup, submit waiver, send trade *on the real platform*).
+- **ToS clearance** — some platforms restrict automated roster actions; verify before building.
+- **User-defined guardrails** — explicit bounds (positions, FAAB caps, protected players, trade approval).
+- **Provenance for every action** — "did X because Y," always.
+- **Notification + audit trail** — the user always knows what the agent did.
+- **Reversibility where possible** — undo / confirm windows; never silent irreversible moves in money leagues.
+
+**Why this matters:** stakes jump when the agent *acts* (a bad autonomous trade in a money league = real harm + instant trust death). The dial lets trust be *earned incrementally* — users graduate up as confidence builds, which is itself the engagement engine that's dead in incumbents. Same discipline as the narrative guard, higher stakes.
