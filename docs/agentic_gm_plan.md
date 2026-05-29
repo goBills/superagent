@@ -262,6 +262,24 @@ Agreed north star (Rob + Codex + Claude, 2026-05-29): the product is **"your GM 
 
 Turning the Salam-demo lesson into direction. Three threads.
 
+### A0. CALIBRATED gate spec (from the realistic 12-team demo, league 50 "Salam Realistic Trade Demo", 2026-05-29)
+
+Evaluated the finder on the reseeded realistic league. My Team = RB-deep, WR-mediocre, **needs `{}`** (complete roster). All 5 surfaced deals were RB→WR, and the data nails the root cause:
+
+| give (my rank) | get | me Δ | them Δ | balance ratio | partner needs RB? |
+|---|---|---|---|---|---|
+| Bucky Irving (RB#3, flex, 84) | Drake London (93) | +14.2 | +6.3 | 0.44 | **No** |
+| Bucky Irving (RB#3, flex) | ARSB (95) | +16.0 | +4.5 | 0.28 | **No** |
+| David Montgomery (RB#4, surplus, 63) | Zay Flowers (74) | +16.4 | +4.1 | 0.25 | **No** |
+| Jaylen Warren (RB#5, surplus, 62) | Jameson Williams (73) | +15.0 | +3.4 | 0.23 | **No** |
+
+**Root cause = complementarity is not enforced.** Every deal sends an RB to a team that doesn't need RB → partner gains little → lopsided → not sendable. The gates, calibrated to this data:
+1. **Balance-ratio gate (primary): `min(Δ) ≥ 0.5 × max(Δ)`.** Kills all 5 (max ratio 0.44). Single highest-impact rule.
+2. **Complementary intent: the give position must be one the partner can actually use** — partner *needs* it (count gap) **or** the give would upgrade a *weak starter* of theirs. Don't ship RB to an RB-set team.
+3. **"Need" = need-OR-upgrade, not just roster-count gaps.** Critical nuance: My Team has zero count-needs but mediocre WR starters, so an elite WR is a real upgrade. Both the **engine** (for the partner side) and **Claude's `computeTradePartners`** (no-deal/teams-to-call) must treat a position as "wanted" if either (a) count gap, or (b) the team's worst starter there is materially below the incoming player's value. *(Today `computeTradePartners` keys only on `needs_by_position`, so it returns nothing for a deep roster like My Team — same blind spot; refine it to need-or-upgrade once we agree the definition, so engine + panel stay consistent.)*
+4. **Give = depth only:** `roster_role ∈ {bench, surplus}`; never a `starter`. (Flex like Bucky is borderline — exclude at least true starters.)
+**Expected result on this league:** with gates on, the finder likely returns **0** (no RB-needy partner) → Claude's no-deal "teams to call" panel becomes the primary, correct experience. So the empty state + need-or-upgrade partner logic is as important as the gates themselves.
+
 ### A. Credibility gates the engine still needs (Codex lane) — grounded in LIVE demo data
 Logged into Salam's demo (league 50, 2 teams) post-redesign. The finder offered **Bijan Robinson (value 100, #1 overall) as the GIVE** for ARSB/JJ/CeeDee — me **+33** / them **+6.88**. Even after Codex's `83a1d9b` floor, this is non-sendable. Root causes + gates:
 1. **Never deal a stud as "surplus."** Bijan is "surplus" only because RB count > slots, but you never trade your RB1. Gate: a player flagged tradeable-surplus must be **genuinely below your starting line (true bench)** — not a top-tier/elite asset. Cap: don't offer a give whose `trade_value_score` is in the team's top-N startable at its position.
