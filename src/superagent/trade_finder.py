@@ -1,4 +1,4 @@
-"""Trade Finder v1 — the matching layer (Claude-owned per agentic_gm_plan.md §9/§10).
+"""Trade Finder v1 — the matching layer for credible 1-for-1 suggestions.
 
 Consumes the deterministic TradeContext payload from `trade_context.get_trade_context`
 and finds mutually-beneficial 1-for-1 trades on a drafted league. v1 is brutally
@@ -6,10 +6,10 @@ scoped (1-for-1 only) and makes NO projection claim — value is the determinist
 `trade_value_score` (market + scarcity) supplied by the contract.
 
 Seam (locked in the plan):
-  * Codex supplies `trade_value_score` + `roster_role` (pre-trade snapshot) + `eligible_slots`.
-  * Claude (here) recomputes optimal STARTER utility post-swap and gates on mutual
-    improvement (`lineup_value_delta` > 0 for BOTH teams) — never trusting the
-    pre-trade role after a swap.
+  * TradeContext supplies `trade_value_score` + `roster_role` (pre-trade snapshot)
+    + `eligible_slots`.
+  * The matcher recomputes optimal STARTER utility post-swap and gates on mutual
+    material improvement — never trusting the pre-trade role after a swap.
 
 Fairness (plan §9C): `lineup_value_delta > 0` for both sides is NECESSARY but not
 SUFFICIENT. Anti-fleece (value-gap guardrail) + human-sanity filters (no star-for-
@@ -29,6 +29,9 @@ _SUPERFLEX_POSITIONS = {"QB", "RB", "WR", "TE"}
 VALUE_GAP_TOLERANCE = 12.0   # anti-fleece: |give - get| trade_value_score must be within this
 MIN_LINEUP_DELTA = 2.0       # both lineups must materially improve, not merely win by rounding dust
 STAR_PROTECT_GAP = 18.0      # never give a player worth this much more than what you get back
+BALANCE_RATIO_THRESHOLD = 0.5
+UPGRADE_VALUE_THRESHOLD = 8.0
+DEPTH_ROLES = {"bench", "surplus"}
 
 
 def _slot_plan(settings: dict[str, Any]) -> dict[str, int]:
@@ -46,20 +49,16 @@ def _score(player: dict[str, Any]) -> float:
     return float(player.get("trade_value_score") or 0.0)
 
 
-def starter_utility(players: list[dict[str, Any]], settings: dict[str, Any]) -> float:
-    """Sum of trade_value_score over the optimal starting lineup.
-
-    Mirrors trade_context._assign_pre_trade_roles fill order (fixed positions →
-    SUPERFLEX → FLEX), greedy best-first, which is optimal for this slot structure
-    because the flexible slots (supersets) are filled last.
-    """
+def _optimal_lineup_players(players: list[dict[str, Any]], settings: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the optimal starting lineup under the locked slot fill order."""
     slots = _slot_plan(settings)
     remaining = list(players)
+    starters: list[dict[str, Any]] = []
 
-    def take(positions: set[str], count: int) -> float:
+    def take(positions: set[str], count: int) -> None:
         nonlocal remaining
         if count <= 0:
-            return 0.0
+            return
         eligible = sorted(
             (p for p in remaining if p.get("position") in positions),
             key=lambda p: (_score(p), -(p.get("effective_rank") or 999.0)),
@@ -67,15 +66,24 @@ def starter_utility(players: list[dict[str, Any]], settings: dict[str, Any]) -> 
         )
         chosen = eligible[:count]
         chosen_ids = {id(p) for p in chosen}
+        starters.extend(chosen)
         remaining = [p for p in remaining if id(p) not in chosen_ids]
-        return sum(_score(p) for p in chosen)
 
-    total = 0.0
     for position in ("QB", "RB", "WR", "TE"):
-        total += take({position}, slots[position])
-    total += take(_SUPERFLEX_POSITIONS, slots["SUPERFLEX"])
-    total += take(_FLEX_POSITIONS, slots["FLEX"])
-    return round(total, 3)
+        take({position}, slots[position])
+    take(_SUPERFLEX_POSITIONS, slots["SUPERFLEX"])
+    take(_FLEX_POSITIONS, slots["FLEX"])
+    return starters
+
+
+def starter_utility(players: list[dict[str, Any]], settings: dict[str, Any]) -> float:
+    """Sum of trade_value_score over the optimal starting lineup.
+
+    Mirrors trade_context._assign_pre_trade_roles fill order (fixed positions →
+    SUPERFLEX → FLEX), greedy best-first, which is optimal for this slot structure
+    because the flexible slots (supersets) are filled last.
+    """
+    return round(sum(_score(player) for player in _optimal_lineup_players(players, settings)), 3)
 
 
 def _swap(players: list[dict[str, Any]], out_id: str, incoming: dict[str, Any]) -> list[dict[str, Any]]:
@@ -102,6 +110,62 @@ def _player_brief(p: dict[str, Any]) -> dict[str, Any]:
 
 def _needs(team: dict[str, Any]) -> dict[str, int]:
     return {k: int(v or 0) for k, v in (team.get("needs_by_position") or {}).items()}
+
+
+def _is_depth(player: dict[str, Any]) -> bool:
+    return str(player.get("roster_role") or "").lower() in DEPTH_ROLES
+
+
+def _has_count_need(needs: dict[str, int], position: str | None) -> bool:
+    if not position:
+        return False
+    if needs.get(position, 0) > 0:
+        return True
+    return position in _FLEX_POSITIONS and needs.get("FLEX", 0) > 0
+
+
+def _starter_upgrade_margin(
+    players: list[dict[str, Any]],
+    settings: dict[str, Any],
+    incoming: dict[str, Any],
+) -> float | None:
+    """Incoming value minus the team's worst current starter at that position.
+
+    FLEX occupants count as starters because `_optimal_lineup_players` returns
+    fixed starters plus flexible-slot starters. We only compare against starters
+    at the incoming player's own position.
+    """
+    position = incoming.get("position")
+    if not position:
+        return None
+    same_position_starters = [
+        player
+        for player in _optimal_lineup_players(players, settings)
+        if player.get("position") == position
+    ]
+    if not same_position_starters:
+        return None
+    worst_starter = min(_score(player) for player in same_position_starters)
+    return round(_score(incoming) - worst_starter, 3)
+
+
+def _helps_team(
+    players: list[dict[str, Any]],
+    needs: dict[str, int],
+    settings: dict[str, Any],
+    incoming: dict[str, Any],
+) -> bool:
+    if _has_count_need(needs, incoming.get("position")):
+        return True
+    margin = _starter_upgrade_margin(players, settings, incoming)
+    return margin is not None and margin >= UPGRADE_VALUE_THRESHOLD
+
+
+def _balance_ratio(delta_a: float, delta_b: float) -> float:
+    bigger = max(delta_a, delta_b)
+    if bigger <= 0:
+        return 0.0
+    return min(delta_a, delta_b) / bigger
 
 
 def find_trades(
@@ -144,6 +208,15 @@ def find_trades(
             for get in opp_players:
                 considered += 1
                 gs, rs = _score(give), _score(get)
+                # Both managers must be dealing from true depth, not starters/flex core.
+                if not _is_depth(give) or not _is_depth(get):
+                    continue
+                # Complementarity is a hard gate: each incoming player must satisfy
+                # a count need or materially upgrade a weak starter.
+                if not _helps_team(my_players, my_needs, settings, get):
+                    continue
+                if not _helps_team(opp_players, opp_needs, settings, give):
+                    continue
                 # Anti-fleece + star protection guardrails (necessary-not-sufficient gate).
                 if abs(gs - rs) > VALUE_GAP_TOLERANCE:
                     continue
@@ -160,6 +233,8 @@ def find_trades(
                 d_opp = round(opp_after - opp_base, 3)
                 # Mutual improvement is mandatory.
                 if d_mine < MIN_LINEUP_DELTA or d_opp < MIN_LINEUP_DELTA:
+                    continue
+                if _balance_ratio(d_mine, d_opp) < BALANCE_RATIO_THRESHOLD:
                     continue
                 mutual_score = round(
                     min(d_mine, d_opp) * 10.0
