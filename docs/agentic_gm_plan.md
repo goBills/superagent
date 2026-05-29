@@ -199,14 +199,18 @@ The design converged across the Claude↔Codex review. These are decisions, not 
 
 The first proof. One wow moment, demoable on any league already drafted in Superagent (uses the data we have *today* — no live-season data, no league sync required). We learn from this before building the rest.
 
+**Progress (2026-05-29):** steps 1–2 ✅ (Codex `TradeContext`, `919ae58`). Steps 3–6 ✅ (Claude `trade_finder.py` engine, `075374d` — verified 5 unit tests + on a real prod league: RB-surplus team correctly offered Saquon→Chase, mutual lineup gain, fair gap, grounded why). **Next:** endpoint exposure (Codex) → Trade tab UI + pitch (Claude).
+
 **The flow (7 steps):**
-1. **Reconstruct all teams** from `LeagueDraftPick` (every pick carries `fantasy_team_name`). — *Codex*
-2. **Compute `trade_value_score` + components** per rostered player (ADP/effective_rank + positional scarcity/VOR + data_quality, with `roster_role` exposed separately as the pre-trade snapshot). — *Codex*
-3. **Find surplus/need matches** — per team, detect positional surplus vs need; find complementary team pairs (my surplus = your need, and vice versa). — *Claude*
-4. **Generate candidate deals** — **v1 is brutally scoped: 1-for-1 only** (2-for-1 only if it falls out trivially and the 2-side is clear fringe depth). Multi-player balancing is later. — *Claude*
-5. **Require mutual `lineup_value_delta` > 0** — both teams' optimal starting-lineup value rises (recomputed post-trade). — *Claude*
-6. **Apply sanity filters + value-gap guardrail** — necessary-not-sufficient (§9C): reject lopsided counts, star-for-scraps, and insulting deals, even when a delta is technically positive. — *Claude*
-7. **Show the deal + pitch (the pitch IS product, not decoration — Rob).** Each card: "give X / get Y," *why it helps you*, *why they'd say yes*, the data-provenance/freshness line, and **the actual draft-ready message you could send the other manager**. Agent-written, narrative-guarded. — *Claude*
+1. ✅ **Reconstruct all teams** from `LeagueDraftPick` (every pick carries `fantasy_team_name`). — *Codex (919ae58)*
+2. ✅ **Compute `trade_value_score` + components** per rostered player (ADP/effective_rank + positional scarcity/VOR + data_quality, with `roster_role` exposed separately as the pre-trade snapshot). — *Codex (919ae58)*
+3. ✅ **Find surplus/need matches** — complementary team pairing. — *Claude (`trade_finder.find_trades`, 075374d)*
+4. ✅ **Generate candidate deals** — **1-for-1 only** in v1. — *Claude (075374d)*
+5. ✅ **Require mutual `lineup_value_delta` > 0** — optimal starter utility recomputed post-swap, mirroring `trade_context` fill order. — *Claude (075374d)*
+6. ✅ **Sanity filters + value-gap guardrail** — `VALUE_GAP_TOLERANCE=12`, `STAR_PROTECT_GAP=18`, both-sides-improve mandatory. — *Claude (075374d)*
+7. ⏭️ **Show the deal + pitch (the pitch IS product — Rob).** Each card: "give X / get Y," *why it helps you*, *why they'd say yes*, the data-provenance/freshness line, and **a send-ready message**. Agent-written, narrative-guarded. — *Claude (next)*
+
+**→ HANDOFF to Codex (endpoint, your lane per §6/§9D):** wrap `trade_finder.find_trades_for_league(league_id, my_team_name)` in an authenticated endpoint (e.g. `GET /leagues/{id}/trade/finder?team=My%20Team`). It already returns `{ok, my_team, deals[], provenance, ...}`. Engine is pure + tested; you own the endpoint + its test. Once it exists, Claude builds the Trade Mode UI (step 7) against it. (Alternatively register `find_trades` as an agent tool so chat can answer "who should I trade for?" natively — also clean to do alongside.)
 
 **Explicitly OUT of v1 slice** (important, not blockers — we ship the slice without them):
 - Weekly GM Briefing / engagement loop (the retention mechanic — next, after the finder proves out).
