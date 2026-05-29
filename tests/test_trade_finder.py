@@ -6,6 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from superagent.trade_finder import (  # noqa: E402
+    MIN_LINEUP_DELTA,
     VALUE_GAP_TOLERANCE,
     find_trades,
     starter_utility,
@@ -83,18 +84,18 @@ def test_finds_mutually_beneficial_swap():
     assert top["give"]["position"] == "RB"
     assert top["get"]["position"] == "WR"
     assert top["partner_team"] == "Team Salam"
-    assert top["lineup_value_delta_mine"] > 0
-    assert top["lineup_value_delta_partner"] > 0
-    # Top deal should be ranked by my benefit (it's my finder).
-    assert top["lineup_value_delta_mine"] == max(d["lineup_value_delta_mine"] for d in result["deals"])
+    assert top["lineup_value_delta_mine"] >= MIN_LINEUP_DELTA
+    assert top["lineup_value_delta_partner"] >= MIN_LINEUP_DELTA
+    # Top deal should be ranked by mutual acceptability, not only my biggest gain.
+    assert top["mutual_benefit_score"] == max(d["mutual_benefit_score"] for d in result["deals"])
 
 
 def test_no_deal_breaches_anti_fleece_or_hurts_either_side():
     result = find_trades(CONTEXT, "My Team", max_deals=10)
     for deal in result["deals"]:
         assert deal["value_gap"] <= VALUE_GAP_TOLERANCE          # anti-fleece
-        assert deal["lineup_value_delta_mine"] > 0               # I improve
-        assert deal["lineup_value_delta_partner"] > 0            # they improve (mutual)
+        assert deal["lineup_value_delta_mine"] >= MIN_LINEUP_DELTA       # I materially improve
+        assert deal["lineup_value_delta_partner"] >= MIN_LINEUP_DELTA    # they materially improve
 
 
 def test_unknown_team_returns_error_not_crash():

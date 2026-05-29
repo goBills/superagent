@@ -27,7 +27,7 @@ _SUPERFLEX_POSITIONS = {"QB", "RB", "WR", "TE"}
 
 # Tunables (v1). Deliberately conservative — we'd rather show 1 great deal than 5 shaky ones.
 VALUE_GAP_TOLERANCE = 12.0   # anti-fleece: |give - get| trade_value_score must be within this
-MIN_LINEUP_DELTA = 0.01      # both lineups must strictly improve (epsilon guards float noise)
+MIN_LINEUP_DELTA = 2.0       # both lineups must materially improve, not merely win by rounding dust
 STAR_PROTECT_GAP = 18.0      # never give a player worth this much more than what you get back
 
 
@@ -159,25 +159,39 @@ def find_trades(
                 d_mine = round(my_after - my_base, 3)
                 d_opp = round(opp_after - opp_base, 3)
                 # Mutual improvement is mandatory.
-                if d_mine <= MIN_LINEUP_DELTA or d_opp <= MIN_LINEUP_DELTA:
+                if d_mine < MIN_LINEUP_DELTA or d_opp < MIN_LINEUP_DELTA:
                     continue
+                mutual_score = round(
+                    min(d_mine, d_opp) * 10.0
+                    + d_mine
+                    + d_opp
+                    - abs(d_mine - d_opp) * 0.1,
+                    3,
+                )
                 deals.append({
                     "partner_team": opp_name,
                     "give": _player_brief(give),
                     "get": _player_brief(get),
                     "lineup_value_delta_mine": d_mine,
                     "lineup_value_delta_partner": d_opp,
+                    "mutual_benefit_score": mutual_score,
                     "value_gap": round(abs(gs - rs), 3),
                     "why_me": _why(get, give, my_needs, gaining=True),
                     "why_partner": _why(give, get, opp_needs, gaining=True),
                 })
 
-    # Rank by my benefit first (it's my finder), then mutual benefit; dedupe by (give,get).
+    # Rank by mutual acceptability first. A lopsided "I gain 40, they gain 0.4"
+    # recommendation may pass raw math, but it is not a compelling trade to send.
     seen: set[tuple] = set()
     ranked: list[dict[str, Any]] = []
     for deal in sorted(
         deals,
-        key=lambda d: (d["lineup_value_delta_mine"], d["lineup_value_delta_partner"]),
+        key=lambda d: (
+            d["mutual_benefit_score"],
+            min(d["lineup_value_delta_mine"], d["lineup_value_delta_partner"]),
+            d["lineup_value_delta_mine"] + d["lineup_value_delta_partner"],
+            -d["value_gap"],
+        ),
         reverse=True,
     ):
         key = (deal["give"]["canonical_player_id"], deal["get"]["canonical_player_id"])
