@@ -282,6 +282,18 @@ curl -X PUT http://localhost:8000/leagues/1 \
   }'
 ```
 
+### GET /leagues/{league_id}/trade/context
+
+Return the v1 `TradeContext` payload for Trade Finder matching. The payload is
+based on the drafted board for now, exposes transparent `trade_value_score`
+components, and marks roster provenance/freshness so the UI never hides stale
+league state.
+
+```bash
+curl "http://localhost:8000/leagues/1/trade/context?season=2026&source=sleeper_adp" \
+  -H "Authorization: Bearer $SUPERAGENT_TOKEN"
+```
+
 ## ESPN Integration
 
 ### POST /integrations/espn/leagues

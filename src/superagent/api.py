@@ -48,6 +48,7 @@ from superagent.models import (
     utc_now,
 )
 from superagent.rate_limit import check_rate_limit
+from superagent.trade_context import get_trade_context
 
 
 @asynccontextmanager
@@ -1773,6 +1774,29 @@ def get_league_draft_sheet(
     )
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result.get("error", "Draft sheet unavailable"))
+    return result["data"]
+
+
+@app.get("/leagues/{league_id}/trade/context")
+def get_league_trade_context(
+    league_id: int,
+    season: Optional[int] = None,
+    bye_week_season: Optional[int] = None,
+    source: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Return the v1 TradeContext payload for Trade Finder matching."""
+    _get_owned_league(db, league_id, current_user.id)
+    result = get_trade_context(
+        league_id=league_id,
+        season=season,
+        bye_week_season=bye_week_season,
+        source=source,
+        db=db,
+    )
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Trade context unavailable"))
     return result["data"]
 
 
