@@ -265,6 +265,15 @@ Turning the Salam-demo lesson into direction. Three threads.
 ### ✅ DONE / CONVERGED & LIVE-VERIFIED (2026-05-29)
 Engine gates shipped (Codex, `f827499`) + teams-to-call panel aligned to the same definition (Claude, `cea5fae`). **Live end-to-end on league 50:** finder returns **0 deals** (1,584 pairs considered — all weak Bucky/London-style cards gated out), and the no-deal panel correctly takes over with real leverage — *"Call The Commissioner: WR/RB that upgrades you, needs RB where you're deep → Target: Jefferson, Jeanty, Rashee Rice."* Both halves use the same need-or-upgrade definition, so finder and panel agree. Backend: 337 tests pass (depth/balance, partner need-or-upgrade rejection, deep-roster upgrade w/o count-need). The "sendable or don't show it" bar is met.
 
+### Demo seed — give league 50 one credible deal (Rob, 2026-05-29)
+Strict gates correctly return 0 on league 50 → great correctness, but a first external demo (Salam) shouldn't *open* on an empty board. Rob's call: **seed one deliberately credible 1-for-1** so the first screen has a sendable ticket + the teams-to-call fallback. Codex owns the prod seed (data lane + token). **Claude verified the gate-clearing target against the real engine** so the seed works first try:
+
+- Add/shape one team as a realistic **WR-heavy / RB-punt "zig" build**: two elite WRs + a startable **surplus WR ≈ value 70** (gettable) and a **weak RB2 starter ≈ value 50**, marked **RB-needy**.
+- Against My Team's real roster (surplus RBs Montgomery 63 / Warren 62; worst WR starter DK Metcalf 58), this yields a clean deal: **Montgomery → their surplus WR(70): me +12 / them +13, ratio 0.92, gap 7 — clears balance/anti-fleece/depth/complementary.**
+- In practice: pick real 2026 players whose Sleeper ADP maps near those values (a ~WR30 as their 4th WR; a low-end RB2). Result: ≥1 "I'd consider that" ticket, with the teams-to-call panel still present below.
+
+*(Stopgap if demoing before reseed: tell Salam "Trade Finder is strict — if no deal shows, the teams-to-call panel is the useful part." But the seeded deal is the better demo.)*
+
 ### A0.1 LOCKED v1 gate numbers (Rob, 2026-05-29) — build against these
 1. **Balance ratio:** `min(Δmine, Δpartner) / max(...) >= 0.5`.
 2. **Upgrade threshold X = 8.0** `trade_value_score` points (not 10 — 10 over-restricts mid-roster).
