@@ -200,6 +200,40 @@ First non-Rob user ran the draft cockpit. Verdict: "super cool." Signal, sorted:
 
 ---
 
+## Handoff → Codex (2026-05-30): Trade Mode round 2 (post-Salam)
+
+**Context.** Salam ran the **trade beta** (league 50, seeded credible deal: My Team David Montgomery → Team Rival Zay Flowers) and validated hard: *"the trade beta is really cool… this is what fantasy needs so bad."* He then drew us a round-2 roadmap. Full capture + priority: **[`docs/agentic_gm_plan.md` §13](docs/agentic_gm_plan.md)**.
+
+**Shipped by Claude (live, verified):**
+- **v0.18.0 (`5d421a4`) — pitch styles.** Replaced the single "Draft the text" button on each deal card with four tone chips — **Friendly / Confident / Numbers / Chirp 😈**. Each sends the agent the same honest deal core (give/get, "I deal from depth, they fill a need") wrapped in a tone. "Chirp" = good-natured smack-talk, explicitly **PG-13, no profanity / no real insults** (Salam wanted "threats, expletives and insults" — product call: keep it sellable; narrative guard still applies). Verified in-browser: all four chips render, Chirp fires the correct guarded prompt. `/health` confirms `5d421a4` live. Frontend-only (`index.html`) — **no engine/contract change**, nothing for you to re-verify here.
+
+**Proposed split for round 2** (peer model — flagging the seams, not assigning territory):
+
+| Item (Salam ask) | Owner | Notes |
+|---|---|---|
+| Pitch styles | Claude — **DONE** | v0.18.0 above. |
+| **Honest bye / strength-of-schedule slice** | **Codex data → Claude UI** | The buildable-now honest forward-looking piece. **No projections.** See contract ask ①. |
+| **Multi-player packages (2-for-1, 2-for-2)** | **Codex engine** | `trade_finder.py` extension. Real complexity jump — needs a gates agreement first, like we did for 1-for-1. See ask ②. |
+| Show more of target team's inventory | Claude UI (+ small endpoint) | Mostly surfacing more candidates per partner; may want a `max_per_partner` knob on the finder. |
+| Hover injury notes + suspension flags | Claude UI + Codex field | Sleeper already carries `injury_status` in the current-context layer — likely just plumbing it into `_player_brief`/TradeContext + a hover. Low lift; confirm the field is populated for 2026. |
+| **Beat-writer / agent-farm news+injury moat** | **3-way design** | The big strategic bet (Rob + Salam both lit up). Sub-agent farm polling beat writers / official injury sources + X ingestion instead of licensing APIs — the "two weeks ahead" engine and the offseason-context answer. Needs a real design pass (fan-out orchestration, source trust/provenance, X ToS, reliability) before anyone builds. **Do not start building — let's spec it together first.** |
+
+**Concrete asks for Codex (with proposed contracts):**
+
+**① Bye / strength-of-schedule in `TradeContext` — honest, buildable now.** We already have the 2026 schedule + `official_bye_weeks`. The credibility line (plan §12): byes/SoS are *computable today*; per-game projections need in-season data (v2) and we will **never** fake them. Proposed additive fields on each player brief (or team block) so the finder + UI can show forward-looking context honestly:
+  - per-player: `bye_week` (already present) + a `rest_of_season` block is overkill for v1 — start with **`playoff_weeks_bye` flag** (does this player's bye fall in the league's fantasy playoff window?) and a coarse **`sos_tier`** (easy/avg/hard rest-of-season for that player's NFL team, derived from opponent ranks — labeled as schedule strength, not a points projection).
+  - Label provenance explicitly (e.g. `"source": "schedule"` ) so the UI can say "based on schedule" and never imply a projection. **Want your read on whether this lives in TradeContext or a sibling `schedule_context` payload the finder joins.**
+
+**② Multi-player packages — let's agree gates before code.** 1-for-1 gates are locked and passing (balance ratio ≥0.5, depth-only give, need-or-upgrade, anti-fleece/star-protect, mutual lineup Δ ≥ 2.0). 2-for-1 breaks several assumptions:
+  - **Combinatorics:** 2-for-1 / 2-for-2 explode the candidate space — need a generation strategy (e.g. only consider packaging a depth piece *with* a genuine asset to fix a real need; cap package size at 2; prune early on value-gap before lineup recompute).
+  - **Fairness redefinition:** "balance ratio" and "anti-fleece" need a package-level definition. The roster-slot math also changes (giving 2, getting 1 frees a roster spot — does the freed slot get backfilled in the lineup recompute, or left empty?).
+  - **Credibility bar is unchanged:** still "sendable or don't show it." A 2-for-1 should only surface when it's *clearly better* than the best available 1-for-1 for the same need — otherwise it's noise.
+  - **My proposal:** you draft a short gates spec in `agentic_gm_plan.md` (mirroring the §12.A0.1 locked-numbers format), we agree on it here, *then* you implement in `trade_finder.py` with tests. I'll keep my hands off `trade_finder.py` until we've agreed the gates (same protocol as round 1).
+
+**No rush / no blocker on you right now** — pitch styles was the cheap delight win and it's out. The honest bye/SoS slice (①) is the next concrete shippable; multi-player (②) and the news moat are design-first. Tell me which you want to pick up and I'll move in lockstep.
+
+---
+
 ## Roadmap & Open Items
 
 **Logged (captured as task chips, not yet built):**
