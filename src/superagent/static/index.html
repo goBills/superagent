@@ -1057,12 +1057,118 @@
             padding: 6px 2px !important;
         }
 
-        /* Chat session controls live with the Ask bar now — chat is contextual, not a section */
-        .command-session {
+        /* Chat history controls live with the Ask bar now — chat is contextual, not a section */
+        .session-state-select { display: none; }
+        .chat-history-wrap {
+            position: relative;
             flex: 0 0 auto;
-            max-width: 140px;
-            padding: 6px 8px;
+        }
+        .command-history { width: 154px; }
+        .overlay-history { width: 150px; }
+        .chat-history-btn {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 7px 10px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            background: var(--surface);
+            color: #334155;
             font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            box-shadow: var(--shadow-sm);
+        }
+        .chat-history-btn:hover {
+            border-color: #c7d6f5;
+            background: #f8fbff;
+            color: var(--brand);
+        }
+        .chat-history-label {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .chat-history-caret {
+            color: var(--muted);
+            font-size: 10px;
+            flex-shrink: 0;
+        }
+        .chat-history-menu {
+            display: none;
+            position: absolute;
+            right: 0;
+            width: min(360px, 88vw);
+            max-height: 360px;
+            overflow-y: auto;
+            padding: 6px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--surface);
+            box-shadow: var(--shadow-lg);
+            z-index: 1200;
+        }
+        .chat-history-menu.open { display: block; }
+        .command-history .chat-history-menu { bottom: calc(100% + 10px); }
+        .overlay-history .chat-history-menu { top: calc(100% + 8px); }
+        .chat-history-empty {
+            padding: 14px 12px;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.45;
+        }
+        .chat-history-row {
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 4px 10px;
+            padding: 10px;
+            border: none;
+            border-radius: var(--radius-sm);
+            background: transparent;
+            text-align: left;
+            cursor: pointer;
+        }
+        .chat-history-row:hover { background: #f5f8ff; }
+        .chat-history-row.active {
+            background: #eef4ff;
+            box-shadow: inset 3px 0 0 var(--brand);
+        }
+        .chat-history-title {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: var(--text);
+            font-size: 13px;
+            font-weight: 800;
+        }
+        .chat-history-time {
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .chat-history-preview {
+            grid-column: 1 / -1;
+            color: #475569;
+            font-size: 12px;
+            line-height: 1.35;
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+            overflow: hidden;
+        }
+        .chat-history-meta {
+            grid-column: 1 / -1;
+            color: #94a3b8;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
         }
 
         .command-send {
@@ -1816,9 +1922,16 @@
         <div class="command-bar" id="commandBar">
             <span class="command-spark">⚡</span>
             <input type="text" id="questionInput" class="command-input" placeholder="Ask Superagent — e.g. who should I draft at 31?" onkeypress="handleKeyPress(event)">
-            <select id="sessionSelect" class="cockpit-select command-session" onchange="loadSelectedSession()">
+            <select id="sessionSelect" class="session-state-select" aria-hidden="true" tabindex="-1">
                 <option value="">Recent chats</option>
             </select>
+            <div class="chat-history-wrap command-history">
+                <button id="sessionMenuButton" class="chat-history-btn" onclick="event.stopPropagation(); toggleSessionMenu('command')" type="button" aria-expanded="false" aria-controls="sessionMenu">
+                    <span class="chat-history-label" id="sessionMenuLabel">Chats</span>
+                    <span class="chat-history-caret">▴</span>
+                </button>
+                <div id="sessionMenu" class="chat-history-menu" onclick="event.stopPropagation()" role="menu" aria-label="Recent chats"></div>
+            </div>
             <button class="example-btn" onclick="startNewChat()" type="button">New</button>
             <button class="command-send" onclick="sendMessage()" type="button">Ask</button>
         </div>
@@ -1830,9 +1943,16 @@
         <div class="answer-overlay-head">
             <span class="answer-overlay-title">⚡ Superagent</span>
             <div class="answer-overlay-tools">
-                <select id="overlaySessionSelect" class="overlay-session" onchange="loadSelectedSession(this.value)" title="Past chats" aria-label="Past chats">
+                <select id="overlaySessionSelect" class="session-state-select" aria-hidden="true" tabindex="-1">
                     <option value="">🕘 Past chats</option>
                 </select>
+                <div class="chat-history-wrap overlay-history">
+                    <button id="overlaySessionMenuButton" class="chat-history-btn" onclick="event.stopPropagation(); toggleSessionMenu('overlay')" type="button" aria-expanded="false" aria-controls="overlaySessionMenu">
+                        <span class="chat-history-label" id="overlaySessionMenuLabel">History</span>
+                        <span class="chat-history-caret">▾</span>
+                    </button>
+                    <div id="overlaySessionMenu" class="chat-history-menu" onclick="event.stopPropagation()" role="menu" aria-label="Past chats"></div>
+                </div>
                 <button class="overlay-newchat" onclick="startNewChat()" type="button" title="Start a new chat">✎ New chat</button>
                 <button class="draft-drawer-close" onclick="closeAnswer()" type="button" aria-label="Close — your chat is saved" title="Close (your chat is saved — reopen from Past chats)">&times;</button>
             </div>
@@ -1923,6 +2043,7 @@
         let isWaiting = false;
         let requestTimeout = null;
         let sessionsLoaded = false;
+        let sessionSummaries = [];
         let draftBoardPicks = [];
         // Roster context for agent prompts. Auto-populated from "I picked" (no visible widget
         // since the Draft Room drawer was removed); persisted in localStorage via draft room state.
@@ -1970,6 +2091,7 @@
         }
 
         function closeAnswer() {
+            closeSessionMenus();
             document.getElementById('answerOverlay').classList.remove('open');
             document.getElementById('answerBackdrop').classList.remove('open');
             document.getElementById('answerOverlay').setAttribute('aria-hidden', 'true');
@@ -2021,6 +2143,125 @@
             return `${date} · ${preview.slice(0, 64)}`;
         }
 
+        function compactChatTitle(session) {
+            const preview = (session && session.preview ? session.preview : 'Untitled chat')
+                .replace(/\s+/g, ' ')
+                .trim();
+            if (!preview) return 'Untitled chat';
+            return preview.length > 48 ? `${preview.slice(0, 45)}…` : preview;
+        }
+
+        function chatPreview(session) {
+            const first = (session && session.preview ? session.preview : '')
+                .replace(/\s+/g, ' ')
+                .trim();
+            const latest = (session && session.latest_preview ? session.latest_preview : '')
+                .replace(/\s+/g, ' ')
+                .trim();
+            const preview = latest && latest !== first ? `Latest: ${latest}` : first;
+            if (!preview) return '';
+            return preview.length > 132 ? `${preview.slice(0, 129)}…` : preview;
+        }
+
+        function chatRelativeTime(isoValue) {
+            const date = new Date(isoValue);
+            if (Number.isNaN(date.getTime())) return 'Saved';
+            const diffMs = Date.now() - date.getTime();
+            const minute = 60 * 1000;
+            const hour = 60 * minute;
+            const day = 24 * hour;
+            if (diffMs < minute) return 'Now';
+            if (diffMs < hour) return `${Math.floor(diffMs / minute)}m ago`;
+            if (diffMs < day) return `${Math.floor(diffMs / hour)}h ago`;
+            if (diffMs < 7 * day) return `${Math.floor(diffMs / day)}d ago`;
+            return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        }
+
+        function closeSessionMenus() {
+            for (const id of ['sessionMenu', 'overlaySessionMenu']) {
+                document.getElementById(id)?.classList.remove('open');
+            }
+            document.getElementById('sessionMenuButton')?.setAttribute('aria-expanded', 'false');
+            document.getElementById('overlaySessionMenuButton')?.setAttribute('aria-expanded', 'false');
+        }
+
+        function toggleSessionMenu(kind) {
+            const menuId = kind === 'overlay' ? 'overlaySessionMenu' : 'sessionMenu';
+            const buttonId = kind === 'overlay' ? 'overlaySessionMenuButton' : 'sessionMenuButton';
+            const menu = document.getElementById(menuId);
+            const button = document.getElementById(buttonId);
+            if (!menu || !button) return;
+            const willOpen = !menu.classList.contains('open');
+            closeSessionMenus();
+            if (willOpen) {
+                renderSessionMenus();
+                menu.classList.add('open');
+                button.setAttribute('aria-expanded', 'true');
+            }
+        }
+
+        function updateSessionMenuLabels() {
+            const current = sessionSummaries.find(session => session.id === sessionId);
+            const label = current ? compactChatTitle(current) : 'Chats';
+            const overlayLabel = current ? compactChatTitle(current) : 'History';
+            const commandLabel = document.getElementById('sessionMenuLabel');
+            const overlaySessionLabel = document.getElementById('overlaySessionMenuLabel');
+            if (commandLabel) commandLabel.textContent = label;
+            if (overlaySessionLabel) overlaySessionLabel.textContent = overlayLabel;
+        }
+
+        function renderSessionMenu(menuId) {
+            const menu = document.getElementById(menuId);
+            if (!menu) return;
+            menu.innerHTML = '';
+            if (!sessionSummaries.length) {
+                const empty = document.createElement('div');
+                empty.className = 'chat-history-empty';
+                empty.textContent = 'No saved chats yet. Ask something and it will appear here.';
+                menu.appendChild(empty);
+                return;
+            }
+            for (const session of sessionSummaries) {
+                const row = document.createElement('button');
+                row.type = 'button';
+                row.className = `chat-history-row${session.id === sessionId ? ' active' : ''}`;
+                row.setAttribute('role', 'menuitem');
+                row.dataset.sessionId = session.id;
+                row.onclick = () => {
+                    closeSessionMenus();
+                    loadSelectedSession(session.id);
+                };
+
+                const title = document.createElement('div');
+                title.className = 'chat-history-title';
+                title.textContent = compactChatTitle(session);
+
+                const time = document.createElement('div');
+                time.className = 'chat-history-time';
+                time.textContent = chatRelativeTime(session.last_active);
+
+                const preview = document.createElement('div');
+                preview.className = 'chat-history-preview';
+                const previewText = chatPreview(session);
+                preview.textContent = previewText;
+
+                const meta = document.createElement('div');
+                meta.className = 'chat-history-meta';
+                const count = Number(session.message_count || 0);
+                meta.textContent = `${count} ${count === 1 ? 'message' : 'messages'}`;
+
+                row.append(title, time, preview, meta);
+                if (!previewText) preview.remove();
+                menu.appendChild(row);
+            }
+        }
+
+        function renderSessionMenus() {
+            renderSessionMenu('sessionMenu');
+            renderSessionMenu('overlaySessionMenu');
+            updateSessionMenuLabels();
+        }
+
         async function loadSessions() {
             if (!authToken) return;
             try {
@@ -2029,7 +2270,9 @@
                 });
                 if (!response.ok) return;
                 const sessions = await response.json();
-                // Populate both the command-bar dropdown and the in-overlay "Past chats" picker.
+                sessionSummaries = Array.isArray(sessions) ? sessions : [];
+                // Keep hidden selects populated for lightweight state checks, while the visible
+                // history menus render readable rows instead of cramped native option labels.
                 const overlaySelect = document.getElementById('overlaySessionSelect');
                 const selects = [
                     { el: sessionSelect, placeholder: 'Recent chats' },
@@ -2044,8 +2287,9 @@
                         option.textContent = sessionOptionLabel(session);
                         el.appendChild(option);
                     }
-                    if (sessionId && sessions.some(s => s.id === sessionId)) el.value = sessionId;
+                    if (sessionId && sessionSummaries.some(s => s.id === sessionId)) el.value = sessionId;
                 }
+                renderSessionMenus();
                 sessionsLoaded = true;
             } catch (error) {
                 sessionsLoaded = false;
@@ -2082,6 +2326,7 @@
                 sessionSelect.value = sessionId;
                 const overlaySelect = document.getElementById('overlaySessionSelect');
                 if (overlaySelect) overlaySelect.value = sessionId;
+                renderSessionMenus();
                 renderSessionMessages(detail.messages || []);
             } catch (error) {
                 addMessage('error', error.message);
@@ -2109,6 +2354,8 @@
             sessionSelect.value = '';
             const overlaySelect = document.getElementById('overlaySessionSelect');
             if (overlaySelect) overlaySelect.value = '';
+            closeSessionMenus();
+            updateSessionMenuLabels();
             clearChat();
             questionInput.focus();
         }
@@ -3655,8 +3902,10 @@
         }
 
         // Initialize on load
+        document.addEventListener('click', () => closeSessionMenus());
+
         document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape') { closeAnswer(); closeDraftSheet(); clearSelection(); return; }
+            if (event.key === 'Escape') { closeSessionMenus(); closeAnswer(); closeDraftSheet(); clearSelection(); return; }
             // Draft-speed shortcuts: only with a selected player and not while typing.
             const tag = (document.activeElement && document.activeElement.tagName) || '';
             if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;

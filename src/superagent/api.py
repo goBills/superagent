@@ -137,6 +137,7 @@ class SessionSummary(BaseModel):
     expires_at: str
     message_count: int
     preview: Optional[str] = None
+    latest_preview: Optional[str] = None
 
 
 class SessionDetail(BaseModel):
@@ -1590,6 +1591,10 @@ def list_sessions(
             (message.content for message in session.messages if message.role == "user"),
             None,
         )
+        latest_user_message = next(
+            (message.content for message in reversed(session.messages) if message.role == "user"),
+            first_user_message,
+        )
         summaries.append(
             SessionSummary(
                 id=session.id,
@@ -1598,6 +1603,7 @@ def list_sessions(
                 expires_at=session.expires_at.isoformat(),
                 message_count=len(session.messages),
                 preview=first_user_message,
+                latest_preview=latest_user_message,
             )
         )
     return summaries
