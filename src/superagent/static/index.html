@@ -978,7 +978,7 @@
         .trade-empty, .trade-warming { padding: 40px 20px; text-align: center; color: var(--muted); font-size: 14px; line-height: 1.6; }
         /* No-deal-still-useful panel: where your leverage is (teams to call + targets) */
         .no-deal { max-width: 680px; width: 100%; padding: 6px 2px; }
-        .no-deal-head { font-size: 15px; font-weight: 800; color: var(--text); }
+        .no-deal-head { font-size: 18px; font-weight: 850; color: var(--text); }
         .no-deal-sub { font-size: 13px; color: var(--muted); margin: 4px 0 14px; }
         .call-list { display: flex; flex-direction: column; gap: 10px; }
         .call-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm); padding: 12px 14px; }
@@ -2891,10 +2891,12 @@
                 if (res.ok) ctx = await res.json();
             } catch (e) { /* fall through to plain message */ }
             const partners = ctx ? computeTradePartners(ctx, myTeam) : [];
+            // Reframed as a proactive feature, not an empty state. The strictness is a stated
+            // principle (a confidence signal), and the headline is the value: who to call.
             let html = `<div class="no-deal">
-                <div class="no-deal-head">No clean 1-for-1 win-win right now for <strong>${escapeHtml(myTeam)}</strong>.</div>
-                <div class="no-deal-sub">That's normal on a balanced roster — but here's where your leverage is:</div>`;
+                <div class="no-deal-head">📞 Trade Calls to Make</div>`;
             if (partners.length) {
+                html += `<div class="no-deal-sub">No straight 1-for-1 cleared the bar — Superagent won't pitch a deal both managers wouldn't take. Here's your real leverage: who to call and who to target.</div>`;
                 html += '<div class="call-list">' + partners.slice(0, 3).map(p => `
                     <div class="call-card">
                         <div class="call-team">📞 Call ${escapeHtml(p.team)}</div>
@@ -2902,7 +2904,7 @@
                         ${p.targets.length ? `<div class="call-targets">🎯 Target: ${p.targets.map(escapeHtml).join(', ')}</div>` : ''}
                     </div>`).join('') + '</div>';
             } else {
-                html += '<div class="call-empty">No obvious complementary partners yet — the league looks balanced. Re-check as rosters shift (waivers, byes, injuries).</div>';
+                html += `<div class="no-deal-sub">No complementary leverage on the board right now — every roster looks balanced. This updates as the league shifts (waivers, byes, injuries).</div>`;
             }
             html += `<div class="league-prov">📋 ${escapeHtml(prov)}</div></div>`;
             dealsEl.innerHTML = html;
