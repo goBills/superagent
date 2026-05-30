@@ -1019,6 +1019,13 @@
             border-radius: var(--radius-sm); font-size: 12px; font-weight: 700; cursor: pointer;
         }
         .trade-pitch-btn:hover { background: #e0eaff; }
+        /* Pitch tone chips — same deal, different voice (Salam wanted personality) */
+        .pitch-styles { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; color: var(--muted); font-weight: 700; }
+        .pitch-tone {
+            padding: 5px 11px; border: 1px solid #c7d6f5; background: #eef4ff; color: var(--brand);
+            border-radius: 999px; font-size: 12px; font-weight: 700; cursor: pointer;
+        }
+        .pitch-tone:hover { background: #e0eaff; }
 
         /* Command bar (slim CLI-style input) */
         .command-bar {
@@ -3196,18 +3203,33 @@
                 <div class="trade-why"><strong>Why they say yes:</strong> ${escapeHtml(d.why_partner || '')}</div>
                 <div class="trade-foot">
                     <span class="trade-prov">📋 ${escapeHtml(prov)}</span>
-                    <button class="trade-pitch-btn" onclick="draftTradePitch(${idx})" type="button">✉️ Draft the text</button>
+                    <span class="pitch-styles">✉️ Draft a pitch:
+                        <button class="pitch-tone" onclick="draftTradePitch(${idx},'friendly')" type="button">Friendly</button>
+                        <button class="pitch-tone" onclick="draftTradePitch(${idx},'bold')" type="button">Confident</button>
+                        <button class="pitch-tone" onclick="draftTradePitch(${idx},'numbers')" type="button">Numbers</button>
+                        <button class="pitch-tone" onclick="draftTradePitch(${idx},'chirp')" type="button">Chirp 😈</button>
+                    </span>
                 </div>
             </div>`;
         }
 
-        // Generate a send-ready trade message via the agent (option b for v1 — team to confirm a/b).
-        function draftTradePitch(idx) {
+        // Generate a send-ready trade message via the agent, in the chosen tone (Salam wanted
+        // pitch *personality*). Honest core stays (deal from depth, helps both); tone wraps it.
+        // "Chirp" is good-natured smack-talk kept PG-13 — narrative guard applies server-side.
+        const PITCH_TONES = {
+            friendly: 'Warm and casual, low-pressure, like texting a friend. 2-3 sentences.',
+            bold: 'Confident and direct — sell the upside with a little swagger, but still honest. 2-3 sentences.',
+            numbers: 'Lead with the roster logic and value: why it upgrades my lineup and fills their need. Concise, data-forward.',
+            chirp: 'Playful competitive smack-talk — good-natured ribbing like leaguemates give each other. Keep it PG-13, NO profanity or real insults, and still make the actual offer clearly. Fun, 2-3 sentences.',
+        };
+        function draftTradePitch(idx, tone) {
             const d = tradeDealsData[idx];
             if (!d) return;
-            const q = `Write a short, friendly trade-offer message I can text my leaguemate who manages "${d.partner_team}". `
+            const style = PITCH_TONES[tone] || PITCH_TONES.friendly;
+            const q = `Write a trade-offer message I can text my leaguemate who manages "${d.partner_team}". `
                 + `I give ${d.give.player_name} (${d.give.position}) and get ${d.get.player_name} (${d.get.position}). `
-                + `Be honest about why it helps both of us — I'm dealing from depth, they fill a need. Keep it casual, 2-3 sentences, no hype.`;
+                + `Be honest about why it helps both of us — I'm dealing from depth, they fill a need. `
+                + `Tone: ${style}`;
             questionInput.value = q;
             sendMessage();
         }

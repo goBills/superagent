@@ -331,3 +331,21 @@ The north feeling: **"oh damn, I could actually send this"** + **"here's the mov
 4. **Pitch styles** — Friendly / Bold / Casual / Negotiator buttons → same deal, different text. *(Cheap, makes it fun immediately.)*
 5. **Counteroffer ladder** — "If they say no, offer X; don't include Y." *(Feels like a real co-GM; later.)*
 6. **Weekly moves queue** — "3 moves this week: 1 trade, 1 waiver, 1 lineup tweak." *(The long-term retention loop = the Co-pilot tier from §11.)*
+
+---
+
+## 13. Salam round-2 feedback (2026-05-29) — STRONG validation + roadmap
+
+After the seeded demo: **"The trade beta is really cool… Man this is what fantasy needs so bad."** The wedge is validated by a real user. His asks, prioritized by delight-per-effort and honesty about data:
+
+**A. Pitch styles/tones — SHIP NOW (cheap, requested, Claude lane).** Salam: *"the draft-a-text button is cute but I come in with threats, expletives and insults."* He wants pitch *personality*. → tone options on the pitch (Friendly / Confident / Numbers / Chirp). Product judgment: "Chirp" = playful smack-talk, kept good-natured/PG-13 (no profanity/slurs) — narrative-guarded; we're a sellable product. Highest delight-per-effort; building now.
+
+**B. Show more of the target team + multi-player packages.** He scouts team-by-team for "inventory at a position / undervalued players," then packages multi-player deals. We do 1-for-1 (brutal v1). Next: surface *more upgrade-able pieces on a partner team* (extends the League view) and **multi-player packaging** (engine, Codex; the planned step past 1-for-1).
+
+**C. Player drill-down + production graph — the big forward-looking ask (v2, data-gated).** Per player: per-game stats, projections, **strength of schedule for remaining games**, to target **bye-week coverage / playoff weeks**. His concrete viz: *production line graph — solid line for W/W production → dotted for projected future weeks; the trade-for player a different color; net points gained/lost from the deal.* This is exactly the §12.B forward-looking layer. Honest split: **byes + strength-of-schedule are computable now** (we have schedule/byes) → ship the honest slice; **per-game projections / the dotted projected line need a validated projection + in-season data** (v2, never faked).
+
+**D. Beat-writer / agent-farm news+injury layer — the strategic data moat (Rob + Salam both lit up).** Rob: *"poll sources like beat writers + official injury sources, an agent farm instead of APIs… sub-agents per team."* Salam: *"YES… beat writers report injuries faster than anyone… X integration that grabs every team's beat writers… hover for injury notes + estimated return, flag suspensions."* This is the **"two weeks ahead" engine** and a potential proprietary moat (own the fast injury/news signal vs licensing APIs). Big build: per-team sub-agent fan-out, source/X ingestion, trust/provenance, ToS/reliability. Offseason reality (Rob): *"there's no context in the offseason, just news"* — so a news/injury layer is the offseason+inseason signal. **Strategic design needed (all three) before building** — it's the largest swing here.
+
+**E. Smaller UI asks:** hover injury notes + estimated return on the draft board; suspension flags. (Cheap, gated on having injury data — pairs with D.)
+
+**Read:** ship A now (fun, requested), ship the honest slice of C (byes/SoS) soon, design D as the moat. The product instinct Salam confirmed: this should feel like a GM co-pilot with *personality and foresight*, not a spreadsheet.
