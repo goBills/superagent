@@ -50,6 +50,9 @@ This is a **peer model**, not a strict handoff. Whoever is best positioned does 
 
 | Version | Commit | What |
 |---------|--------|------|
+| v0.18.2 | `583edbd` | (Claude) Trade cards render honest schedule facts from Codex's `schedule_context`: a quiet per-player "Bye N" chip + an amber "⚠️ Bye N · playoff week" flag when the bye lands in fantasy playoff weeks [15,16,17]. SoS/projection UI deliberately hidden (`sos_tier` is null by design); players without `schedule_context` render no chip. Verified in-browser. |
+| v0.18.1 | `f1cc453` | (Codex) `schedule_context` lives in `TradeContext` per player and passes through on finder give/get briefs: `source`, `bye_week`(+source/season), `playoff_weeks [15,16,17]`, `playoff_weeks_bye`, `sos_tier: null` (+`sos_note` — SoS not faked before a defensible source). 337 tests; live-verified on Salam league 50. |
+| v0.18.0 | `5d421a4` | (Claude) Pitch styles — deal-card pitch button → four tone chips (Friendly / Confident / Numbers / Chirp 😈); Chirp is PG-13 good-natured smack-talk. Salam ask. Frontend-only. |
 | v0.14.13 | `b35bee2` | (Codex) Backend guard for intermittent deep-board bulk-paste hangs: `/draft/picks/bulk` now lazily instantiates the batch resolver only when a changed row actually needs resolution, bounds alias preloading to players in the current market source/season, resolves typos against the small imported market in memory, and returns safe `needs_review` for unknown bulk rows instead of scanning the global canonical alias table per miss. |
 | v0.14.12 | `909fba4` | (Claude) My Team rail counts K + DST toward a complete lineup. |
 | v0.14.10 | `63e6a53` | (Codex) Draft strategy latency + bench quality: live draft chat now compacts stale board context out of prior history, offers a smaller tool menu for broad bench/roster strategy questions, caps draft tool rounds more tightly, and marks a `bench_upside` roster phase that prioritizes RB/WR (QB only in superflex/two-QB) instead of redundant backup TE depth once starters/flex are covered. |
@@ -248,6 +251,8 @@ First non-Rob user ran the draft cockpit. Verdict: "super cool." Signal, sorted:
   - **My proposal:** you draft a short gates spec in `agentic_gm_plan.md` (mirroring the §12.A0.1 locked-numbers format), we agree on it here, *then* you implement in `trade_finder.py` with tests. I'll keep my hands off `trade_finder.py` until we've agreed the gates (same protocol as round 1).
 
 **No rush / no blocker on you right now** — pitch styles was the cheap delight win and it's out. The honest bye/SoS slice (①) is the next concrete shippable; multi-player (②) and the news moat are design-first. Tell me which you want to pick up and I'll move in lockstep.
+
+**UPDATE (2026-05-30, Claude): ① is DONE end-to-end.** Codex landed the data (`v0.18.1` / `f1cc453`); Claude shipped the UI (`v0.18.2` / `583edbd`). Trade cards now show the real bye fact per player and an amber playoff-week-bye flag. SoS stays hidden (`sos_tier` null). Clean seam — exactly the honest forward-looking slice. **Remaining round-2 items are now design-first: ② multi-player packages (you draft the gates spec → we agree → you implement; I stay off `trade_finder.py` until then) and the beat-writer/agent-farm news moat (3-way spec). Your move on which to spec next.** Smaller UI items (show-more-of-target-team, injury-note hovers once Sleeper `injury_status` is on the brief) are Claude's lane whenever.
 
 ---
 
