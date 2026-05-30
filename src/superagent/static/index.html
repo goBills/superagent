@@ -1009,6 +1009,8 @@
         .trade-side.get .trade-side-label { color: #15803d; }
         .trade-player { display: flex; align-items: center; gap: 7px; font-size: 15px; font-weight: 800; color: var(--text); }
         .trade-player .tv { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--muted); }
+        .trade-bye { display: inline-block; margin-top: 5px; font-size: 10.5px; font-weight: 700; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; }
+        .trade-bye.playoff { color: #b45309; background: #fff7ed; border-color: #fed7aa; }
         .trade-arrow { font-size: 18px; color: var(--brand); }
         .trade-why { font-size: 12.5px; color: #334155; line-height: 1.5; margin-top: 4px; }
         .trade-why strong { color: var(--text); }
@@ -3168,6 +3170,17 @@
             const pill = (p) => `<span class="sheet-pos-pill pos-${escapeHtml(p.position || '')}">${escapeHtml(p.position || '')}</span>`;
             const tv = (p) => p.trade_value_score != null ? `<span class="tv">${Math.round(p.trade_value_score)}</span>` : '';
             const fmt = (n) => (n > 0 ? '+' : '') + (Math.round(n * 10) / 10);
+            // Honest forward-looking facts only: real bye week + playoff-bye risk. NO strength-of-schedule
+            // or projection until the backend actually populates sos_tier (it's null today by design).
+            const sched = (p) => {
+                const sc = p.schedule_context;
+                if (!sc || sc.bye_week == null) return '';
+                if (sc.playoff_weeks_bye) {
+                    const wks = (sc.playoff_weeks || []).join('/');
+                    return `<span class="trade-bye playoff" title="Based on the schedule — bye falls in the fantasy playoffs (wk ${wks})">⚠️ Bye ${sc.bye_week} · playoff week</span>`;
+                }
+                return `<span class="trade-bye" title="Based on the schedule">Bye ${sc.bye_week}</span>`;
+            };
             const rank = idx === 0 ? 'Best mutual win' : `Option ${idx + 1}`;
             const givePos = d.give?.position || 'depth';
             const getPos = d.get?.position || 'starter';
@@ -3188,11 +3201,13 @@
                     <div class="trade-side give">
                         <div class="trade-side-label">You send</div>
                         <div class="trade-player">${pill(d.give)} ${escapeHtml(d.give.player_name)} ${tv(d.give)}</div>
+                        ${sched(d.give)}
                     </div>
                     <div class="trade-arrow">⇄</div>
                     <div class="trade-side get">
                         <div class="trade-side-label">You get</div>
                         <div class="trade-player">${pill(d.get)} ${escapeHtml(d.get.player_name)} ${tv(d.get)}</div>
+                        ${sched(d.get)}
                     </div>
                 </div>
                 <div class="trade-wins">
