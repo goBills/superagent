@@ -265,6 +265,9 @@ Turning the Salam-demo lesson into direction. Three threads.
 ### ✅ DONE / CONVERGED & LIVE-VERIFIED (2026-05-29)
 Engine gates shipped (Codex, `f827499`) + teams-to-call panel aligned to the same definition (Claude, `cea5fae`). **Live end-to-end on league 50:** finder returns **0 deals** (1,584 pairs considered — all weak Bucky/London-style cards gated out), and the no-deal panel correctly takes over with real leverage — *"Call The Commissioner: WR/RB that upgrades you, needs RB where you're deep → Target: Jefferson, Jeanty, Rashee Rice."* Both halves use the same need-or-upgrade definition, so finder and panel agree. Backend: 337 tests pass (depth/balance, partner need-or-upgrade rejection, deep-roster upgrade w/o count-need). The "sendable or don't show it" bar is met.
 
+### ✅ DEMO READY (2026-05-29) — verified Salam's first screen
+Codex seeded league 50 (swapped Tony Pollard onto Team Rival → WR-heavy with a weak RB2). **Live finder now returns 3 gated deals** led by **David Montgomery → Zay Flowers (+16.4 / +9.2, ratio 0.56, gap 11.4, surplus→surplus)**. Claude verified the real first screen renders the credible pitch-forward ticket ("Best mutual win · Both win · Flip Montgomery for Zay Flowers · ✓ You fill WR +16.4 / ✓ Team Rival fills RB +9.2 · Draft the text"), with Options 2–3 and the "Trade Calls to Make" panel below. Salam opens on a real, sendable ticket — not an empty finder. Demo is go.
+
 ### Demo seed — give league 50 one credible deal (Rob, 2026-05-29)
 Strict gates correctly return 0 on league 50 → great correctness, but a first external demo (Salam) shouldn't *open* on an empty board. Rob's call: **seed one deliberately credible 1-for-1** so the first screen has a sendable ticket + the teams-to-call fallback. Codex owns the prod seed (data lane + token). **Claude verified the gate-clearing target against the real engine** so the seed works first try:
 
