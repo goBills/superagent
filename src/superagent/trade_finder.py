@@ -105,6 +105,7 @@ def _player_brief(p: dict[str, Any]) -> dict[str, Any]:
         "roster_role": p.get("roster_role"),
         "injury_status": p.get("injury_status"),
         "bye_week": p.get("bye_week"),
+        "schedule_context": p.get("schedule_context"),
     }
 
 

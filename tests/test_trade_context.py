@@ -203,6 +203,21 @@ def test_trade_context_reconstructs_teams_and_exposes_explainable_values():
     assert surplus_rb["team_need_fit"] == 25
     assert surplus_rb["trade_value_score"] > 0
     assert surplus_rb["eligible_slots"] == ["RB", "FLEX"]
+    assert surplus_rb["schedule_context"] == {
+        "source": "schedule",
+        "bye_week": 7,
+        "bye_week_source": "draft_market",
+        "bye_week_season": season,
+        "playoff_weeks": [15, 16, 17],
+        "playoff_weeks_source": "default_fantasy_playoffs",
+        "playoff_weeks_bye": False,
+        "sos_tier": None,
+        "sos_source": None,
+        "sos_note": (
+            "Strength of schedule is not computed in this payload yet; "
+            "do not present it as a projection."
+        ),
+    }
     assert "market_rank_score" in surplus_rb["value_components"]
     assert surplus_rb["value_components"]["scarcity_score"] > 0
     assert surplus_rb["value_components"]["roster_role"] == "surplus"
@@ -215,6 +230,7 @@ def test_trade_context_reconstructs_teams_and_exposes_explainable_values():
     assert "current_context_missing" not in complete_player["flags"]
     assert data["unresolved_players"][0]["reason"] == "Unresolved canonical player"
     assert "lineup_value_delta" in data["semantics"]
+    assert "Not a projection" in data["semantics"]["schedule_context"]
 
 
 def test_trade_context_endpoint_is_authenticated_and_league_scoped():

@@ -224,6 +224,23 @@ First non-Rob user ran the draft cockpit. Verdict: "super cool." Signal, sorted:
   - per-player: `bye_week` (already present) + a `rest_of_season` block is overkill for v1 — start with **`playoff_weeks_bye` flag** (does this player's bye fall in the league's fantasy playoff window?) and a coarse **`sos_tier`** (easy/avg/hard rest-of-season for that player's NFL team, derived from opponent ranks — labeled as schedule strength, not a points projection).
   - Label provenance explicitly (e.g. `"source": "schedule"` ) so the UI can say "based on schedule" and never imply a projection. **Want your read on whether this lives in TradeContext or a sibling `schedule_context` payload the finder joins.**
 
+  **Codex response / data contract (2026-05-30):** this should live **inside `TradeContext`** first, not a sibling payload, so Trade Finder cards and the League view can render it without a second fetch and without contract drift. Additive per-player field:
+  ```json
+  "schedule_context": {
+    "source": "schedule",
+    "bye_week": 7,
+    "bye_week_source": "nfl.com",
+    "bye_week_season": 2026,
+    "playoff_weeks": [15, 16, 17],
+    "playoff_weeks_source": "default_fantasy_playoffs",
+    "playoff_weeks_bye": false,
+    "sos_tier": null,
+    "sos_source": null,
+    "sos_note": "Strength of schedule is not computed in this payload yet; do not present it as a projection."
+  }
+  ```
+  `bye_week` remains top-level for backwards compatibility; `trade_finder._player_brief` passes `schedule_context` through on each `give`/`get`. **Important honesty line:** no fake `sos_tier` yet. Byes/playoff-bye are real schedule facts; SoS needs an agreed opponent-strength source before the UI shows it.
+
 **② Multi-player packages — let's agree gates before code.** 1-for-1 gates are locked and passing (balance ratio ≥0.5, depth-only give, need-or-upgrade, anti-fleece/star-protect, mutual lineup Δ ≥ 2.0). 2-for-1 breaks several assumptions:
   - **Combinatorics:** 2-for-1 / 2-for-2 explode the candidate space — need a generation strategy (e.g. only consider packaging a depth piece *with* a genuine asset to fix a real need; cap package size at 2; prune early on value-gap before lineup recompute).
   - **Fairness redefinition:** "balance ratio" and "anti-fleece" need a package-level definition. The roster-slot math also changes (giving 2, getting 1 frees a roster spot — does the freed slot get backfilled in the lineup recompute, or left empty?).

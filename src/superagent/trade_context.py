@@ -31,6 +31,7 @@ from superagent.models import DraftPlayerMarket, LeagueDraftPick, LeagueSettings
 
 TRADE_CONTEXT_VERSION = "trade_context.v1"
 TRADE_CONTEXT_ROSTER_SOURCE = "draft_board"
+DEFAULT_FANTASY_PLAYOFF_WEEKS = [15, 16, 17]
 
 
 def _response(ok: bool, data: Any = None, error: str | None = None, meta: dict | None = None) -> dict:
@@ -308,6 +309,36 @@ def _player_flags(row: dict[str, Any], team_bye_counts: Counter) -> list[str]:
     return flags
 
 
+def _schedule_context_payload(
+    *,
+    bye_week: int | None,
+    bye_source: str | None,
+    bye_week_season: int | None,
+) -> dict[str, Any]:
+    """Small, honest forward-looking schedule facts for Trade Mode.
+
+    This is intentionally not a projection surface. Bye weeks are real schedule
+    facts; strength-of-schedule is left unavailable until we have a defensible
+    opponent-strength source for the requested season.
+    """
+    playoff_weeks = list(DEFAULT_FANTASY_PLAYOFF_WEEKS)
+    return {
+        "source": "schedule",
+        "bye_week": bye_week,
+        "bye_week_source": bye_source,
+        "bye_week_season": bye_week_season,
+        "playoff_weeks": playoff_weeks,
+        "playoff_weeks_source": "default_fantasy_playoffs",
+        "playoff_weeks_bye": bool(bye_week in playoff_weeks) if bye_week is not None else False,
+        "sos_tier": None,
+        "sos_source": None,
+        "sos_note": (
+            "Strength of schedule is not computed in this payload yet; "
+            "do not present it as a projection."
+        ),
+    }
+
+
 def _build_player_payload(
     market: DraftPlayerMarket,
     settings: LeagueSettings,
@@ -326,6 +357,11 @@ def _build_player_payload(
         "bye_week": bye_week,
         "bye_week_source": bye_source,
         "bye_week_season": resolved_bye_week_season,
+        "schedule_context": _schedule_context_payload(
+            bye_week=bye_week,
+            bye_source=bye_source,
+            bye_week_season=resolved_bye_week_season,
+        ),
         "adp": market.adp,
         "effective_rank": effective_rank,
         "rank_source": rank_source,
@@ -462,6 +498,10 @@ def _build_context(
             "lineup_value_delta": (
                 "Computed by the matching layer by refilling each team's optimal starters with "
                 "trade_value_score after a candidate swap."
+            ),
+            "schedule_context": (
+                "Forward-looking schedule facts only. Bye/playoff-bye flags are schedule facts; "
+                "strength-of-schedule is null until a defensible source is attached. Not a projection."
             ),
         },
     }
