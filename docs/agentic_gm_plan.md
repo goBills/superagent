@@ -262,6 +262,9 @@ Agreed north star (Rob + Codex + Claude, 2026-05-29): the product is **"your GM 
 
 Turning the Salam-demo lesson into direction. Three threads.
 
+### ✅ DONE / CONVERGED & LIVE-VERIFIED (2026-05-29)
+Engine gates shipped (Codex, `f827499`) + teams-to-call panel aligned to the same definition (Claude, `cea5fae`). **Live end-to-end on league 50:** finder returns **0 deals** (1,584 pairs considered — all weak Bucky/London-style cards gated out), and the no-deal panel correctly takes over with real leverage — *"Call The Commissioner: WR/RB that upgrades you, needs RB where you're deep → Target: Jefferson, Jeanty, Rashee Rice."* Both halves use the same need-or-upgrade definition, so finder and panel agree. Backend: 337 tests pass (depth/balance, partner need-or-upgrade rejection, deep-roster upgrade w/o count-need). The "sendable or don't show it" bar is met.
+
 ### A0.1 LOCKED v1 gate numbers (Rob, 2026-05-29) — build against these
 1. **Balance ratio:** `min(Δmine, Δpartner) / max(...) >= 0.5`.
 2. **Upgrade threshold X = 8.0** `trade_value_score` points (not 10 — 10 over-restricts mid-roster).
